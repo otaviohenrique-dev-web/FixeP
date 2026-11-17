@@ -1,0 +1,50 @@
+# Render Blueprint: cria os dois serviços do FrixeP a partir deste arquivo.
+# Passo a passo em docs/DEPLOY_SUPABASE_RENDER.md. Valores marcados "sync: false" são digitados por você no painel do Render
+# (nunca ficam no Git): senhas, chaves e endereços.
+services:
+  # ------------------------------------------------------------------ servidor do jogo (API + WebSocket)
+  - type: web
+    name: frixep-server
+    runtime: node
+    # A região NÃO pode ser trocada depois de criado o serviço. Virginia fica mais perto do Brasil que Oregon (onde está o
+    # banco do Supabase); o banco é consultado só ao entrar no jogo e a cada 30 s, então a latência do jogo pesa mais.
+    region: virginia
+    # O plano gratuito desliga o serviço após ~15 min sem uso e derruba todos os jogadores: use um plano pago.
+    plan: starter
+    # --include=dev: garante ferramentas de build mesmo com NODE_ENV=production
+    buildCommand: npm ci --include=dev
+    startCommand: npm run start:prod -w @frixep/server
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true # o Render gera um valor aleatório forte
+      - key: DATABASE_URL
+        sync: false # Supabase: Connect > Direct > Session pooler (com a senha do banco)
+      - key: DATABASE_CA
+        sync: false # opcional, recomendado: certificado do banco (Supabase > Database > Settings > SSL Configuration)
+      - key: SERVER_URL
+        sync: false # URL pública deste serviço, ex.: https://frixep-server.onrender.com
+      - key: CLIENT_URL
+        sync: false # URL pública do site do jogo (serviço frixep-client abaixo)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
+  # ------------------------------------------------------------------ site do jogo (arquivos estáticos)
+  - type: web
+    name: frixep-client
+    runtime: static
+    buildCommand: npm ci --include=dev && npm run build -w @frixep/client
+    staticPublishPath: packages/client/dist
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: VITE_API_URL
+        sync: false # URL pública do servidor, ex.: https://frixep-server.onrender.com (o endereço wss:// é derivado sozinho)
