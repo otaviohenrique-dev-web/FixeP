@@ -31,10 +31,12 @@ payloads malformados, flood, adulteração do estado local). Rode contra um serv
 (porta diferente da do jogo) a partir de `packages/server`:
 
 ```
-PORT=2999 npm run start        # terminal 1 (no PowerShell: $env:PORT=2999; npm.cmd run start)
-SERVER=http://localhost:2999 npm run test:cheat   # terminal 2
+PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 npm run start        # terminal 1 (banco em memória)
+SERVER=http://localhost:2999 npm run test:cheat                    # terminal 2: anti-trapaça (25 verificações)
+SERVER=http://localhost:2999 npm run test:persist                  # terminal 2: contas, personagem e XP (32 verificações)
 ```
 
-Sai com código 1 se qualquer verificação falhar. Hoje: 25/25.
+No PowerShell: `$env:PORT=2999; $env:PGLITE_DIR="memory"; $env:API_RATE_MULT=100; npm.cmd run start`.
+Saem com código 1 se qualquer verificação falhar. Veja também `docs/DEPLOY_SUPABASE_RENDER.md`.
 
 

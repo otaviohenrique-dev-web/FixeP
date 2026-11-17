@@ -9,6 +9,7 @@ export interface HudOptions {
 export interface Hud {
   trigger(a: ActionId): void;
   setHp(hp: number, max: number): void;
+  setProgress(level: number, xp: number, need: number): void;
   setDead(secondsLeft: number | null): void;
   setBuff(on: boolean): void;
 }
@@ -20,6 +21,10 @@ const CSS = `
 .hd-hp-fill{position:absolute;inset:0;width:100%;transform-origin:left;background:linear-gradient(180deg,#e0472b,#8d1a0c);transition:transform .15s}
 .hd-hp-lag{position:absolute;inset:0;width:100%;transform-origin:left;background:rgba(255,220,160,.55);transition:transform .7s .25s}
 .hd-hp-txt{position:absolute;inset:0;display:grid;place-items:center;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.12em;text-shadow:0 1px 3px #000}
+.hd-lv{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.hd-lv b{font:900 12px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;color:#ffd08a;text-shadow:0 0 10px rgba(255,150,60,.5)}
+.hd-xp{position:relative;flex:1;height:6px;border-radius:3px;overflow:hidden;background:rgba(8,14,24,.85);border:1px solid rgba(160,200,240,.3)}
+.hd-xp i{position:absolute;inset:0;transform-origin:left;transform:scaleX(0);background:linear-gradient(90deg,#3f8fd6,#9fd4ff);transition:transform .4s}
 .hd-buff{margin-top:6px;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.25em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 10px rgba(255,120,40,.6);opacity:0;transition:opacity .2s}
 .hd-buff.on{opacity:1}
 .hd-bar{position:absolute;left:50%;bottom:max(14px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:10px;align-items:flex-end;pointer-events:auto}
@@ -53,7 +58,7 @@ export function mountHud(opts: HudOptions): Hud {
   const root = document.createElement("div");
   root.className = "hd";
   root.innerHTML = `
-    <div class="hd-hp"><div class="hd-hp-bar"><div class="hd-hp-lag"></div><div class="hd-hp-fill"></div><div class="hd-hp-txt"></div></div><div class="hd-buff">Grito ativo</div></div>
+    <div class="hd-hp"><div class="hd-lv"><b>NV 1</b><div class="hd-xp"><i></i></div></div><div class="hd-hp-bar"><div class="hd-hp-lag"></div><div class="hd-hp-fill"></div><div class="hd-hp-txt"></div></div><div class="hd-buff">Grito ativo</div></div>
     <div class="hd-bar"></div>`;
   document.body.append(root);
 
@@ -66,6 +71,8 @@ export function mountHud(opts: HudOptions): Hud {
   const lag = root.querySelector<HTMLElement>(".hd-hp-lag")!;
   const txt = root.querySelector<HTMLElement>(".hd-hp-txt")!;
   const buff = root.querySelector<HTMLElement>(".hd-buff")!;
+  const lvTxt = root.querySelector<HTMLElement>(".hd-lv b")!;
+  const xpFill = root.querySelector<HTMLElement>(".hd-xp i")!;
   const bar = root.querySelector<HTMLElement>(".hd-bar")!;
   const deadSub = dead.querySelector("p")!;
 
@@ -127,6 +134,10 @@ export function mountHud(opts: HudOptions): Hud {
       fill.style.transform = `scaleX(${r})`;
       lag.style.transform = `scaleX(${r})`;
       txt.textContent = `${Math.ceil(hp)} / ${max}`;
+    },
+    setProgress(level, xp, need) {
+      lvTxt.textContent = `NV ${level}`;
+      xpFill.style.transform = `scaleX(${need > 0 ? Math.min(1, xp / need) : 1})`;
     },
     setDead(secondsLeft) {
       dead.classList.toggle("on", secondsLeft !== null);

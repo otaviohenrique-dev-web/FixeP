@@ -19,6 +19,12 @@ export interface LoginHandle {
   destroy(): void;
   setMessage(m: string): void;
 }
+/** Cena da fogueira + painel vazio: base para login, criação de personagem etc. */
+export interface ScreenHandle extends LoginHandle {
+  panel: HTMLElement;
+  msg: HTMLElement;
+  button(label: string, badge: string, main: boolean, fn: () => void | Promise<void>): HTMLButtonElement;
+}
 
 // ---------------------------------------------------------------- utilidades
 const VB_W = 1600;
@@ -308,6 +314,16 @@ const ICON_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 
 // ---------------------------------------------------------------- montagem
 export function mountLogin(opts: LoginOptions): LoginHandle {
+  const s = mountScreen("Entrar no reino", opts.message);
+  let n = 0;
+  if (opts.providers.google) s.button("Entrar com Google", "G", n++ === 0, opts.onGoogle);
+  if (opts.providers.discord) s.button("Entrar com Discord", "D", n++ === 0, opts.onDiscord);
+  if (opts.providers.guest) s.button("Jogar como convidado", "&#9733;", n++ === 0, opts.onGuest);
+  if (n === 0 && !opts.message) s.setMessage("Nenhum método de login disponível no momento.");
+  return s;
+}
+
+export function mountScreen(heading: string, message?: string): ScreenHandle {
   const style = document.createElement("style");
   style.textContent = CSS;
   document.head.append(style);
@@ -328,8 +344,8 @@ export function mountLogin(opts: LoginOptions): LoginHandle {
         <h1 aria-label="FrixeP">Frixe<b>P</b></h1>
         <p class="fx-tag">Acenda a Brasa &middot; Desperte o mundo</p>
       </header>
-      <section class="fx-panel" aria-label="Entrar no jogo">
-        <div class="fx-head">Entrar no reino</div>
+      <section class="fx-panel">
+        <div class="fx-head"></div>
         <p class="fx-msg" role="alert"></p>
       </section>
     </div>
@@ -339,7 +355,9 @@ export function mountLogin(opts: LoginOptions): LoginHandle {
   const panel = root.querySelector<HTMLElement>(".fx-panel")!;
   const msg = root.querySelector<HTMLElement>(".fx-msg")!;
   const setMessage = (m: string) => (msg.textContent = m);
-  setMessage(opts.message ?? "");
+  setMessage(message ?? "");
+  root.querySelector<HTMLElement>(".fx-head")!.textContent = heading;
+  panel.setAttribute("aria-label", heading);
 
   const mkBtn = (label: string, badge: string, main: boolean, fn: () => void | Promise<void>) => {
     const b = document.createElement("button");
@@ -352,12 +370,8 @@ export function mountLogin(opts: LoginOptions): LoginHandle {
       try { await fn(); } finally { b.disabled = false; }
     };
     panel.insertBefore(b, msg);
+    return b;
   };
-  let n = 0;
-  if (opts.providers.google) mkBtn("Entrar com Google", "G", n++ === 0, opts.onGoogle);
-  if (opts.providers.discord) mkBtn("Entrar com Discord", "D", n++ === 0, opts.onDiscord);
-  if (opts.providers.guest) mkBtn("Jogar como convidado", "&#9733;", n++ === 0, opts.onGuest);
-  if (n === 0 && !opts.message) setMessage("Nenhum método de login disponível no momento.");
 
   // ----- som
   const audio = new Ambience();
@@ -561,6 +575,9 @@ export function mountLogin(opts: LoginOptions): LoginHandle {
 
   return {
     setMessage,
+    panel,
+    msg,
+    button: mkBtn,
     destroy() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);

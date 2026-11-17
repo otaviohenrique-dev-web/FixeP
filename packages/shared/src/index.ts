@@ -17,6 +17,7 @@ export const Evt = {
   Telegraph: "telegraph", // inimigo vai atacar numa área
   Hit: "hit", // dano aplicado
   Died: "died",
+  LevelUp: "levelup",
 } as const;
 
 export interface MoveToPayload {
@@ -38,6 +39,7 @@ export interface SwingEvent { id: string; a: ActionId; x: number; y: number; dir
 export interface TelegraphEvent { id: string; x: number; y: number; r: number; ms: number }
 export interface HitEvent { k: "e" | "p"; id: string; dmg: number; crit: boolean; x: number; y: number; by?: string }
 export interface DiedEvent { k: "e" | "p"; id: string }
+export interface LevelUpEvent { id: string; level: number }
 
 export const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
@@ -100,3 +102,19 @@ export const ENEMY_SPAWNS: readonly { x: number; y: number }[] = [
   { x: 10, y: 26 },
   { x: 11, y: 12 },
 ];
+
+// ------------------------------------------------------------ progressão
+export const LEVEL_CAP = 20;
+export const XP_PER_KILL = 20;
+/** XP necessário para sair do nível `level` para o próximo (0 no nível máximo). */
+export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : 40 + 30 * level);
+export const maxHpFor = (level: number) => WARRIOR.maxHp + 10 * (level - 1);
+export const dmgMult = (level: number) => 1 + 0.05 * (level - 1);
+
+// ------------------------------------------------------------ personagem
+export type CharClass = "warrior" | "archer" | "cleric";
+/** Classes jogáveis hoje (as outras aparecem como "em breve" na criação). */
+export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior"];
+export const NAME_MIN = 3;
+export const NAME_MAX = 16;
+export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number }
