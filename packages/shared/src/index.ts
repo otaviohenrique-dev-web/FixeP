@@ -9,6 +9,11 @@ export const SPAWN = { x: 20, y: 20 };
 export const Msg = {
   MoveTo: "move_to",
   Act: "act", // ação de combate: { a, ax, ay }
+  InvEquip: "inv_equip", // { slot }
+  InvUnequip: "inv_unequip", // { slot: "weapon" | "armor" }
+  InvUse: "inv_use", // { slot }
+  InvDrop: "inv_drop", // { slot }
+  InvSync: "inv_sync", // pede a fotografia do inventário (o cliente pede depois de registrar os receptores)
 } as const;
 
 /** Eventos de combate enviados pelo servidor (broadcast). */
@@ -18,6 +23,9 @@ export const Evt = {
   Hit: "hit", // dano aplicado
   Died: "died",
   LevelUp: "levelup",
+  Inv: "inv", // fotografia completa do inventário (só para o dono)
+  Loot: "loot", // item recebido
+  Notice: "notice", // aviso de texto para o dono
 } as const;
 
 export interface MoveToPayload {
@@ -108,8 +116,10 @@ export const LEVEL_CAP = 20;
 export const XP_PER_KILL = 20;
 /** XP necessário para sair do nível `level` para o próximo (0 no nível máximo). */
 export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : 40 + 30 * level);
-export const maxHpFor = (level: number) => WARRIOR.maxHp + 10 * (level - 1);
-export const dmgMult = (level: number) => 1 + 0.05 * (level - 1);
+/** Vida máxima: base + 10 por nível + bônus de armadura. */
+export const maxHpFor = (level: number, armorHp = 0) => WARRIOR.maxHp + 10 * (level - 1) + armorHp;
+/** Multiplicador de dano: +5% por nível, multiplicado pelo bônus percentual da arma. */
+export const dmgMult = (level: number, weaponPct = 0) => (1 + 0.05 * (level - 1)) * (1 + weaponPct / 100);
 
 // ------------------------------------------------------------ personagem
 export type CharClass = "warrior" | "archer" | "cleric";
@@ -118,3 +128,5 @@ export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior"];
 export const NAME_MIN = 3;
 export const NAME_MAX = 16;
 export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number }
+
+export * from "./items";

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { NAME_MIN, NAME_MAX, type CharClass } from "@frixep/shared";
+import { NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, type CharClass } from "@frixep/shared";
+import { emptyInventory, type Inventory } from "../game/inventory.js";
 import type { Db } from "./index.js";
 
 export type { CharClass };
@@ -78,5 +79,43 @@ export class Repo {
 
   async saveProgress(charId: string, level: number, xp: number): Promise<void> {
     await this.db.query("update characters set level = $2, xp = $3, updated_at = now() where id = $1", [charId, level, xp]);
+  }
+
+  async loadInventory(charId: string): Promise<Inventory> {
+    const inv = emptyInventory();
+    const items = await this.db.query<{ slot: number; item_id: string; qty: number }>(
+      "select slot, item_id, qty from inventory_items where character_id = $1",
+      [charId],
+    );
+    for (const r of items.rows) {
+      const def = ITEMS[r.item_id]; // item removido do jogo é ignorado em vez de quebrar a entrada
+      if (!def || r.slot < 0 || r.slot >= INV_SLOTS || inv.slots[r.slot]) continue;
+      inv.slots[r.slot] = { id: r.item_id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
+    }
+    const eq = await this.db.query<{ slot: string; item_id: string }>("select slot, item_id from equipment where character_id = $1", [charId]);
+    for (const r of eq.rows) {
+      const def = ITEMS[r.item_id];
+      if (def && (EQUIP_SLOTS as readonly string[]).includes(r.slot) && def.kind === r.slot) inv.equip[r.slot as "weapon" | "armor"] = r.item_id;
+    }
+    return inv;
+  }
+
+  /** Troca o inventário salvo pelo estado atual, numa transação. A fotografia é copiada ANTES de qualquer espera. */
+  async saveInventory(charId: string, inv: Inventory): Promise<void> {
+    const rows = inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty }] : []));
+    const eq = EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]! }] : []));
+    await this.db.tx(async ({ query: q }) => {
+      await q("select pg_advisory_xact_lock(hashtext($1))", [`inv:${charId}`]);
+      await q("delete from inventory_items where character_id = $1", [charId]);
+      await q("delete from equipment where character_id = $1", [charId]);
+      if (rows.length) {
+        const ph = rows.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
+        await q(`insert into inventory_items (character_id, slot, item_id, qty) values ${ph}`, [charId, ...rows.flatMap((r) => [r.slot, r.id, r.qty])]);
+      }
+      if (eq.length) {
+        const ph = eq.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(",");
+        await q(`insert into equipment (character_id, slot, item_id) values ${ph}`, [charId, ...eq.flatMap((r) => [r.slot, r.id])]);
+      }
+    });
   }
 }

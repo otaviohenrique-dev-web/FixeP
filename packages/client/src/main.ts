@@ -1,13 +1,15 @@
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, WARRIOR, SKELETON, xpToNext,
+  Msg, Evt, MAP_W, MAP_H, WARRIOR, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
+  type InventorySnapshot, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
 import { ensureCharacter } from "./character";
 import { mountGameMenu } from "./menu";
 import { mountHud, type Hud } from "./hud";
+import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
 
 const TILE_W = 64;
@@ -32,6 +34,7 @@ const menuOpen = () => !!document.querySelector(".gm-back.open");
 class WorldScene extends Phaser.Scene {
   private room!: Room;
   private hud!: Hud;
+  private inv!: InventoryUi;
   private sprites = new Map<string, Phaser.GameObjects.Arc>();
   private labels = new Map<string, Phaser.GameObjects.Text>();
   private bars!: Phaser.GameObjects.Graphics;
@@ -116,6 +119,18 @@ class WorldScene extends Phaser.Scene {
     this.room.onMessage(Evt.Died, (m: DiedEvent) => this.onDied(m));
     this.room.onMessage(Evt.LevelUp, (m: LevelUpEvent) => this.onLevelUp(m));
 
+    // mochila: registra os receptores ANTES de pedir a fotografia (evita perder a mensagem inicial)
+    this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1 });
+    this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => this.inv.setSnapshot(s));
+    this.room.onMessage(Evt.Loot, (m: LootEvent) => {
+      const d = ITEMS[m.id];
+      if (!d) return;
+      this.inv.toast(`+ ${d.name}${m.qty > 1 ? ` x${m.qty}` : ""}`, RARITY_COLOR[d.rarity]);
+      sfx.pickup();
+    });
+    this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), "#ffb3a6"));
+    this.room.send(Msg.InvSync, {});
+
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
       this.room.send(Msg.MoveTo, { x, y });
@@ -131,6 +146,12 @@ class WorldScene extends Phaser.Scene {
       ShiftLeft: "dodge", ShiftRight: "dodge",
     };
     window.addEventListener("keydown", (e) => {
+      if (e.code === "KeyQ" && !e.repeat && !menuOpen()) { // Q: bebe a primeira poção
+        const slot = this.inv.firstPotionSlot();
+        if (slot >= 0) this.room.send(Msg.InvUse, { slot });
+        else this.inv.toast("Você não tem poções.", "#ffb3a6");
+        return;
+      }
       const a = keys[e.code];
       if (!a || e.repeat || menuOpen()) return;
       e.preventDefault();
