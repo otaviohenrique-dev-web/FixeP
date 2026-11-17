@@ -16,7 +16,7 @@ app.use("/auth", authRouter());
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 const httpServer = http.createServer(app);
-const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });
+const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer, maxPayload: 2048 }) /* mensagens legítimas têm poucos bytes */ });
 gameServer.define("zone", ZoneRoom);
 await gameServer.listen(port);
 console.log(`[frixep] servidor em http://localhost:${port} (ws no mesmo porto)`);
