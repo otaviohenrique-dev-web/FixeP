@@ -58,7 +58,8 @@ Não é preciso Google, Discord nem Supabase para desenvolver.
 - **Dev de arte:** toda a arte em `assets/` (e `docs/ART_GUIDE.md`). Não altera `packages/`; se precisar de mudança no código, abre uma Issue.
 
 ## Especificações de arte (resumo; completo em `docs/ART_GUIDE.md`)
-- Pixel art. Tile isométrico **64 x 32 px**. Personagens em quadro de **64 x 64 px**, 8 direções (5 desenhadas + 3 espelhadas).
+- Pixel art. Tile isométrico **64 x 32 px**. Personagens em quadro de **64 x 64 px**.
+- Direções: **decidido (17/11/2026) começar com 4 diagonais** (desenhar SE e NE; o jogo espelha SW e NW). As 8 direções (5 desenhadas + 3 espelhadas) entram depois, no marco M8 de `docs/GUIA_ARTE_INICIAL.pdf`.
 - Entrega: PNG com transparência + JSON de atlas no formato do Phaser; atlas de no máximo **2048 x 2048 px**.
 - Nomes de arquivo em minúsculas, com sublinhado, sem acento nem espaço (ex.: `warrior_walk_se_00.png`).
 - Finais em `assets/<categoria>/`; editáveis (`.aseprite`, `.psd`) em `assets/source/`.

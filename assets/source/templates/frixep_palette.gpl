@@ -1,0 +1,32 @@
+GIMP Palette
+Name: FrixeP Inicial
+Columns: 4
+#
+  2   5  11	#02050b noite profunda
+ 10  24  48	#0a1830 azul noite
+ 16  38  64	#102640 montanha
+ 22  57  90	#16395a azul gelo escuro
+ 29  74 107	#1d4a6b azul gelo
+ 63 111 153	#3f6f99 azul frio
+111 176 230	#6fb0e6 gelo
+191 227 255	#bfe3ff gelo claro
+255 255 255	#ffffff neve
+ 26  26  36	#1a1a24 carvao
+ 42  42  58	#2a2a3a carvao claro
+122 138 160	#7a8aa0 cinza azulado
+122  42  12	#7a2a0c brasa escura
+200  86  26	#c8561a ferrugem
+255  90  26	#ff5a1a brasa
+255 154  77	#ff9a4d laranja brasa
+255 208 138	#ffd08a luz quente
+255 242 201	#fff2c9 luz clara
+ 90  84  72	#5a5448 osso sombra
+216 210 192	#d8d2c0 osso
+107  74  46	#6b4a2e couro
+ 47 107  58	#2f6b3a verde musgo
+111 207 111	#6fcf6f verde arqueiro
+125 255 154	#7dff9a cura
+242 230 160	#f2e6a0 luz do clerigo
+141  26  12	#8d1a0c sangue escuro
+224  71  43	#e0472b sangue
+255 138  61	#ff8a3d guerreiro
