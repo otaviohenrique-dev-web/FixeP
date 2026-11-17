@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import { Msg, MAP_W, MAP_H } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
+import { mountGameMenu } from "./menu";
 
 const TILE_W = 64;
 const TILE_H = 32;
@@ -61,6 +62,22 @@ class WorldScene extends Phaser.Scene {
       this.sprites.delete(id);
       this.labels.get(id)?.destroy();
       this.labels.delete(id);
+    });
+
+    // menu do jogo: "Desconectar" sai da sala, apaga o token e volta para o login
+    let leaving = false;
+    mountGameMenu({
+      playerName: (this.room.state as any).players.get(this.room.sessionId)?.name ?? "Portador",
+      onLogout: async () => {
+        leaving = true;
+        try { await this.room.leave(true); } catch { /* já desconectado */ }
+        logout();
+      },
+    });
+    this.room.onLeave((code) => {
+      if (leaving) return;
+      if (code === 4001) logout(); // outra aba assumiu a conta: vai ao login sem disputar a sessão
+      else location.reload(); // queda de rede ou servidor: recarrega mantendo o token
     });
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
