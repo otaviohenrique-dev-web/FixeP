@@ -47,3 +47,8 @@ Os valores abaixo são **propostas**. O artista pode ajustar, mas qualquer mudan
 4. **F5/F6:** variações dia/noite (camadas emissivas), clima, cosméticos raros.
 
 > Regra de ouro: aprovar **um personagem + um tile + um efeito** no jogo antes de produzir o resto. Corrigir estilo cedo custa pouco; corrigir depois de 200 sprites custa meses.
+
+## 8. Primeiras entregas e modelos
+
+O plano de entregas iniciais (marcos M0 a M8, tempos de animação, tamanhos dos efeitos e convenção de exportação) está em `docs/GUIA_ARTE_INICIAL.pdf`.
+Modelos prontos (grade isométrica 64x32, quadro de personagem 64x64 com o ponto dos pés e paleta inicial) em `assets/source/templates/`.
