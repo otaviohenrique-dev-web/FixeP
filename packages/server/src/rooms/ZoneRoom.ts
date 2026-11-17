@@ -1,35 +1,51 @@
 import { Room, Client, ServerError } from "colyseus";
-import { Schema, MapSchema, type } from "@colyseus/schema";
-import { Msg, MoveToPayload, MAP_W, MAP_H, TICK_RATE, MOVE_SPEED, MAX_CLIENTS_PER_ZONE, clamp } from "@frixep/shared";
-
+import {
+  Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
+  MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, SPAWN, ENEMY_SPAWNS,
+  WARRIOR, SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
+} from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
+import { Player, Enemy, ZoneState } from "./entities.js";
 
-export class Player extends Schema {
-  @type("number") x = 20;
-  @type("number") y = 20;
-  @type("string") name = "";
-  tx = 20; // alvo (não sincronizado)
-  ty = 20;
-}
+const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
-export class ZoneState extends Schema {
-  @type({ map: Player }) players = new MapSchema<Player>();
+/** distância do ponto (px,py) ao segmento (x1,y1)-(x2,y2) */
+function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 === 0 ? 0 : clamp(((px - x1) * dx + (py - y1) * dy) / l2, 0, 1);
+  return dist(px, py, x1 + t * dx, y1 + t * dy);
 }
 
 export class ZoneRoom extends Room<ZoneState> {
   maxClients = MAX_CLIENTS_PER_ZONE;
   private userIds = new Map<string, string>(); // sessionId -> accountId
+  private t = 0; // relógio da simulação (s)
 
   onCreate() {
     this.setState(new ZoneState());
     this.setPatchRate(1000 / TICK_RATE);
 
-    // Cliente envia INTENÇÃO (alvo), nunca posição. Servidor valida e simula.
+    ENEMY_SPAWNS.forEach((s, i) => {
+      const e = new Enemy();
+      e.x = e.sx = s.x;
+      e.y = e.sy = s.y;
+      this.state.enemies.set(`e${i + 1}`, e);
+    });
+
+    // Cliente envia INTENÇÃO (alvo / ação), nunca posição nem dano. Servidor valida e simula.
     this.onMessage(Msg.MoveTo, (client, p: MoveToPayload) => {
       const pl = this.state.players.get(client.sessionId);
-      if (!pl || !Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
+      if (!pl || pl.dead || !Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
       pl.tx = clamp(p.x, 0, MAP_W - 1);
       pl.ty = clamp(p.y, 0, MAP_H - 1);
+    });
+
+    this.onMessage(Msg.Act, (client, p: ActPayload) => {
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || pl.dead) return;
+      if (!ACTION_IDS.includes(p?.a) || !Number.isFinite(p?.ax) || !Number.isFinite(p?.ay)) return;
+      this.doAction(client.sessionId, pl, p.a, p.ax, p.ay);
     });
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
@@ -59,15 +75,220 @@ export class ZoneRoom extends Room<ZoneState> {
     this.state.players.delete(client.sessionId);
   }
 
+  // ------------------------------------------------------------------ simulação
   private tick(dt: number) {
-    this.state.players.forEach((p) => {
-      const dx = p.tx - p.x;
-      const dy = p.ty - p.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 0.01) return;
-      const step = Math.min(dist, MOVE_SPEED * dt);
-      p.x += (dx / dist) * step;
-      p.y += (dy / dist) * step;
+    this.t += dt;
+    this.state.players.forEach((p) => this.updatePlayer(p, dt));
+    this.state.enemies.forEach((e, id) => this.updateEnemy(id, e, dt));
+  }
+
+  private updatePlayer(p: Player, dt: number) {
+    if (p.dead) {
+      if (this.t >= p.deadUntil) {
+        p.dead = false;
+        p.hp = p.maxHp;
+        p.x = p.tx = SPAWN.x;
+        p.y = p.ty = SPAWN.y;
+      }
+      return;
+    }
+    p.buff = this.t < p.buffUntil;
+
+    if (p.dashLeft > 0) {
+      const step = Math.min(dt, p.dashLeft);
+      p.x = clamp(p.x + p.dashVx * step, 0, MAP_W - 1);
+      p.y = clamp(p.y + p.dashVy * step, 0, MAP_H - 1);
+      p.dashLeft -= dt;
+      if (p.dashLeft <= 0) { p.tx = p.x; p.ty = p.y; }
+      return;
+    }
+
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 0.01) return;
+    const step = Math.min(d, WARRIOR.speed * dt);
+    p.x += (dx / d) * step;
+    p.y += (dy / d) * step;
+    p.face = Math.atan2(dy, dx);
+  }
+
+  // ------------------------------------------------------------------ ações do jogador
+  private doAction(id: string, p: Player, a: ActionId, ax: number, ay: number) {
+    const def: ActionDef = WARRIOR.actions[a];
+    if (this.t < (p.cdUntil[a] ?? 0) - 0.05) return; // em recarga (tolerância de rede)
+    if (p.dashLeft > 0) return; // não age durante o deslocamento
+
+    let dx = ax - p.x, dy = ay - p.y;
+    const l = Math.hypot(dx, dy);
+    if (l < 0.01) { dx = Math.cos(p.face); dy = Math.sin(p.face); } else { dx /= l; dy /= l; }
+    p.face = Math.atan2(dy, dx);
+    p.cdUntil[a] = this.t + def.cd;
+    p.tx = p.x; // ação interrompe o movimento
+    p.ty = p.y;
+
+    this.broadcast(Evt.Swing, { id, a, x: p.x, y: p.y, dir: p.face });
+
+    switch (a) {
+      case "attack":
+      case "skill1": {
+        const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
+        this.hitEnemies(id, def.dmg ?? 0, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
+        break;
+      }
+      case "skill2": {
+        const ex = p.x + dx * (def.dash ?? 0), ey = p.y + dy * (def.dash ?? 0);
+        this.hitEnemies(id, def.dmg ?? 0, (e) => distToSegment(e.x, e.y, p.x, p.y, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
+        this.startDash(p, dx, dy, def);
+        break;
+      }
+      case "skill3": {
+        p.buffUntil = this.t + (def.buffS ?? 0);
+        p.buff = true;
+        this.state.enemies.forEach((e) => {
+          if (e.st !== "dead" && dist(e.x, e.y, p.x, p.y) <= (def.tauntRadius ?? 0)) {
+            e.tauntId = id;
+            e.tauntUntil = this.t + (def.tauntS ?? 0);
+          }
+        });
+        break;
+      }
+      case "dodge": {
+        p.invulnUntil = this.t + (def.invulnS ?? 0);
+        this.startDash(p, dx, dy, def);
+        break;
+      }
+    }
+  }
+
+  private startDash(p: Player, dx: number, dy: number, def: ActionDef) {
+    const time = def.dashTime ?? 0.25;
+    const speed = (def.dash ?? 0) / time;
+    p.dashVx = dx * speed;
+    p.dashVy = dy * speed;
+    p.dashLeft = time;
+  }
+
+  private hitEnemies(by: string, baseDmg: number, inArea: (e: Enemy) => boolean) {
+    this.state.enemies.forEach((e, eid) => {
+      if (e.st === "dead" || !inArea(e)) return;
+      const crit = Math.random() < CRIT.chance;
+      const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
+      const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult : 1)));
+      e.hp = Math.max(0, e.hp - dmg);
+      if (!e.targetId) e.targetId = by; // quem bate chama a atenção
+      this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by });
+      if (e.hp <= 0) {
+        e.st = "dead";
+        e.respawnAt = this.t + SKELETON.respawnS;
+        e.targetId = "";
+        this.broadcast(Evt.Died, { k: "e", id: eid });
+      }
     });
+  }
+
+  // ------------------------------------------------------------------ IA do esqueleto
+  private nearestPlayer(e: Enemy, maxDist: number): [string, Player] | null {
+    let best: [string, Player] | null = null;
+    let bestD = maxDist;
+    this.state.players.forEach((p, id) => {
+      if (p.dead) return;
+      const d = dist(e.x, e.y, p.x, p.y);
+      if (d < bestD) { bestD = d; best = [id, p]; }
+    });
+    return best;
+  }
+
+  private updateEnemy(_id: string, e: Enemy, dt: number) {
+    if (e.st === "dead") {
+      if (this.t >= e.respawnAt) {
+        e.hp = e.maxHp;
+        e.x = e.sx;
+        e.y = e.sy;
+        e.st = "idle";
+      }
+      return;
+    }
+
+    // alvo: provocação ativa > quem já está em combate > mais próximo no raio de aggro
+    let target: [string, Player] | null = null;
+    const taunter = this.t < e.tauntUntil ? this.state.players.get(e.tauntId) : undefined;
+    if (taunter && !taunter.dead) target = [e.tauntId, taunter];
+    else {
+      const current = e.targetId ? this.state.players.get(e.targetId) : undefined;
+      if (current && !current.dead && dist(e.x, e.y, current.x, current.y) <= SKELETON.aggro * 1.5) target = [e.targetId, current];
+      else target = this.nearestPlayer(e, SKELETON.aggro);
+    }
+    e.targetId = target ? target[0] : "";
+
+    const away = dist(e.x, e.y, e.sx, e.sy) > SKELETON.leash;
+
+    switch (e.st) {
+      case "idle":
+        if (target && !away) e.st = "chase";
+        break;
+
+      case "chase": {
+        if (!target || away) {
+          // volta para casa e recupera a vida
+          this.moveToward(e, e.sx, e.sy, SKELETON.speed * 1.4, dt);
+          e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2 * dt);
+          if (dist(e.x, e.y, e.sx, e.sy) < 0.2) e.st = "idle";
+          break;
+        }
+        const p = target[1];
+        const d = dist(e.x, e.y, p.x, p.y);
+        if (d > SKELETON.engage * 0.85) this.moveToward(e, p.x, p.y, SKELETON.speed, dt);
+        if (d <= SKELETON.engage) {
+          // telégrafo: a área é travada agora; quem sair dela antes do golpe não leva dano
+          const dir = Math.atan2(p.y - e.y, p.x - e.x);
+          e.face = dir;
+          e.strikeX = e.x + Math.cos(dir) * SKELETON.strikeOffset;
+          e.strikeY = e.y + Math.sin(dir) * SKELETON.strikeOffset;
+          e.windupEnd = this.t + SKELETON.windupS;
+          e.st = "windup";
+          this.broadcast(Evt.Telegraph, { id: _id, x: e.strikeX, y: e.strikeY, r: SKELETON.strikeRadius, ms: SKELETON.windupS * 1000 });
+        }
+        break;
+      }
+
+      case "windup":
+        if (this.t >= e.windupEnd) {
+          this.state.players.forEach((p, pid) => {
+            if (p.dead || this.t < p.invulnUntil) return; // esquiva (i-frames)
+            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= SKELETON.strikeRadius + PLAYER_RADIUS) this.damagePlayer(pid, p, SKELETON.dmg);
+          });
+          e.recoverEnd = this.t + SKELETON.recoverS;
+          e.st = "recover";
+        }
+        break;
+
+      case "recover":
+        if (this.t >= e.recoverEnd) e.st = target ? "chase" : "idle";
+        break;
+    }
+  }
+
+  private moveToward(e: Enemy, x: number, y: number, speed: number, dt: number) {
+    const dx = x - e.x, dy = y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 0.01) return;
+    const step = Math.min(d, speed * dt);
+    e.x += (dx / d) * step;
+    e.y += (dy / d) * step;
+    e.face = Math.atan2(dy, dx);
+  }
+
+  private damagePlayer(id: string, p: Player, baseDmg: number) {
+    const reduction = this.t < p.buffUntil ? WARRIOR.actions.skill3.reduction : 0;
+    const dmg = Math.max(1, Math.round(baseDmg * (1 - reduction)));
+    p.hp = Math.max(0, p.hp - dmg);
+    this.broadcast(Evt.Hit, { k: "p", id, dmg, crit: false, x: p.x, y: p.y });
+    if (p.hp <= 0) {
+      p.dead = true;
+      p.deadUntil = this.t + WARRIOR.respawnS;
+      p.tx = p.x;
+      p.ty = p.y;
+      this.broadcast(Evt.Died, { k: "p", id });
+    }
   }
 }
