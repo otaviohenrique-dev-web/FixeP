@@ -69,6 +69,11 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.InvEquip, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => equipFromSlot(pl.inv, p?.slot, pl.level, pl.cls as CharClass)));
     this.onMessage(Msg.InvUnequip, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => unequip(pl.inv, p?.slot)));
     this.onMessage(Msg.InvDrop, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => dropSlot(pl.inv, p?.slot)));
+    // ping: devolve o mesmo carimbo de tempo para o cliente medir a ida e volta. Só ecoa números (nada é interpretado).
+    this.onMessage(Msg.Ping, (client, p: { t?: unknown }) => {
+      if (!this.allow(client)) return;
+      if (typeof p?.t === "number" && Number.isFinite(p.t)) client.send(Evt.Pong, { t: p.t });
+    });
     this.onMessage(Msg.InvSync, (client) => {
       if (!this.allow(client)) return;
       const p = this.state.players.get(client.sessionId);

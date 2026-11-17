@@ -213,6 +213,24 @@ console.log("\n== 7. Adulterar o estado no cliente ==");
   b.room.leave();
 }
 
+// ------------------------------------------------------------------ 8. ping
+console.log("\n== 8. Ping ==");
+{
+  const c = await join();
+  const pongs = [];
+  c.room.onMessage("pong", (m) => pongs.push(m));
+  c.room.send("ping", { t: 123.5, lixo: "ignorado" });
+  await sleep(500);
+  check("o servidor devolve o mesmo carimbo de tempo (pong)", pongs.length === 1 && pongs[0].t === 123.5 && Object.keys(pongs[0]).length === 1, JSON.stringify(pongs));
+  for (const t of ["x", null, NaN, Infinity, {}, [], undefined]) { c.room.send("ping", { t }); await sleep(40); }
+  c.room.send("ping", "texto");
+  c.room.send("ping", null);
+  await sleep(500);
+  check("ping com valores inválidos não gera resposta nem derruba o cliente", pongs.length === 1 && c.log.left === null, `pongs=${pongs.length} saiu=${c.log.left}`);
+  check("ping a cada 2 s (uso normal) nunca é punido", await (async () => { for (let i = 0; i < 5; i++) { c.room.send("ping", { t: i }); await sleep(250); } return c.log.left === null && pongs.length === 6; })());
+  c.room.leave();
+}
+
 // ------------------------------------------------------------------ resumo
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} verificações passaram`);
