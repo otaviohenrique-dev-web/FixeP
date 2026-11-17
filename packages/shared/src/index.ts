@@ -14,6 +14,7 @@ export const Msg = {
   InvUse: "inv_use", // { slot }
   InvDrop: "inv_drop", // { slot }
   InvSync: "inv_sync", // pede a fotografia do inventário (o cliente pede depois de registrar os receptores)
+  Ping: "ping", // { t }: o servidor devolve o mesmo t em Evt.Pong (o cliente mede a ida e volta)
 } as const;
 
 /** Eventos enviados pelo servidor. */
@@ -27,6 +28,7 @@ export const Evt = {
   Proj: "proj", // projétil criado (o cliente anima o voo)
   ProjEnd: "projend", // projétil terminou (acertou ou acabou o alcance)
   Trap: "trap", // armadilha: colocada, disparou ou sumiu
+  Pong: "pong", // resposta ao ping, só para quem perguntou
   Inv: "inv", // fotografia completa do inventário (só para o dono)
   Loot: "loot", // item recebido
   Notice: "notice", // aviso de texto para o dono

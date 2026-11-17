@@ -70,3 +70,13 @@ Saem com código 1 se qualquer verificação falhar. Veja também `docs/DEPLOY_S
 ## Deploy
 
 `render.yaml` descreve os serviços do Render. Veja `docs/DEPLOY_SUPABASE_RENDER.md` (Parte 5).
+
+## Painel de FPS e ping (desenvolvimento)
+
+No canto superior direito do jogo aparecem os **FPS** (quadros desenhados por segundo) e o **ping** (ida e volta até o servidor, medido a cada 2 s).
+Verde é bom, amarelo é atenção e vermelho é ruim (FPS abaixo de 25, ping acima de 180 ms).
+**F3** liga e desliga (a escolha fica salva no navegador); `?stats=0` esconde e `?stats=1` mostra pela URL.
+Para publicar sem o painel por padrão, defina `VITE_SHOW_STATS=0` na montagem do site (Render > frixep-client > Environment).
+
+> **Atenção ao rodar servidores de teste:** o `.env` agora tem a `DATABASE_URL` do Supabase e ela tem prioridade sobre `PGLITE_DIR`.
+> Para testes locais **não carregue o `.env`** (rode `npx tsx src/index.ts` com `JWT_SECRET` inline) ou use `DB_SCHEMA=frixep_test`.

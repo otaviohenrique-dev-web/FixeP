@@ -12,6 +12,7 @@ import { mountGameMenu } from "./menu";
 import { mountHud, type Hud } from "./hud";
 import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
+import { mountStats } from "./stats";
 
 const TILE_W = 64;
 const TILE_H = 32;
@@ -140,6 +141,10 @@ class WorldScene extends Phaser.Scene {
     });
     this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), "#ffb3a6"));
     this.room.send(Msg.InvSync, {});
+
+    // painel de FPS e ping (canto superior direito; F3 liga/desliga)
+    const stats = mountStats({ sendPing: (t) => this.room.send(Msg.Ping, { t }) });
+    this.room.onMessage(Evt.Pong, (m: { t: number }) => stats.onPong(m.t));
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
