@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { Client, Room } from "colyseus.js";
+import { Client, Room, getStateCallbacks } from "colyseus.js";
 import { Msg, MAP_W, MAP_H } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
 
@@ -35,14 +35,20 @@ class WorldScene extends Phaser.Scene {
       }
     }
 
-    const token = await ensureLogin();
+    const token = (this.sys.settings.data as { token: string }).token;
     try {
       this.room = await new Client(wsUrl).joinOrCreate("zone", { token });
     } catch {
       logout(); // token inválido/recusado: volta ao login
       return;
     }
-    const players = (this.room.state as any).players;
+    // o primeiro estado chega logo depois do join: espera antes de ler `players`
+    if (!(this.room.state as any)?.players) {
+      await new Promise<void>((resolve) => this.room.onStateChange.once(() => resolve()));
+    }
+    // colyseus.js 0.16: callbacks de coleção passam por getStateCallbacks
+    const $ = getStateCallbacks(this.room);
+    const players = $(this.room.state as any).players;
 
     players.onAdd((p: any, id: string) => {
       const me = id === this.room.sessionId;
@@ -64,8 +70,9 @@ class WorldScene extends Phaser.Scene {
   }
 
   update() {
-    if (!this.room) return;
-    (this.room.state as any).players.forEach((p: any, id: string) => {
+    const players = (this.room?.state as any)?.players;
+    if (!players) return;
+    players.forEach((p: any, id: string) => {
       const s = this.sprites.get(id);
       if (!s) return;
       const { sx, sy } = toScreen(p.x, p.y);
@@ -78,10 +85,17 @@ class WorldScene extends Phaser.Scene {
   }
 }
 
+// Primeiro o login; o Phaser só inicia depois que há um token válido.
+const token = await ensureLogin();
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: "game",
   backgroundColor: "#0b0b10",
   scale: { mode: Phaser.Scale.RESIZE, width: "100%", height: "100%" },
-  scene: WorldScene,
+  scene: [],
+  callbacks: {
+    postBoot: (game) => {
+      game.scene.add("world", WorldScene, true, { token });
+    },
+  },
 });

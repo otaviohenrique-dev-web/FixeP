@@ -1,4 +1,6 @@
-const API = import.meta.env.VITE_API_URL ?? `http://${location.hostname}:2567`;
+import { mountLogin } from "./login";
+
+const API =import.meta.env.VITE_API_URL ?? `http://${location.hostname}:2567`;
 const KEY = "frixep_token";
 
 export const apiUrl = API;
@@ -39,44 +41,33 @@ function isExpired(token: string): boolean {
   }
 }
 
-function showLogin(message: string): Promise<string> {
-  return new Promise(async (resolve) => {
-    const box = document.createElement("div");
-    box.style.cssText =
-      "position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#0b0b10;color:#ddd;font-family:system-ui,sans-serif;z-index:10";
-    const h = document.createElement("h1");
-    h.textContent = "FrixeP";
-    h.style.cssText = "margin:0 0 8px;letter-spacing:4px;color:#ff8a3d";
-    box.append(h);
-    if (message) {
-      const m = document.createElement("p");
-      m.textContent = message;
-      m.style.color = "#e66";
-      box.append(m);
-    }
-    const btn = (label: string, onClick: () => void) => {
-      const b = document.createElement("button");
-      b.textContent = label;
-      b.style.cssText = "min-width:240px;padding:12px 16px;font-size:16px;border:1px solid #444;border-radius:8px;background:#1a1a24;color:#eee;cursor:pointer";
-      b.onclick = onClick;
-      box.append(b);
-    };
+async function showLogin(message: string): Promise<string> {
+  let providers = { google: false, discord: false, guest: false };
+  let msg = message;
+  try {
+    providers = await (await fetch(`${API}/auth/providers`)).json();
+  } catch {
+    msg = "Servidor indisponível. Tente novamente em instantes.";
+  }
 
-    let avail = { google: false, discord: false, guest: false };
-    try { avail = await (await fetch(`${API}/auth/providers`)).json(); } catch {
-      const m = document.createElement("p");
-      m.textContent = "Servidor indisponível.";
-      box.append(m);
-    }
-    if (avail.google) btn("Entrar com Google", () => (location.href = `${API}/auth/google`));
-    if (avail.discord) btn("Entrar com Discord", () => (location.href = `${API}/auth/discord`));
-    if (avail.guest)
-      btn("Jogar como convidado", async () => {
-        const { token } = await (await fetch(`${API}/auth/guest`, { method: "POST" })).json();
-        write(token);
-        box.remove();
-        resolve(token);
-      });
-    document.body.append(box);
+  return new Promise((resolve) => {
+    const ui = mountLogin({
+      message: msg,
+      providers,
+      onGoogle: () => { location.href = `${API}/auth/google`; },
+      onDiscord: () => { location.href = `${API}/auth/discord`; },
+      onGuest: async () => {
+        try {
+          const res = await fetch(`${API}/auth/guest`, { method: "POST" });
+          const { token } = await res.json();
+          if (!token) throw new Error("sem token");
+          write(token);
+          ui.destroy();
+          resolve(token);
+        } catch {
+          ui.setMessage("Não foi possível entrar como convidado.");
+        }
+      },
+    });
   });
 }
