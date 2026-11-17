@@ -1,8 +1,9 @@
-import { WARRIOR, type ActionId } from "@frixep/shared";
+import { CLASS_DEFS, type ActionId, type CharClass } from "@frixep/shared";
 
 /** HUD do combate em DOM: barra de vida, botões de ação com recarga e aviso de morte. */
 
 export interface HudOptions {
+  cls: CharClass;
   /** chamado quando o jogador aciona uma ação e ela não está em recarga local */
   onAction(a: ActionId): void;
 }
@@ -11,7 +12,7 @@ export interface Hud {
   setHp(hp: number, max: number): void;
   setProgress(level: number, xp: number, need: number): void;
   setDead(secondsLeft: number | null): void;
-  setBuff(on: boolean): void;
+  setBuff(on: boolean, label?: string): void;
 }
 
 const CSS = `
@@ -35,7 +36,7 @@ const CSS = `
 .hd-btn:active{transform:scale(.92)}
 .hd-btn:hover{border-color:#ff9a4d;box-shadow:0 0 18px rgba(255,120,40,.4),0 4px 14px rgba(0,0,0,.65)}
 .hd-btn:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
-.hd-name{font:700 9px/1.1 "Cinzel",Georgia,serif;letter-spacing:.06em;text-transform:uppercase;text-align:center;text-shadow:0 1px 3px #000;padding:0 2px;pointer-events:none}
+.hd-name{font:700 8px/1.1 "Cinzel",Georgia,serif;letter-spacing:.06em;text-transform:uppercase;text-align:center;text-shadow:0 1px 3px #000;padding:0 2px;pointer-events:none}
 .hd-key{position:absolute;top:3px;left:0;right:0;text-align:center;font:700 8px/1 "Cinzel",Georgia,serif;color:#ffb072;pointer-events:none;letter-spacing:.08em}
 .hd-cd{position:absolute;left:0;right:0;bottom:0;height:0;background:rgba(0,0,0,.68);pointer-events:none}
 .hd-cdn{position:absolute;inset:0;display:none;place-items:center;font:700 16px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 4px #000;pointer-events:none}
@@ -76,13 +77,14 @@ export function mountHud(opts: HudOptions): Hud {
   const bar = root.querySelector<HTMLElement>(".hd-bar")!;
   const deadSub = dead.querySelector("p")!;
 
+  const defs = CLASS_DEFS[opts.cls].actions;
   const cdUntil: Partial<Record<ActionId, number>> = {};
   const els = new Map<ActionId, { btn: HTMLElement; cd: HTMLElement; n: HTMLElement }>();
 
   // ordem visual: esquiva, skills, ataque (maior) à direita
   const order: ActionId[] = ["dodge", "skill1", "skill2", "skill3", "attack"];
   for (const a of order) {
-    const def = WARRIOR.actions[a];
+    const def = defs[a];
     const b = document.createElement("button");
     b.type = "button";
     b.className = "hd-btn" + (a === "attack" ? " big" : "");
@@ -100,7 +102,7 @@ export function mountHud(opts: HudOptions): Hud {
   function trigger(a: ActionId) {
     const now = performance.now();
     if (now < (cdUntil[a] ?? 0)) return;
-    cdUntil[a] = now + WARRIOR.actions[a].cd * 1000;
+    cdUntil[a] = now + defs[a].cd * 1000;
     opts.onAction(a);
   }
 
@@ -110,7 +112,7 @@ export function mountHud(opts: HudOptions): Hud {
     const now = performance.now();
     for (const [a, e] of els) {
       const left = (cdUntil[a] ?? 0) - now;
-      const total = WARRIOR.actions[a].cd * 1000;
+      const total = defs[a].cd * 1000;
       if (left > 0) {
         e.btn.classList.add("cool");
         e.cd.style.height = `${Math.min(100, (left / total) * 100)}%`;
@@ -143,7 +145,8 @@ export function mountHud(opts: HudOptions): Hud {
       dead.classList.toggle("on", secondsLeft !== null);
       if (secondsLeft !== null) deadSub.textContent = `Renascendo em ${Math.max(0, Math.ceil(secondsLeft))}`;
     },
-    setBuff(on) {
+    setBuff(on, label = "Grito ativo") {
+      if (on) buff.textContent = label;
       buff.classList.toggle("on", on);
     },
   };

@@ -4,7 +4,7 @@ process.env.PGLITE_DIR = "memory";
 process.env.NODE_ENV = "test";
 
 import { randomUUID } from "node:crypto";
-import { INV_SLOTS, ITEMS } from "@frixep/shared";
+import { INV_SLOTS, ITEMS, CLASS_DEFS, ACTION_IDS, maxHpFor } from "@frixep/shared";
 import { emptyInventory, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, snapshot } from "../src/game/inventory.js";
 import { rollLoot, GEAR_CHANCE, POTION_CHANCE } from "../src/game/loot.js";
 import { openDb } from "../src/db/index.js";
@@ -36,11 +36,11 @@ console.log("\n== Equipar, trocar e desequipar ==");
   addItem(inv, "espada_enferrujada", 1);
   addItem(inv, "espada_de_ferro", 1);
   addItem(inv, "pocao_de_vida", 1);
-  check("equipar arma de nível 1 funciona", equipFromSlot(inv, 0, 1).ok && inv.equip.weapon === "espada_enferrujada" && inv.slots[0] === null);
-  const r = equipFromSlot(inv, 1, 1);
+  check("equipar arma de nível 1 funciona", equipFromSlot(inv, 0, 1, "warrior").ok && inv.equip.weapon === "espada_enferrujada" && inv.slots[0] === null);
+  const r = equipFromSlot(inv, 1, 1, "warrior");
   check("arma de nível 3 é recusada no nível 1", !r.ok && (r as any).error.includes("3") && inv.equip.weapon === "espada_enferrujada" && inv.slots[1]?.id === "espada_de_ferro");
-  check("no nível 3 a troca funciona e a arma antiga volta para o espaço", equipFromSlot(inv, 1, 3).ok && inv.equip.weapon === "espada_de_ferro" && inv.slots[1]?.id === "espada_enferrujada");
-  check("poção não é equipável", !equipFromSlot(inv, 2, 99).ok && inv.slots[2]?.id === "pocao_de_vida");
+  check("no nível 3 a troca funciona e a arma antiga volta para o espaço", equipFromSlot(inv, 1, 3, "warrior").ok && inv.equip.weapon === "espada_de_ferro" && inv.slots[1]?.id === "espada_enferrujada");
+  check("poção não é equipável", !equipFromSlot(inv, 2, 99, "warrior").ok && inv.slots[2]?.id === "pocao_de_vida");
   check("bônus da arma equipada é lido", bonuses(inv).dmgPct === 20 && bonuses(inv).hp === 0);
   check("desequipar devolve o item à mochila", unequip(inv, "weapon").ok && inv.equip.weapon === null && inv.slots.some((s) => s?.id === "espada_de_ferro"));
   check("desequipar sem nada equipado falha", !unequip(inv, "armor").ok);
@@ -56,13 +56,42 @@ console.log("\n== Entradas inválidas ==");
   const inv2 = emptyInventory();
   addItem(inv2, "espada_enferrujada", 1); // existe um item no espaço 0: um índice aceito por engano mexeria nele
   const snap = JSON.stringify(inv2);
-  for (const v of lixo) { equipFromSlot(inv2, v, 99); dropSlot(inv2, v); }
+  for (const v of lixo) { equipFromSlot(inv2, v, 99, "warrior"); dropSlot(inv2, v); }
   check("nenhum valor lixo (texto, array, NaN, fora do intervalo) é aceito como índice", JSON.stringify(inv2) === snap);
   check("unequip com espaço inválido é recusado", ["", "x", "__proto__", "constructor", 0, null, {}].every((v) => !unequip(emptyInventory(), v).ok));
   const inv3 = emptyInventory();
   addItem(inv3, "pocao_de_vida", 1);
   consumeOne(inv3, 0);
   check("consumir a última unidade esvazia o espaço", inv3.slots[0] === null);
+}
+
+console.log("\n== Armas por classe ==");
+{
+  const inv = emptyInventory();
+  addItem(inv, "espada_enferrujada", 1);
+  addItem(inv, "arco_curto", 1);
+  addItem(inv, "cajado_de_galho", 1);
+  addItem(inv, "gibao_surrado", 1);
+  check("arqueiro não equipa espada", !equipFromSlot(inv, 0, 99, "archer").ok && inv.equip.weapon === null && inv.slots[0]?.id === "espada_enferrujada");
+  check("clérigo não equipa arco", !equipFromSlot(inv, 1, 99, "cleric").ok && inv.slots[1]?.id === "arco_curto");
+  check("guerreiro não equipa cajado", !equipFromSlot(inv, 2, 99, "warrior").ok && inv.slots[2]?.id === "cajado_de_galho");
+  check("a recusa diz qual classe pode usar", String((equipFromSlot(inv, 0, 99, "cleric") as any).error).includes("Guerreiro"));
+  check("arqueiro equipa o arco", equipFromSlot(inv, 1, 99, "archer").ok && inv.equip.weapon === "arco_curto");
+  check("armadura serve a qualquer classe", equipFromSlot(inv, 3, 99, "cleric").ok && inv.equip.armor === "gibao_surrado");
+}
+
+console.log("\n== Definições das classes ==");
+{
+  const kinds = new Set(["melee", "ring", "dashHit", "tauntBuff", "dodge", "projectile", "trap", "rain", "healAoe", "emberBuff", "revive"]);
+  for (const cls of ["warrior", "archer", "cleric"] as const) {
+    const d = CLASS_DEFS[cls];
+    const acts = ACTION_IDS.map((a) => d.actions[a]);
+    check(`${d.name}: 5 ações com tipo válido e recarga positiva`, acts.every((x) => x && kinds.has(x.kind) && x.cd > 0));
+  }
+  check("vida base por classe: 120 / 90 / 100", maxHpFor("warrior", 1) === 120 && maxHpFor("archer", 1) === 90 && maxHpFor("cleric", 1) === 100);
+  check("vida cresce 10 por nível e soma a armadura", maxHpFor("archer", 5, 15) === 90 + 40 + 15);
+  check("toda arma tem classe e todo item de classe existe nas definições", Object.values(ITEMS).filter((i) => i.kind === "weapon").every((i) => i.cls && CLASS_DEFS[i.cls]));
+  check("cada classe tem uma arma de cada raridade", (["warrior", "archer", "cleric"] as const).every((c) => (["common", "uncommon", "rare"] as const).every((r) => Object.values(ITEMS).some((i) => i.kind === "weapon" && i.cls === c && i.rarity === r))));
 }
 
 console.log("\n== Sorteio de loot ==");
@@ -79,6 +108,8 @@ console.log("\n== Sorteio de loot ==");
   check(`chance de equipamento ≈ ${GEAR_CHANCE * 100}%`, near(gear / N, GEAR_CHANCE, 0.02), `${((gear / N) * 100).toFixed(1)}%`);
   check(`chance de poção ≈ ${POTION_CHANCE * 100}%`, near(potion / N, POTION_CHANCE, 0.02), `${((potion / N) * 100).toFixed(1)}%`);
   check("itens raros são ≈ 5% dos equipamentos", near(rare / gearTotal, 0.05, 0.02), `${((rare / gearTotal) * 100).toFixed(1)}%`);
+  const stray = (["warrior", "archer", "cleric"] as const).flatMap((c) => Array.from({ length: 4000 }, () => rollLoot(c)).flat().filter((d) => ITEMS[d.id].cls && ITEMS[d.id].cls !== c));
+  check("ninguém recebe arma de outra classe como loot", stray.length === 0, `${stray.length} indevidos`);
   check("todo drop sorteado existe no catálogo", Array.from({ length: 2000 }, () => rollLoot()).flat().every((d) => ITEMS[d.id] && d.qty >= 1));
 }
 

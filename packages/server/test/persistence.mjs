@@ -48,7 +48,6 @@ const bad = [
   ["nome não é texto", { name: 12345, class: "warrior" }],
   ["nome é objeto", { name: { $ne: "" }, class: "warrior" }],
   ["sem nome", { class: "warrior" }],
-  ["classe indisponível (arqueiro)", { name: "Valido" + rnd(), class: "archer" }],
   ["classe inexistente", { name: "Valido" + rnd(), class: "deus" }],
   ["classe __proto__", { name: "Valido" + rnd(), class: "__proto__" }],
   ["sem classe", { name: "Valido" + rnd() }],
@@ -75,6 +74,14 @@ r = await api(tk2, "/character", { name: `  ${name.toUpperCase()}  `, class: "wa
 check("nome repetido com espaços/caixa alta → 409", r.status === 409);
 body = await (await api(tk, "/me")).json();
 check("/me devolve o personagem criado", body.character?.name === name);
+
+console.log("\n== 3a. As três classes são jogáveis ==");
+for (const cls of ["warrior", "archer", "cleric"]) {
+  const t = await guest();
+  const res = await api(t, "/character", { name: `Cls${cls.slice(0, 3)}${rnd()}`, class: cls });
+  const me2 = await (await api(t, "/me")).json();
+  check(`criar personagem da classe ${cls} → 201 e a classe fica salva`, res.status === 201 && me2.character?.class === cls, `status ${res.status}, classe ${me2.character?.class}`);
+}
 
 console.log("\n== 3b. Corrida: pedidos simultâneos ==");
 {

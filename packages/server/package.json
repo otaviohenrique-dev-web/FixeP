@@ -11,6 +11,7 @@
     "test:cheat": "node test/anticheat.mjs",
     "test:persist": "node test/persistence.mjs",
     "test:inv": "node test/inventory.mjs",
+    "test:classes": "node test/classes.mjs",
     "test:inv:unit": "tsx test/inventory.unit.ts"
   },
   "dependencies": {

@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, WARRIOR, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
+  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
+  type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type InventorySnapshot, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent,
 } from "@frixep/shared";
@@ -38,10 +39,13 @@ class WorldScene extends Phaser.Scene {
   private sprites = new Map<string, Phaser.GameObjects.Arc>();
   private labels = new Map<string, Phaser.GameObjects.Text>();
   private bars!: Phaser.GameObjects.Graphics;
-  private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter };
+  private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter; green: Phaser.GameObjects.Particles.ParticleEmitter };
   private hitstopUntil = 0;
   private touchMode = false;
   private deadUntil = 0;
+  private cls: CharClass = "warrior";
+  private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; obj: Phaser.GameObjects.Shape }>();
+  private traps = new Map<string, Phaser.GameObjects.Shape[]>();
 
   private get state(): any { return this.room?.state; }
   private me(): any { return this.state?.players?.get(this.room.sessionId); }
@@ -75,6 +79,7 @@ class WorldScene extends Phaser.Scene {
     if (!this.state?.players) await new Promise<void>((resolve) => this.room.onStateChange.once(() => resolve()));
 
     this.makeEffects();
+    this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
 
     // colyseus.js 0.16: callbacks de coleção passam por getStateCallbacks
     const $ = getStateCallbacks(this.room);
@@ -82,7 +87,7 @@ class WorldScene extends Phaser.Scene {
 
     st.players.onAdd((p: any, id: string) => {
       const me = id === this.room.sessionId;
-      this.sprites.set(`p:${id}`, this.add.circle(0, 0, 10, me ? 0xff8a3d : 0x6fa8dc).setStrokeStyle(2, 0x000000, 0.5));
+      this.sprites.set(`p:${id}`, this.add.circle(0, 0, 10, CLASS_DEFS[p.cls as CharClass]?.color ?? 0x6fa8dc).setStrokeStyle(me ? 3 : 2, me ? 0xffffff : 0x000000, me ? 0.9 : 0.5));
       this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "10px", color: "#ccc" }).setOrigin(0.5, 3.4));
       if (me) this.cameras.main.startFollow(this.sprites.get(`p:${id}`)!, true, 0.1, 0.1);
     });
@@ -95,7 +100,7 @@ class WorldScene extends Phaser.Scene {
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
 
     // HUD, menu e entrada
-    this.hud = mountHud({ onAction: (a) => this.act(a) });
+    this.hud = mountHud({ cls: this.cls, onAction: (a) => this.act(a) });
     mountGameMenu({
       playerName: this.me()?.name ?? "Portador",
       onLogout: async () => {
@@ -112,15 +117,20 @@ class WorldScene extends Phaser.Scene {
     });
 
     this.room.onMessage(Evt.Swing, (m: SwingEvent) => {
-      if (m.id !== this.room.sessionId) this.playSwing(m.a, m.x, m.y, m.dir, false); // a própria ação já foi mostrada
+      // a própria ação já foi mostrada na hora; as dos outros usam a classe de quem agiu
+      if (m.id !== this.room.sessionId) this.playSwing((this.state.players.get(m.id)?.cls as CharClass) ?? "warrior", m.a, m.x, m.y, m.dir, false);
     });
+    this.room.onMessage(Evt.Proj, (m: ProjEvent) => this.onProj(m));
+    this.room.onMessage(Evt.ProjEnd, (m: ProjEndEvent) => this.onProjEnd(m));
+    this.room.onMessage(Evt.Trap, (m: TrapEvent) => this.onTrap(m));
+    this.room.onMessage(Evt.Heal, (m: HealEvent) => this.onHeal(m));
     this.room.onMessage(Evt.Telegraph, (m: TelegraphEvent) => this.onTelegraph(m));
     this.room.onMessage(Evt.Hit, (m: HitEvent) => this.onHit(m));
     this.room.onMessage(Evt.Died, (m: DiedEvent) => this.onDied(m));
     this.room.onMessage(Evt.LevelUp, (m: LevelUpEvent) => this.onLevelUp(m));
 
     // mochila: registra os receptores ANTES de pedir a fotografia (evita perder a mensagem inicial)
-    this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1 });
+    this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls });
     this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => this.inv.setSnapshot(s));
     this.room.onMessage(Evt.Loot, (m: LootEvent) => {
       const d = ITEMS[m.id];
@@ -175,7 +185,7 @@ class WorldScene extends Phaser.Scene {
           alpha: { start: 1, end: 0 }, tint, blendMode: "ADD", emitting: false,
         })
         .setDepth(1e6);
-    this.emitters = { orange: mk(0xffa040), red: mk(0xff3b2b), gold: mk(0xffe27a) };
+    this.emitters = { orange: mk(0xffa040), red: mk(0xff3b2b), gold: mk(0xffe27a), green: mk(0x7dff9a) };
   }
 
   private ring(gx: number, gy: number, r: number, color: number, ms: number, from = 1, fill = true) {
@@ -191,50 +201,131 @@ class WorldScene extends Phaser.Scene {
     this.labels.delete(key);
   }
 
-  /** visual de uma ação; `mine` = ação do próprio jogador (toca o som) */
-  private playSwing(a: ActionId, gx: number, gy: number, dir: number, mine: boolean) {
-    const A = WARRIOR.actions;
+  /** visual de uma ação, escolhido pelo TIPO da ação; `mine` = ação do próprio jogador (toca o som) */
+  private playSwing(cls: CharClass, a: ActionId, gx: number, gy: number, dir: number, mine: boolean) {
+    const def = CLASS_DEFS[cls].actions[a];
     const dx = Math.cos(dir), dy = Math.sin(dir);
-    switch (a) {
-      case "attack":
-        this.ring(gx + dx * A.attack.offset, gy + dy * A.attack.offset, A.attack.radius, 0xffffff, 150, 0.6);
+    switch (def.kind) {
+      case "melee":
+        this.ring(gx + dx * (def.offset ?? 0), gy + dy * (def.offset ?? 0), def.radius ?? 1, 0xffffff, 150, 0.6);
         if (mine) sfx.swing();
         break;
-      case "skill1":
-        this.ring(gx, gy, A.skill1.radius, 0xffd9a0, 330, 0.3);
+      case "ring":
+        this.ring(gx, gy, def.radius ?? 2, 0xffd9a0, 330, 0.3);
         if (mine) sfx.whirl();
         break;
-      case "skill2":
+      case "dashHit":
         for (let i = 0; i <= 6; i++) {
-          const k = (i / 6) * A.skill2.dash;
+          const k = (i / 6) * (def.dash ?? 0);
           const { sx, sy } = toScreen(gx + dx * k, gy + dy * k);
           this.emitters.orange.explode(3, sx, sy);
         }
-        this.ring(gx + dx * A.skill2.dash, gy + dy * A.skill2.dash, A.skill2.radius, 0xffa040, 260, 0.5);
+        this.ring(gx + dx * (def.dash ?? 0), gy + dy * (def.dash ?? 0), def.radius ?? 1, 0xffa040, 260, 0.5);
         if (mine) sfx.dash();
         break;
-      case "skill3":
-        this.ring(gx, gy, A.skill3.tauntRadius, 0xff9a4d, 650, 0.2, false);
+      case "tauntBuff":
+        this.ring(gx, gy, def.tauntRadius ?? 5, 0xff9a4d, 650, 0.2, false);
         this.ring(gx, gy, 1.2, 0xffd08a, 400, 0.4);
         if (mine) sfx.shout();
         break;
       case "dodge": {
-        const { sx, sy } = toScreen(gx, gy);
-        this.emitters.gold.explode(8, sx, sy);
+        const n = Math.max(2, Math.round((def.dash ?? 3) * 2));
+        for (let i = 0; i < n; i++) {
+          const k = (i / n) * (def.dash ?? 3);
+          const { sx, sy } = toScreen(gx + dx * k, gy + dy * k);
+          this.emitters.gold.explode(2, sx, sy);
+        }
         if (mine) sfx.dash();
         break;
       }
+      case "projectile": // o voo do projétil vem do servidor (Evt.Proj)
+        if (mine) sfx.shoot();
+        break;
+      case "trap": // a armadilha aparece quando o servidor confirma (Evt.Trap)
+        if (mine) sfx.trapSet();
+        break;
+      case "rain":
+        if (mine) sfx.shoot();
+        break;
+      case "healAoe":
+        this.ring(gx, gy, def.radius ?? 4, 0x7dff9a, 500, 0.2, false);
+        this.ring(gx, gy, 1.4, 0xc8ffd4, 380, 0.4);
+        if (mine) sfx.heal();
+        break;
+      case "emberBuff":
+        this.ring(gx, gy, def.radius ?? 5, 0xffb347, 600, 0.2, false);
+        this.ring(gx, gy, 1.4, 0xffd08a, 420, 0.4);
+        if (mine) sfx.ember();
+        break;
+      case "revive":
+        this.ring(gx, gy, 1.6, 0xfff2a8, 500, 0.3);
+        if (mine) sfx.heal();
+        break;
+    }
+  }
+
+  // ---------------------------------------------------------------- projéteis, armadilhas e cura
+  private onProj(m: ProjEvent) {
+    const color = m.look === "pierce" ? 0x9fe39f : m.look === "bolt" ? 0xfff2a8 : 0xe8d9a0;
+    const obj: Phaser.GameObjects.Shape =
+      m.look === "bolt"
+        ? this.add.circle(0, 0, 6, color).setBlendMode(Phaser.BlendModes.ADD)
+        : this.add.ellipse(0, 0, m.look === "pierce" ? 26 : 18, m.look === "pierce" ? 6 : 4, color);
+    const d = dirScreen(m.dir);
+    obj.setRotation(Math.atan2(d.y, d.x)).setDepth(1e5);
+    this.projs.set(m.id, { x: m.x, y: m.y, dx: Math.cos(m.dir), dy: Math.sin(m.dir), speed: m.speed, left: m.range, obj });
+  }
+
+  private onProjEnd(m: ProjEndEvent) {
+    const pr = this.projs.get(m.id);
+    if (!pr) return;
+    pr.obj.destroy();
+    this.projs.delete(m.id);
+  }
+
+  private onTrap(m: TrapEvent) {
+    const { sx, sy } = toScreen(m.x, m.y);
+    if (m.s === "set") {
+      const ring = this.add.ellipse(sx, sy, m.r * ELL_W, m.r * ELL_H, 0x7dff9a, 0.08).setStrokeStyle(2, 0x7dff9a, 0.7).setDepth(0.4);
+      const core = this.add.ellipse(sx, sy, 22, 11, 0xd9c58a, 0.9).setStrokeStyle(2, 0x3a2f12, 1).setDepth(0.45);
+      this.tweens.add({ targets: ring, alpha: { from: 0.5, to: 1 }, duration: 700, yoyo: true, repeat: -1 });
+      this.traps.set(m.id, [ring, core]);
+      return;
+    }
+    const parts = this.traps.get(m.id);
+    parts?.forEach((o) => o.destroy());
+    this.traps.delete(m.id);
+    if (m.s === "boom") {
+      this.ring(m.x, m.y, m.r, 0xffa040, 380, 0.2);
+      this.emitters.orange.explode(26, sx, sy);
+      this.cameras.main.shake(120, 0.004);
+      sfx.boom();
+    }
+  }
+
+  private onHeal(m: HealEvent) {
+    const { sx, sy } = toScreen(m.x, m.y);
+    this.emitters.green.explode(m.revive ? 28 : 12, sx, sy - 10);
+    if (m.revive) {
+      this.emitters.gold.explode(20, sx, sy - 10);
+      this.floatText(m.x, m.y - 0.6, "RENASCEU", "#fff2a8", 20, true);
+      if (m.id === this.room.sessionId) { this.cameras.main.flash(250, 255, 240, 160); sfx.heal(); }
+    } else {
+      this.floatText(m.x, m.y, `+${m.amount}`, "#7dff9a", 18, true);
+      if (m.id === this.room.sessionId) sfx.heal();
     }
   }
 
   private onTelegraph(m: TelegraphEvent) {
     const { sx, sy } = toScreen(m.x, m.y);
     const w = m.r * ELL_W, h = m.r * ELL_H;
-    const outline = this.add.ellipse(sx, sy, w, h, 0xff2a2a, 0.12).setStrokeStyle(2, 0xff5a4a, 0.95).setDepth(0.5);
-    const inner = this.add.ellipse(sx, sy, w, h, 0xff2a2a, 0.38).setDepth(0.55).setScale(0.1);
+    const col = m.friendly ? 0x66ccff : 0xff2a2a;
+    const edge = m.friendly ? 0x9fe0ff : 0xff5a4a;
+    const outline = this.add.ellipse(sx, sy, w, h, col, 0.12).setStrokeStyle(2, edge, 0.95).setDepth(0.5);
+    const inner = this.add.ellipse(sx, sy, w, h, col, 0.38).setDepth(0.55).setScale(0.1);
     this.tweens.add({ targets: inner, scale: 1, duration: m.ms, ease: "Quad.easeIn" });
     this.time.delayedCall(m.ms + 120, () => { outline.destroy(); inner.destroy(); });
-    sfx.warn();
+    if (!m.friendly) sfx.warn();
   }
 
   private floatText(gx: number, gy: number, txt: string, color: string, size: number, pop: boolean) {
@@ -285,7 +376,7 @@ class WorldScene extends Phaser.Scene {
       if (s) this.emitters.orange.explode(26, s.x, s.y - 8);
       sfx.enemyDie();
     } else if (m.id === this.room.sessionId) {
-      this.deadUntil = this.time.now + WARRIOR.respawnS * 1000;
+      this.deadUntil = this.time.now + RESPAWN_S * 1000;
       this.cameras.main.shake(300, 0.012);
       sfx.die();
     }
@@ -319,17 +410,29 @@ class WorldScene extends Phaser.Scene {
     const payload: ActPayload = { a, ax: x, ay: y };
     this.room.send(Msg.Act, payload);
     // resposta imediata no cliente (o servidor continua sendo quem decide o resultado)
-    this.playSwing(a, me.x, me.y, Math.atan2(y - me.y, x - me.x), true);
+    this.playSwing(this.cls, a, me.x, me.y, Math.atan2(y - me.y, x - me.x), true);
   }
 
   // ---------------------------------------------------------------- quadro
-  update(time: number) {
+  update(time: number, delta: number) {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes
     this.bars.clear();
 
-    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, hidden: boolean, dim = false) => {
+    // projéteis: o servidor decide os acertos; aqui só animamos o voo com a mesma velocidade
+    const dts = delta / 1000;
+    for (const [id, pr] of this.projs) {
+      const step = Math.min(pr.speed * dts, pr.left);
+      pr.x += pr.dx * step;
+      pr.y += pr.dy * step;
+      pr.left -= step;
+      const { sx, sy } = toScreen(pr.x, pr.y);
+      pr.obj.setPosition(sx, sy - 10);
+      if (pr.left <= 0.001) { pr.obj.destroy(); this.projs.delete(id); }
+    }
+
+    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, hidden: boolean, dim = false, ember = false) => {
       const s = this.sprites.get(key);
       if (!s) return;
       s.setVisible(!hidden);
@@ -349,9 +452,10 @@ class WorldScene extends Phaser.Scene {
       this.bars.fillStyle(key.startsWith("e:") ? 0xc0392b : 0x4cc26a, 1).fillRect(s.x - w / 2, s.y - 26, w * ratio, 4);
       const d = dirScreen(face);
       this.bars.lineStyle(3, 0xffffff, 0.85).lineBetween(s.x, s.y, s.x + d.x * 16, s.y + d.y * 16);
+      if (ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + 8, 36, 18); // Brasa ativa
     };
 
-    st.players.forEach((p: any, id: string) => place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, false, p.dead));
+    st.players.forEach((p: any, id: string) => place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, false, p.dead, p.ember));
     st.enemies.forEach((e: any, id: string) => {
       place(`e:${id}`, e.x, e.y, e.face, e.hp, e.maxHp, e.st === "dead");
       const s = this.sprites.get(`e:${id}`);
@@ -361,10 +465,10 @@ class WorldScene extends Phaser.Scene {
     const me = this.me();
     if (me) {
       this.hud.setHp(me.hp, me.maxHp);
-      this.hud.setBuff(!!me.buff);
+      this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Grito ativo" : "Brasa ativa");
       this.hud.setProgress(me.level, me.xp, xpToNext(me.level));
       if (me.dead) {
-        if (!this.deadUntil) this.deadUntil = time + WARRIOR.respawnS * 1000;
+        if (!this.deadUntil) this.deadUntil = time + RESPAWN_S * 1000;
         this.hud.setDead((this.deadUntil - time) / 1000);
       } else {
         this.deadUntil = 0;
