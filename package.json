@@ -1,0 +1,10 @@
+{
+  "name": "frixep",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:server": "npm run dev -w @frixep/server",
+    "dev:client": "npm run dev -w @frixep/client",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
