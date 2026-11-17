@@ -66,3 +66,28 @@ No PowerShell: `$env:PORT=2999; $env:PGLITE_DIR="memory"; $env:API_RATE_MULT=100
 Saem com código 1 se qualquer verificação falhar. Veja também `docs/DEPLOY_SUPABASE_RENDER.md`.
 
 
+
+## Arte no jogo (sprites)
+
+O jogo desenha **sprites animados** quando encontra o atlas do personagem e **círculos** quando não encontra, então a arte pode
+chegar aos poucos (por exemplo, só o Guerreiro primeiro). Basta salvar o PNG + JSON exportados do Aseprite e recarregar a página:
+
+| Arquivo (em `assets/`) | O que vira no jogo |
+|---|---|
+| `characters/warrior.png` + `.json` | Guerreiro |
+| `characters/archer.png` + `.json` | Arqueiro |
+| `characters/cleric.png` + `.json` | Clérigo |
+| `monsters/skeleton.png` + `.json` | Esqueleto |
+
+As **tags** do Aseprite definem as animações (`idle_se`, `walk_ne`, `attack_se`...). Convenção completa em
+`docs/GUIA_ARTE_INICIAL.pdf`. Direções ausentes são espelhadas (SW usa SE, NW usa NE) ou substituídas pela mais próxima.
+Se um JSON estiver fora do padrão, o console do navegador (F12) explica o motivo; se o PNG vier quebrado do GitHub, rode `git lfs pull`.
+
+**Atlas de depuração** (bonecos provisórios, só para testar o carregador; **não é arte do jogo** e não vai para o Git):
+
+```
+python tools/gen_debug_atlas.py          # precisa de Python e Pillow
+# depois abra http://localhost:5173/?atlas=debug
+```
+
+Testes da lógica do carregador: `npm run test:sprites -w @frixep/client` (40 verificações).
