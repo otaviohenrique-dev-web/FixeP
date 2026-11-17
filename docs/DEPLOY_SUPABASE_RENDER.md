@@ -86,3 +86,24 @@ salvos ao sair, ao subir de nível e a cada 30 segundos.
 
 Arquivos em `packages/server/migrations/*.sql`, aplicados em ordem na inicialização, cada um numa transação.
 Para mudar o banco, **crie um arquivo novo** (`002_...sql`); nunca edite um já aplicado.
+
+## Testar contra o Supabase sem sujar o banco real
+
+As suítes de teste criam dezenas de contas e personagens. Para **não misturar** isso com dados de verdade, rode-as num
+**schema separado** (`DB_SCHEMA`), dentro do mesmo banco. O schema real (`public`) não é tocado.
+
+```
+# em packages/server, com a DATABASE_URL já no .env
+PORT=2999 DB_SCHEMA=frixep_test API_RATE_MULT=100 LOOT_TEST=1 npm run start      # terminal 1 (servidor de teste)
+SERVER=http://localhost:2999 npm run test:persist                                # terminal 2 (e test:inv, test:classes, test:cheat)
+
+node --env-file=../../.env test/remote-db.mjs status    # contagens do schema real e do de teste
+node --env-file=../../.env test/remote-db.mjs drop      # apaga SÓ o schema de teste (recusa o "public")
+```
+
+`DB_SCHEMA` é ignorado em produção (o servidor se recusa a iniciar com ele quando `NODE_ENV=production`).
+Resultado em 17/11/2026 no Supabase (Oregon): persistência 34/34, inventário 16/16, classes 34/34 e anti-trapaça 25/25;
+o teste de 12 criações simultâneas gerou exatamente 1 personagem com conexões reais.
+
+**Antes de abrir o jogo ao público:** contas de convidado (`provider = 'guest'`) só existem em desenvolvimento
+(`ALLOW_GUEST` fica desligado em produção). Apague as de teste do schema `public`, se houver, e defina `DATABASE_CA`.

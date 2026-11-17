@@ -37,6 +37,17 @@ function sslFor(url: string): pg.PoolConfig["ssl"] {
 async function openPostgres(url: string): Promise<Db> {
   const pool = new pg.Pool({ connectionString: url, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000, ssl: sslFor(url) });
   pool.on("error", (e) => console.error("[db] erro no pool:", e.message));
+
+  // DB_SCHEMA (só para testes): usa um schema separado no mesmo banco, para os testes automatizados nunca
+  // misturarem dados com os reais (schema "public"). Depois do teste, basta apagar esse schema.
+  const schema = process.env.DB_SCHEMA;
+  if (schema) {
+    if (isProd) throw new Error("DB_SCHEMA não é permitido em produção");
+    if (!/^[a-z_][a-z0-9_]{0,40}$/.test(schema) || schema === "public") throw new Error("DB_SCHEMA inválido (use letras minúsculas, números e _; não use 'public')");
+    pool.on("connect", (client) => { void client.query(`set search_path to "${schema}"`); }); // vale para cada conexão nova
+    await pool.query(`create schema if not exists "${schema}"`);
+    console.warn(`[db] ATENÇÃO: usando o schema isolado "${schema}" (modo de teste)`);
+  }
   return {
     kind: "postgres",
     query: (sql, params) => pool.query(sql, params as any[]) as any,
