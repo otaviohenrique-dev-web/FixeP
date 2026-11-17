@@ -9,7 +9,9 @@
     "start:prod": "tsx src/index.ts",
     "typecheck": "tsc -p .",
     "test:cheat": "node test/anticheat.mjs",
-    "test:persist": "node test/persistence.mjs"
+    "test:persist": "node test/persistence.mjs",
+    "test:inv": "node test/inventory.mjs",
+    "test:inv:unit": "tsx test/inventory.unit.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.0",

@@ -1,5 +1,6 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
 import { SPAWN, WARRIOR, SKELETON } from "@frixep/shared";
+import { emptyInventory, type Inventory } from "../game/inventory.js";
 
 export class Player extends Schema {
   @type("number") x = SPAWN.x;
@@ -16,6 +17,10 @@ export class Player extends Schema {
   // --- só no servidor (não sincronizado) ---
   charId = ""; // linha em `characters`
   dirty = false; // progresso ainda não salvo
+  invDirty = false; // inventário ainda não salvo
+  inv: Inventory = emptyInventory();
+  potionCdUntil = 0;
+  saveChain: Promise<void> = Promise.resolve(); // salvamentos do mesmo jogador rodam em fila (dado velho não sobrescreve novo)
   tx = SPAWN.x;
   ty = SPAWN.y;
   cdUntil: Record<string, number> = {};

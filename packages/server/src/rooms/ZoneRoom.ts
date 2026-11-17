@@ -3,13 +3,15 @@ import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
   MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, SPAWN, ENEMY_SPAWNS,
   WARRIOR, SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
-  LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, dmgMult,
+  LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
+import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, type Inventory } from "../game/inventory.js";
+import { rollLoot } from "../game/loot.js";
 
-interface JoinAuth { user: AuthUser; character: CharacterRow }
+interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory }
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
@@ -60,7 +62,69 @@ export class ZoneRoom extends Room<ZoneState> {
       this.doAction(client.sessionId, pl, p.a, clamp(p.ax, -100, 140), clamp(p.ay, -100, 140));
     });
 
+    // Inventário: o cliente pede, o servidor valida e devolve a fotografia completa.
+    this.onMessage(Msg.InvEquip, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => equipFromSlot(pl.inv, p?.slot, pl.level)));
+    this.onMessage(Msg.InvUnequip, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => unequip(pl.inv, p?.slot)));
+    this.onMessage(Msg.InvDrop, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => dropSlot(pl.inv, p?.slot)));
+    this.onMessage(Msg.InvSync, (client) => {
+      if (!this.allow(client)) return;
+      const p = this.state.players.get(client.sessionId);
+      if (p) this.sendInv(client.sessionId, p);
+    });
+    this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(pl, p?.slot)));
+
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
+  }
+
+  // ------------------------------------------------------------------ inventário
+  private notify(id: string, text: string) {
+    this.clients.getById(id)?.send(Evt.Notice, { text });
+  }
+
+  private sendInv(id: string, p: Player) {
+    this.clients.getById(id)?.send(Evt.Inv, snapshot(p.inv));
+  }
+
+  /** vida máxima e dano dependem do nível E do equipamento */
+  private refreshStats(p: Player, fill = false) {
+    p.maxHp = maxHpFor(p.level, bonuses(p.inv).hp);
+    p.hp = fill ? p.maxHp : Math.min(p.hp, p.maxHp);
+  }
+
+  private invOp(client: Client, op: (p: Player) => { ok: true } | { ok: false; error: string }) {
+    if (!this.allow(client)) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead) return;
+    const r = op(p);
+    if (!r.ok) return this.notify(client.sessionId, r.error);
+    p.invDirty = true;
+    this.refreshStats(p);
+    this.sendInv(client.sessionId, p);
+  }
+
+  private usePotion(p: Player, slot: unknown): { ok: true } | { ok: false; error: string } {
+    if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
+    const stack = p.inv.slots[slot];
+    const def = stack ? ITEMS[stack.id] : undefined;
+    if (!stack || !def || def.kind !== "potion") return { ok: false, error: "Esse item não pode ser usado." };
+    if (this.t < p.potionCdUntil) return { ok: false, error: "Poção em recarga." };
+    if (p.hp >= p.maxHp) return { ok: false, error: "Sua vida já está cheia." };
+    consumeOne(p.inv, slot);
+    p.potionCdUntil = this.t + POTION_COOLDOWN_S;
+    p.hp = Math.min(p.maxHp, p.hp + (def.heal ?? 0));
+    return { ok: true };
+  }
+
+  private giveLoot(id: string, p: Player) {
+    const client = this.clients.getById(id);
+    let any = false;
+    for (const d of rollLoot()) {
+      const notFit = addItem(p.inv, d.id, d.qty);
+      const got = d.qty - notFit;
+      if (got > 0) { client?.send(Evt.Loot, { id: d.id, qty: got }); any = true; }
+      if (notFit > 0) this.notify(id, "Mochila cheia: item perdido.");
+    }
+    if (any) { p.invDirty = true; this.sendInv(id, p); }
   }
 
   async onAuth(_client: Client, options: { token?: string }): Promise<JoinAuth> {
@@ -72,9 +136,10 @@ export class ZoneRoom extends Room<ZoneState> {
     }
     const character = await this.repo.getCharacter(user.id);
     if (!character) throw new ServerError(403, "crie um personagem antes de entrar");
+    const inventory = await this.repo.loadInventory(character.id);
     // uma sessão por conta: derruba a anterior
     for (const c of this.clients) if (this.userIds.get(c.sessionId) === user.id) c.leave(4001);
-    return { user, character };
+    return { user, character, inventory };
   }
 
   onJoin(client: Client, _options: unknown, auth: JoinAuth) {
@@ -84,9 +149,10 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.charId = auth.character.id;
     pl.level = auth.character.level;
     pl.xp = auth.character.xp;
-    pl.maxHp = maxHpFor(pl.level);
-    pl.hp = pl.maxHp;
+    pl.inv = auth.inventory;
+    this.refreshStats(pl, true);
     this.state.players.set(client.sessionId, pl);
+    this.sendInv(client.sessionId, pl);
   }
 
   // ------------------------------------------------------------------ limite de taxa
@@ -131,13 +197,22 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   // ------------------------------------------------------------------ persistência
-  private async save(p: Player) {
-    if (!p.dirty || !p.charId) return;
-    p.dirty = false;
+  /** Os salvamentos de um mesmo jogador rodam em fila: um estado velho nunca termina depois de um novo. */
+  private save(p: Player): Promise<void> {
+    p.saveChain = p.saveChain.then(() => this.doSave(p));
+    return p.saveChain;
+  }
+
+  private async doSave(p: Player) {
+    if (!p.charId || (!p.dirty && !p.invDirty)) return;
+    const progress = p.dirty, inv = p.invDirty;
+    p.dirty = p.invDirty = false;
     try {
-      await this.repo.saveProgress(p.charId, p.level, p.xp);
+      if (progress) await this.repo.saveProgress(p.charId, p.level, p.xp);
+      if (inv) await this.repo.saveInventory(p.charId, p.inv);
     } catch (e) {
-      p.dirty = true; // tenta de novo no próximo ciclo
+      p.dirty ||= progress; // tenta de novo no próximo ciclo
+      p.invDirty ||= inv;
       console.error("[db] falha ao salvar personagem:", (e as Error).message);
     }
   }
@@ -158,8 +233,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (p.level >= LEVEL_CAP) p.xp = 0;
     p.dirty = true;
     if (leveled) {
-      p.maxHp = maxHpFor(p.level);
-      p.hp = p.maxHp;
+      this.refreshStats(p, true);
       this.broadcast(Evt.LevelUp, { id, level: p.level });
       void this.save(p); // subir de nível salva na hora
     }
@@ -222,12 +296,12 @@ export class ZoneRoom extends Room<ZoneState> {
       case "attack":
       case "skill1": {
         const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
-        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level), (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level, bonuses(p.inv).dmgPct), (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
         break;
       }
       case "skill2": {
         const ex = p.x + dx * (def.dash ?? 0), ey = p.y + dy * (def.dash ?? 0);
-        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level), (e) => distToSegment(e.x, e.y, p.x, p.y, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level, bonuses(p.inv).dmgPct), (e) => distToSegment(e.x, e.y, p.x, p.y, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
         this.startDash(p, dx, dy, def);
         break;
       }
@@ -273,7 +347,10 @@ export class ZoneRoom extends Room<ZoneState> {
         e.targetId = "";
         this.broadcast(Evt.Died, { k: "e", id: eid });
         const killer = this.state.players.get(by);
-        if (killer && !killer.dead) this.addXp(by, killer, XP_PER_KILL);
+        if (killer && !killer.dead) {
+          this.addXp(by, killer, XP_PER_KILL);
+          this.giveLoot(by, killer);
+        }
       }
     });
   }

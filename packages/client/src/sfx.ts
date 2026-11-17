@@ -84,5 +84,6 @@ export const sfx = {
   die: () => { tone("sawtooth", 200, 35, 0.8, 0.35); },
   enemyDie: () => { tone("triangle", 320, 70, 0.35, 0.3); whoosh(2000, 300, 0.3, 0.12); },
   levelUp: () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone("triangle", f, f * 1.01, 0.28, 0.22), i * 90)); },
+  pickup: () => { tone("sine", 660, 990, 0.1, 0.16); setTimeout(() => tone("sine", 990, 1320, 0.1, 0.12), 70); },
   warn: () => tone("square", 330, 300, 0.09, 0.05),
 };
