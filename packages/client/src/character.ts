@@ -1,12 +1,12 @@
-import { NAME_MAX, NAME_MIN, PLAYABLE_CLASSES, type CharClass, type CharacterInfo } from "@frixep/shared";
+import { CLASS_DEFS, NAME_MAX, NAME_MIN, PLAYABLE_CLASSES, type CharClass, type CharacterInfo } from "@frixep/shared";
 import { apiUrl, logout } from "./auth";
 import { mountScreen } from "./login";
 
-const CLASSES: { id: CharClass; name: string; role: string }[] = [
-  { id: "warrior", name: "Guerreiro", role: "Tanque" },
-  { id: "archer", name: "Arqueiro", role: "Dano à distância" },
-  { id: "cleric", name: "Clérigo", role: "Suporte" },
-];
+const CLASSES: { id: CharClass; name: string; role: string }[] = (["warrior", "archer", "cleric"] as CharClass[]).map((id) => ({
+  id,
+  name: CLASS_DEFS[id].name,
+  role: CLASS_DEFS[id].role,
+}));
 
 const CSS = `
 .fc-field{display:flex;flex-direction:column;gap:6px}

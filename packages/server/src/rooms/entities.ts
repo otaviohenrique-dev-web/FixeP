@@ -1,5 +1,5 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
-import { SPAWN, WARRIOR, SKELETON } from "@frixep/shared";
+import { SPAWN, CLASS_DEFS, SKELETON } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 
 export class Player extends Schema {
@@ -7,10 +7,12 @@ export class Player extends Schema {
   @type("number") y = SPAWN.y;
   @type("number") face = 0; // ângulo (rad) no espaço da grade
   @type("string") name = "";
-  @type("number") hp = WARRIOR.maxHp;
-  @type("number") maxHp = WARRIOR.maxHp;
+  @type("number") hp = CLASS_DEFS.warrior.maxHp;
+  @type("number") maxHp = CLASS_DEFS.warrior.maxHp;
   @type("boolean") dead = false;
+  @type("string") cls = "warrior";
   @type("boolean") buff = false; // Grito de guerra ativo
+  @type("boolean") ember = false; // Brasa do Clérigo ativa
   @type("number") level = 1;
   @type("number") xp = 0;
 
@@ -20,6 +22,8 @@ export class Player extends Schema {
   invDirty = false; // inventário ainda não salvo
   inv: Inventory = emptyInventory();
   potionCdUntil = 0;
+  emberUntil = 0;
+  emberPct = 0;
   saveChain: Promise<void> = Promise.resolve(); // salvamentos do mesmo jogador rodam em fila (dado velho não sobrescreve novo)
   tx = SPAWN.x;
   ty = SPAWN.y;

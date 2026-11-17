@@ -85,5 +85,10 @@ export const sfx = {
   enemyDie: () => { tone("triangle", 320, 70, 0.35, 0.3); whoosh(2000, 300, 0.3, 0.12); },
   levelUp: () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone("triangle", f, f * 1.01, 0.28, 0.22), i * 90)); },
   pickup: () => { tone("sine", 660, 990, 0.1, 0.16); setTimeout(() => tone("sine", 990, 1320, 0.1, 0.12), 70); },
+  shoot: () => whoosh(1800, 3200, 0.1, 0.16),
+  trapSet: () => { tone("square", 220, 180, 0.06, 0.12); setTimeout(() => tone("square", 330, 300, 0.06, 0.1), 70); },
+  boom: () => { tone("sawtooth", 160, 40, 0.3, 0.35); whoosh(2400, 200, 0.3, 0.25); },
+  heal: () => { [523, 659, 880].forEach((f, i) => setTimeout(() => tone("sine", f, f * 1.005, 0.22, 0.14), i * 70)); },
+  ember: () => { tone("triangle", 220, 440, 0.4, 0.16); whoosh(500, 1400, 0.4, 0.14); },
   warn: () => tone("square", 330, 300, 0.09, 0.05),
 };

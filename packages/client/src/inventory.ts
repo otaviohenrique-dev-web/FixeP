@@ -1,5 +1,5 @@
 import {
-  ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME,
+  ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
 } from "@frixep/shared";
 
@@ -64,13 +64,13 @@ const BAG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 const icon = (d: ItemDef) => `<span style="color:${RARITY_COLOR[d.rarity]};display:contents">${ICONS[d.kind]}</span>`;
 
 function statsLine(d: ItemDef): string {
-  if (d.dmgPct) return `+${d.dmgPct}% de dano`;
+  if (d.dmgPct) return `+${d.dmgPct}% de poder`;
   if (d.hp) return `+${d.hp} de vida`;
   if (d.heal) return `Cura ${d.heal} de vida`;
   return "";
 }
 
-export function mountInventory(opts: { send(type: string, payload: unknown): void; getLevel(): number }): InventoryUi {
+export function mountInventory(opts: { send(type: string, payload: unknown): void; getLevel(): number; getClass(): CharClass }): InventoryUi {
   const style = document.createElement("style");
   style.textContent = CSS;
   document.head.append(style);
@@ -131,7 +131,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     // bônus totais
     const w = snap.equip.weapon ? ITEMS[snap.equip.weapon] : null;
     const a = snap.equip.armor ? ITEMS[snap.equip.armor] : null;
-    statsEl.textContent = `Dano +${w?.dmgPct ?? 0}%  ·  Vida +${a?.hp ?? 0}`;
+    statsEl.textContent = `Poder +${w?.dmgPct ?? 0}%  ·  Vida +${a?.hp ?? 0}`;
     // espaços
     gridEl.innerHTML = "";
     snap.inv.forEach((st, i) => {
@@ -171,6 +171,12 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     const p2 = document.createElement("p");
     p2.textContent = def.desc;
     detEl.append(h, p1, p2);
+    if (def.cls && sel.kind === "slot") {
+      const pc = document.createElement("p");
+      pc.textContent = `Exclusivo: ${CLASS_DEFS[def.cls].name}`;
+      if (def.cls !== opts.getClass()) pc.className = "iv-bad";
+      detEl.append(pc);
+    }
     const needs = def.minLevel > 1 ? def.minLevel : 0;
     if (needs && sel.kind === "slot") {
       const p3 = document.createElement("p");
