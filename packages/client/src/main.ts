@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { Msg, MAP_W, MAP_H } from "@frixep/shared";
+import { ensureLogin, logout, wsUrl } from "./auth";
 
 const TILE_W = 64;
 const TILE_H = 32;
@@ -34,8 +35,13 @@ class WorldScene extends Phaser.Scene {
       }
     }
 
-    const url = import.meta.env.VITE_SERVER_URL ?? `ws://${location.hostname}:2567`;
-    this.room = await new Client(url).joinOrCreate("zone");
+    const token = await ensureLogin();
+    try {
+      this.room = await new Client(wsUrl).joinOrCreate("zone", { token });
+    } catch {
+      logout(); // token inválido/recusado: volta ao login
+      return;
+    }
     const players = (this.room.state as any).players;
 
     players.onAdd((p: any, id: string) => {

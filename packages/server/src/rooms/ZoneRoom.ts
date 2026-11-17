@@ -1,6 +1,8 @@
-import { Room, Client } from "colyseus";
+import { Room, Client, ServerError } from "colyseus";
 import { Schema, MapSchema, type } from "@colyseus/schema";
 import { Msg, MoveToPayload, MAP_W, MAP_H, TICK_RATE, MOVE_SPEED, MAX_CLIENTS_PER_ZONE, clamp } from "@frixep/shared";
+
+import { verifySession, type AuthUser } from "../auth.js";
 
 export class Player extends Schema {
   @type("number") x = 20;
@@ -16,6 +18,7 @@ export class ZoneState extends Schema {
 
 export class ZoneRoom extends Room<ZoneState> {
   maxClients = MAX_CLIENTS_PER_ZONE;
+  private userIds = new Map<string, string>(); // sessionId -> accountId
 
   onCreate() {
     this.setState(new ZoneState());
@@ -32,13 +35,27 @@ export class ZoneRoom extends Room<ZoneState> {
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
   }
 
-  onJoin(client: Client) {
+  async onAuth(_client: Client, options: { token?: string }): Promise<AuthUser> {
+    let user: AuthUser;
+    try {
+      user = await verifySession(options?.token);
+    } catch {
+      throw new ServerError(401, "não autorizado"); // não vaza detalhes do JWT
+    }
+    // uma sessão por conta: derruba a anterior
+    for (const c of this.clients) if (this.userIds.get(c.sessionId) === user.id) c.leave(4001);
+    return user;
+  }
+
+  onJoin(client: Client, _options: unknown, auth: AuthUser) {
+    this.userIds.set(client.sessionId, auth.id);
     const pl = new Player();
-    pl.name = `Portador-${client.sessionId.slice(0, 4)}`;
+    pl.name = auth.name;
     this.state.players.set(client.sessionId, pl);
   }
 
   onLeave(client: Client) {
+    this.userIds.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
   }
 
