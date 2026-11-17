@@ -107,3 +107,59 @@ o teste de 12 criações simultâneas gerou exatamente 1 personagem com conexõe
 
 **Antes de abrir o jogo ao público:** contas de convidado (`provider = 'guest'`) só existem em desenvolvimento
 (`ALLOW_GUEST` fica desligado em produção). Apague as de teste do schema `public`, se houver, e defina `DATABASE_CA`.
+
+## Parte 5. Conectar o Render (passo a passo)
+
+O arquivo **`render.yaml`**, na raiz do projeto, descreve os dois serviços: **frixep-server** (API + WebSocket) e **frixep-client**
+(o site). Os valores secretos **não** estão nele: você os digita no painel do Render.
+
+### Caso A: você ainda NÃO tem os serviços no Render (recomendado)
+1. Em https://dashboard.render.com clique em **New > Blueprint** e conecte o repositório `otaviohenrique-dev-web/FixeP` (branch `main`).
+2. O Render lê o `render.yaml` e mostra os 2 serviços. Preencha as variáveis que ele pedir:
+
+| Variável | Serviço | O que colocar |
+|---|---|---|
+| `DATABASE_URL` | server | A linha `postgresql://postgres.SEU_ID:SENHA@aws-1-us-west-2.pooler.supabase.com:5432/postgres` (a mesma do seu `.env`) |
+| `SERVER_URL` | server | URL do servidor: `https://frixep-server.onrender.com` |
+| `CLIENT_URL` | server | URL do site: `https://frixep-client.onrender.com` (sem `/` no final) |
+| `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` | server | Credenciais do Google para **produção** (crie um cliente OAuth novo; não reutilize o de desenvolvimento) |
+| `DATABASE_CA` | server | (opcional, recomendado) certificado do banco: Supabase > Database > Settings > SSL Configuration |
+| `VITE_API_URL` | client | A mesma URL do servidor: `https://frixep-server.onrender.com` |
+
+   `JWT_SECRET` o Render gera sozinho. Se o Render der a um serviço um endereço diferente do previsto (nome já usado por outra pessoa),
+   crie assim mesmo e depois **corrija `SERVER_URL`, `CLIENT_URL` e `VITE_API_URL`** com os endereços reais e faça **Manual Deploy**.
+3. Clique em **Apply** e espere os dois deploys ficarem verdes (alguns minutos).
+4. No console do Google (https://console.cloud.google.com/apis/credentials), no cliente OAuth de produção, adicione em
+   **URIs de redirecionamento autorizados**: `https://frixep-server.onrender.com/auth/google/callback` (com o **seu** endereço real).
+
+### Caso B: você JÁ criou os serviços
+Não use o Blueprint (criaria duplicatas). No serviço do servidor, confira em **Settings**:
+- **Build Command:** `npm ci --include=dev`
+- **Start Command:** `npm run start:prod -w @frixep/server`
+- **Health Check Path:** `/health`
+- **Environment:** as variáveis da tabela acima, mais `NODE_ENV=production` e `NODE_VERSION=22`.
+
+No site (static): **Build Command** `npm ci --include=dev && npm run build -w @frixep/client`, **Publish Directory** `packages/client/dist` e `VITE_API_URL`.
+
+### Como saber que deu certo
+1. `https://SEU-SERVIDOR/health` responde `{"ok":true}`.
+2. Nos **Logs** do servidor aparecem `[db] conectado (postgres)` e `servidor em http://localhost:...`.
+3. `https://SEU-SERVIDOR/auth/providers` mostra `"guest":false` (convidado desligado em produção) e `"google":true`.
+4. Abra o site, entre com o Google, crie o personagem e veja o mapa. Isso prova login, banco e WebSocket juntos.
+
+### Se der erro
+| Sintoma | Causa e solução |
+|---|---|
+| `tsx: not found` ou `vite: not found` no deploy | O comando de build não inclui as dependências de desenvolvimento. Use `npm ci --include=dev`. |
+| `JWT_SECRET obrigatório em produção` | Falta a variável `JWT_SECRET` (o Blueprint a gera sozinho). |
+| `DATABASE_URL obrigatório em produção` ou `password authentication failed` | Variável ausente ou senha errada. Refaça o **Reset database password** no Supabase e atualize a variável. |
+| Site abre, mas o login não volta ao jogo | `SERVER_URL` diferente do endereço real, ou o redirect do Google não foi cadastrado (`redirect_uri_mismatch`). |
+| Erro de CORS no console do navegador | `CLIENT_URL` precisa ser **exatamente** a origem do site, sem `/` no final e com `https://`. |
+| Tela de login funciona, mas não entra no mapa | `VITE_API_URL` errada, ou o site foi montado antes de a variável existir: faça **Manual Deploy** no site. |
+| Jogo cai depois de alguns minutos parado | Plano gratuito do Render desliga o serviço sem uso (derruba todos). Use o plano **Starter** no servidor. |
+
+### Pontos de atenção
+- **Região:** o `render.yaml` usa `virginia` (mais perto do Brasil que Oregon, onde está o banco). A região **não pode ser trocada** depois de criado o serviço; decida antes.
+- **Arte no Git LFS:** os PNG de `assets/` ficam no Git LFS. Quando a arte chegar, confirme que o site publicado carrega os sprites; se vierem quebrados,
+  o console do navegador avisa (o jogo continua com círculos). Isso ainda não foi verificado no Render.
+- **Segredos:** a senha do banco, o `JWT_SECRET` e as chaves do Google só existem no painel do Render e no seu `.env`; nunca no Git nem em chats.
