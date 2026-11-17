@@ -24,4 +24,17 @@ Abra duas abas: os jogadores aparecem andando no mapa (clique para mover).
 
 Mouse: a mira segue o ponteiro. Toque: a mira vai para o inimigo mais próximo.
 
+## Teste anti-trapaça
+
+Suíte que age como cliente malicioso (token forjado, speed hack, spam de skills, dano injetado,
+payloads malformados, flood, adulteração do estado local). Rode contra um servidor de teste
+(porta diferente da do jogo) a partir de `packages/server`:
+
+```
+PORT=2999 npm run start        # terminal 1 (no PowerShell: $env:PORT=2999; npm.cmd run start)
+SERVER=http://localhost:2999 npm run test:cheat   # terminal 2
+```
+
+Sai com código 1 se qualquer verificação falhar. Hoje: 25/25.
+
 

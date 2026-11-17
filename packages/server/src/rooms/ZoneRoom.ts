@@ -35,6 +35,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
     // Cliente envia INTENÇÃO (alvo / ação), nunca posição nem dano. Servidor valida e simula.
     this.onMessage(Msg.MoveTo, (client, p: MoveToPayload) => {
+      if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
       if (!pl || pl.dead || !Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
       pl.tx = clamp(p.x, 0, MAP_W - 1);
@@ -42,10 +43,12 @@ export class ZoneRoom extends Room<ZoneState> {
     });
 
     this.onMessage(Msg.Act, (client, p: ActPayload) => {
+      if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
       if (!pl || pl.dead) return;
       if (!ACTION_IDS.includes(p?.a) || !Number.isFinite(p?.ax) || !Number.isFinite(p?.ay)) return;
-      this.doAction(client.sessionId, pl, p.a, p.ax, p.ay);
+      // a mira é só uma direção: limita a valores sensatos (evita overflow em contas)
+      this.doAction(client.sessionId, pl, p.a, clamp(p.ax, -100, 140), clamp(p.ay, -100, 140));
     });
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
@@ -70,7 +73,36 @@ export class ZoneRoom extends Room<ZoneState> {
     this.state.players.set(client.sessionId, pl);
   }
 
+  // ------------------------------------------------------------------ limite de taxa
+  // balde de fichas por cliente: rajada de 40, reposição de 30 mensagens/s. Jogo legítimo
+  // fica bem abaixo disso (cliques e teclas); excesso é descartado e a insistência derruba a conexão.
+  private buckets = new Map<string, { tokens: number; last: number; strikes: number }>();
+  private static readonly BURST = 40;
+  private static readonly REFILL = 30;
+  private static readonly MAX_STRIKES = 100;
+  private static readonly STRIKE_DECAY = 10; // infrações perdoadas por segundo
+
+  private allow(client: Client): boolean {
+    const now = performance.now();
+    let b = this.buckets.get(client.sessionId);
+    if (!b) this.buckets.set(client.sessionId, (b = { tokens: ZoneRoom.BURST, last: now, strikes: 0 }));
+    const dtS = (now - b.last) / 1000;
+    b.tokens = Math.min(ZoneRoom.BURST, b.tokens + dtS * ZoneRoom.REFILL);
+    b.strikes = Math.max(0, b.strikes - dtS * ZoneRoom.STRIKE_DECAY); // bom comportamento "perdoa" aos poucos
+    b.last = now;
+    if (b.tokens >= 1) {
+      b.tokens -= 1;
+      return true;
+    }
+    if (++b.strikes > ZoneRoom.MAX_STRIKES) {
+      console.warn(`[anti-abuso] ${client.sessionId} derrubado por excesso de mensagens`);
+      client.leave(4003);
+    }
+    return false;
+  }
+
   onLeave(client: Client) {
+    this.buckets.delete(client.sessionId);
     this.userIds.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
   }
