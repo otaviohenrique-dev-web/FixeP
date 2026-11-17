@@ -1,10 +1,11 @@
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, WARRIOR, SKELETON,
-  type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent,
+  Msg, Evt, MAP_W, MAP_H, WARRIOR, SKELETON, xpToNext,
+  type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
+import { ensureCharacter } from "./character";
 import { mountGameMenu } from "./menu";
 import { mountHud, type Hud } from "./hud";
 import { sfx } from "./sfx";
@@ -113,6 +114,7 @@ class WorldScene extends Phaser.Scene {
     this.room.onMessage(Evt.Telegraph, (m: TelegraphEvent) => this.onTelegraph(m));
     this.room.onMessage(Evt.Hit, (m: HitEvent) => this.onHit(m));
     this.room.onMessage(Evt.Died, (m: DiedEvent) => this.onDied(m));
+    this.room.onMessage(Evt.LevelUp, (m: LevelUpEvent) => this.onLevelUp(m));
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
@@ -247,6 +249,15 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
+  private onLevelUp(m: LevelUpEvent) {
+    const s = this.sprites.get(`p:${m.id}`);
+    if (!s) return;
+    this.emitters.gold.explode(30, s.x, s.y - 8);
+    const g = toGrid(s.x, s.y);
+    this.floatText(g.x, g.y - 1.2, `NÍVEL ${m.level}!`, "#ffd45e", 26, true);
+    if (m.id === this.room.sessionId) sfx.levelUp();
+  }
+
   private onDied(m: DiedEvent) {
     if (m.k === "e") {
       const s = this.sprites.get(`e:${m.id}`);
@@ -330,6 +341,7 @@ class WorldScene extends Phaser.Scene {
     if (me) {
       this.hud.setHp(me.hp, me.maxHp);
       this.hud.setBuff(!!me.buff);
+      this.hud.setProgress(me.level, me.xp, xpToNext(me.level));
       if (me.dead) {
         if (!this.deadUntil) this.deadUntil = time + WARRIOR.respawnS * 1000;
         this.hud.setDead((this.deadUntil - time) / 1000);
@@ -343,6 +355,7 @@ class WorldScene extends Phaser.Scene {
 
 // Primeiro o login; o Phaser só inicia depois que há um token válido.
 const token = await ensureLogin();
+await ensureCharacter(token); // sem personagem, mostra a criação antes de entrar no jogo
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: "game",

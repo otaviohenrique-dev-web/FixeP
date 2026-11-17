@@ -10,8 +10,12 @@ export class Player extends Schema {
   @type("number") maxHp = WARRIOR.maxHp;
   @type("boolean") dead = false;
   @type("boolean") buff = false; // Grito de guerra ativo
+  @type("number") level = 1;
+  @type("number") xp = 0;
 
   // --- só no servidor (não sincronizado) ---
+  charId = ""; // linha em `characters`
+  dirty = false; // progresso ainda não salvo
   tx = SPAWN.x;
   ty = SPAWN.y;
   cdUntil: Record<string, number> = {};

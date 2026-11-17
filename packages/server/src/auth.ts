@@ -1,6 +1,7 @@
 import { randomUUID, randomBytes } from "node:crypto";
 import { Router } from "express";
 import { SignJWT, jwtVerify } from "jose";
+import type { Repo } from "./db/repo.js";
 
 const isProd = process.env.NODE_ENV === "production";
 if (isProd && !process.env.JWT_SECRET) throw new Error("JWT_SECRET obrigatório em produção");
@@ -12,17 +13,6 @@ const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 export interface AuthUser {
   id: string;
   name: string;
-}
-
-// TODO(F2): trocar por tabela `accounts` no PostgreSQL.
-const users = new Map<string, AuthUser>();
-function upsertUser(key: string, name: string): AuthUser {
-  let u = users.get(key);
-  if (!u) {
-    u = { id: randomUUID(), name };
-    users.set(key, u);
-  }
-  return u;
 }
 
 export async function signSession(u: AuthUser): Promise<string> {
@@ -85,7 +75,7 @@ function backToClient(token?: string, error?: string) {
   return `${CLIENT_URL}/#${frag}`; // fragmento: não vai para logs de servidor nem Referer
 }
 
-export function authRouter(): Router {
+export function authRouter(repo: Repo): Router {
   const r = Router();
 
   r.get("/providers", (_req, res) => {
@@ -139,8 +129,8 @@ export function authRouter(): Router {
 
       const profRes = await fetch(p.userUrl, { headers: { Authorization: `Bearer ${tok.access_token}` } });
       const prof = p.profile(await profRes.json());
-      const user = upsertUser(`${name}:${prof.id}`, prof.name.slice(0, 20));
-      res.redirect(backToClient(await signSession(user)));
+      const acct = await repo.upsertAccount(name, String(prof.id), String(prof.name).slice(0, 20));
+      res.redirect(backToClient(await signSession({ id: acct.id, name: acct.name })));
     } catch (e) {
       console.warn("[auth] falha OAuth:", (e as Error).message);
       res.redirect(backToClient(undefined, "login_falhou"));
@@ -150,8 +140,13 @@ export function authRouter(): Router {
   // Conta convidada: só em dev (ou ALLOW_GUEST=1).
   r.post("/guest", async (_req, res) => {
     if (isProd && process.env.ALLOW_GUEST !== "1") return res.status(403).end();
-    const user = { id: randomUUID(), name: `Convidado-${randomBytes(2).toString("hex")}` };
-    res.json({ token: await signSession(user) });
+    try {
+      const acct = await repo.upsertAccount("guest", randomUUID(), `Convidado-${randomBytes(2).toString("hex")}`);
+      res.json({ token: await signSession({ id: acct.id, name: acct.name }) });
+    } catch (e) {
+      console.error("[auth] guest:", (e as Error).message);
+      res.status(500).end();
+    }
   });
 
   return r;

@@ -3,9 +3,13 @@ import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
   MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, SPAWN, ENEMY_SPAWNS,
   WARRIOR, SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
+  LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, dmgMult,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, ZoneState } from "./entities.js";
+import type { Repo, CharacterRow } from "../db/repo.js";
+
+interface JoinAuth { user: AuthUser; character: CharacterRow }
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
@@ -21,9 +25,14 @@ export class ZoneRoom extends Room<ZoneState> {
   maxClients = MAX_CLIENTS_PER_ZONE;
   private userIds = new Map<string, string>(); // sessionId -> accountId
   private t = 0; // relógio da simulação (s)
+  private repo!: Repo;
+  private saver?: ReturnType<typeof setInterval>;
 
-  onCreate() {
+  onCreate(options: { repo: Repo }) {
+    this.repo = options.repo;
     this.setState(new ZoneState());
+    // salva o progresso pendente a cada 30 s (além de ao sair e ao subir de nível)
+    this.saver = setInterval(() => void this.saveAll(), 30_000);
     this.setPatchRate(1000 / TICK_RATE);
 
     ENEMY_SPAWNS.forEach((s, i) => {
@@ -54,22 +63,29 @@ export class ZoneRoom extends Room<ZoneState> {
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
   }
 
-  async onAuth(_client: Client, options: { token?: string }): Promise<AuthUser> {
+  async onAuth(_client: Client, options: { token?: string }): Promise<JoinAuth> {
     let user: AuthUser;
     try {
       user = await verifySession(options?.token);
     } catch {
       throw new ServerError(401, "não autorizado"); // não vaza detalhes do JWT
     }
+    const character = await this.repo.getCharacter(user.id);
+    if (!character) throw new ServerError(403, "crie um personagem antes de entrar");
     // uma sessão por conta: derruba a anterior
     for (const c of this.clients) if (this.userIds.get(c.sessionId) === user.id) c.leave(4001);
-    return user;
+    return { user, character };
   }
 
-  onJoin(client: Client, _options: unknown, auth: AuthUser) {
-    this.userIds.set(client.sessionId, auth.id);
+  onJoin(client: Client, _options: unknown, auth: JoinAuth) {
+    this.userIds.set(client.sessionId, auth.user.id);
     const pl = new Player();
-    pl.name = auth.name;
+    pl.name = auth.character.name;
+    pl.charId = auth.character.id;
+    pl.level = auth.character.level;
+    pl.xp = auth.character.xp;
+    pl.maxHp = maxHpFor(pl.level);
+    pl.hp = pl.maxHp;
     this.state.players.set(client.sessionId, pl);
   }
 
@@ -101,10 +117,52 @@ export class ZoneRoom extends Room<ZoneState> {
     return false;
   }
 
-  onLeave(client: Client) {
+  async onLeave(client: Client) {
     this.buckets.delete(client.sessionId);
     this.userIds.delete(client.sessionId);
+    const pl = this.state.players.get(client.sessionId);
     this.state.players.delete(client.sessionId);
+    if (pl) await this.save(pl);
+  }
+
+  async onDispose() {
+    clearInterval(this.saver);
+    await this.saveAll();
+  }
+
+  // ------------------------------------------------------------------ persistência
+  private async save(p: Player) {
+    if (!p.dirty || !p.charId) return;
+    p.dirty = false;
+    try {
+      await this.repo.saveProgress(p.charId, p.level, p.xp);
+    } catch (e) {
+      p.dirty = true; // tenta de novo no próximo ciclo
+      console.error("[db] falha ao salvar personagem:", (e as Error).message);
+    }
+  }
+
+  private async saveAll() {
+    await Promise.all([...this.state.players.values()].map((p) => this.save(p)));
+  }
+
+  private addXp(id: string, p: Player, amount: number) {
+    if (p.level >= LEVEL_CAP) return;
+    p.xp += amount;
+    let leveled = false;
+    while (p.level < LEVEL_CAP && p.xp >= xpToNext(p.level)) {
+      p.xp -= xpToNext(p.level);
+      p.level++;
+      leveled = true;
+    }
+    if (p.level >= LEVEL_CAP) p.xp = 0;
+    p.dirty = true;
+    if (leveled) {
+      p.maxHp = maxHpFor(p.level);
+      p.hp = p.maxHp;
+      this.broadcast(Evt.LevelUp, { id, level: p.level });
+      void this.save(p); // subir de nível salva na hora
+    }
   }
 
   // ------------------------------------------------------------------ simulação
@@ -164,12 +222,12 @@ export class ZoneRoom extends Room<ZoneState> {
       case "attack":
       case "skill1": {
         const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
-        this.hitEnemies(id, def.dmg ?? 0, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level), (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
         break;
       }
       case "skill2": {
         const ex = p.x + dx * (def.dash ?? 0), ey = p.y + dy * (def.dash ?? 0);
-        this.hitEnemies(id, def.dmg ?? 0, (e) => distToSegment(e.x, e.y, p.x, p.y, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level), (e) => distToSegment(e.x, e.y, p.x, p.y, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
         this.startDash(p, dx, dy, def);
         break;
       }
@@ -214,6 +272,8 @@ export class ZoneRoom extends Room<ZoneState> {
         e.respawnAt = this.t + SKELETON.respawnS;
         e.targetId = "";
         this.broadcast(Evt.Died, { k: "e", id: eid });
+        const killer = this.state.players.get(by);
+        if (killer && !killer.dead) this.addXp(by, killer, XP_PER_KILL);
       }
     });
   }

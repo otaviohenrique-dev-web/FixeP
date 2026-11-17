@@ -15,7 +15,12 @@ const check = (name, ok, detail = "") => {
 
 async function guest() {
   const r = await fetch(`${HTTP}/auth/guest`, { method: "POST" });
-  return (await r.json()).token;
+  const token = (await r.json()).token;
+  // desde a F2 é preciso ter personagem para entrar na sala
+  const name = "Bot" + Math.random().toString(36).slice(2, 8);
+  const c = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
+  if (!c.ok) throw new Error(`criar personagem de teste falhou: ${c.status}`);
+  return token;
 }
 async function join(token) {
   const room = await new Client(WS).joinOrCreate("zone", { token: token ?? (await guest()) });
