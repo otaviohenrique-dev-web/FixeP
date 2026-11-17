@@ -37,6 +37,7 @@ Os valores abaixo são **propostas**. O artista pode ajustar, mas qualquer mudan
 - Atlas de no máximo **2048 x 2048 px** (limite seguro para celulares de entrada). Um atlas por categoria/zona.
 - Nomes em minúsculas com sublinhado: `warrior_walk_se_00.png`, `tile_bosque_grama_01.png`, `fx_hit_slash_00.png`.
 - Tiled: tilesets em `.tsx`, mapas em `.tmj` (JSON), com camadas `chao`, `decoracao`, `colisao`, `objetos`.
+- **Git LFS:** o repositório já guarda `.psd`, `.aseprite`, `.kra`, `.tif`, `.wav` e todos os PNG de `assets/` no LFS. Rode `git lfs install` **uma vez** na sua máquina, antes de clonar.
 - Licença: tudo que for criado do zero é da equipe. Qualquer asset de terceiros ou gerado por IA deve ser registrado em `assets/CREDITS.md` com fonte e licença.
 
 ## 7. Ordem sugerida de produção (alinhada ao roadmap)
