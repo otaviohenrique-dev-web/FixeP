@@ -2,7 +2,8 @@ import { Room, Client, ServerError } from "colyseus";
 import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
   MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, SPAWN, ENEMY_SPAWNS,
-  WARRIOR, SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
+  CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
+  SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
   LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
@@ -11,6 +12,8 @@ import type { Repo, CharacterRow } from "../db/repo.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, type Inventory } from "../game/inventory.js";
 import { rollLoot } from "../game/loot.js";
 
+interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; hit: Set<string> }
+interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
 interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory }
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
@@ -63,7 +66,7 @@ export class ZoneRoom extends Room<ZoneState> {
     });
 
     // Inventário: o cliente pede, o servidor valida e devolve a fotografia completa.
-    this.onMessage(Msg.InvEquip, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => equipFromSlot(pl.inv, p?.slot, pl.level)));
+    this.onMessage(Msg.InvEquip, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => equipFromSlot(pl.inv, p?.slot, pl.level, pl.cls as CharClass)));
     this.onMessage(Msg.InvUnequip, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => unequip(pl.inv, p?.slot)));
     this.onMessage(Msg.InvDrop, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => dropSlot(pl.inv, p?.slot)));
     this.onMessage(Msg.InvSync, (client) => {
@@ -87,7 +90,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** vida máxima e dano dependem do nível E do equipamento */
   private refreshStats(p: Player, fill = false) {
-    p.maxHp = maxHpFor(p.level, bonuses(p.inv).hp);
+    p.maxHp = maxHpFor(this.classOf(p).id, p.level, bonuses(p.inv).hp);
     p.hp = fill ? p.maxHp : Math.min(p.hp, p.maxHp);
   }
 
@@ -118,7 +121,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private giveLoot(id: string, p: Player) {
     const client = this.clients.getById(id);
     let any = false;
-    for (const d of rollLoot()) {
+    for (const d of rollLoot(p.cls as CharClass)) {
       const notFit = addItem(p.inv, d.id, d.qty);
       const got = d.qty - notFit;
       if (got > 0) { client?.send(Evt.Loot, { id: d.id, qty: got }); any = true; }
@@ -147,6 +150,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const pl = new Player();
     pl.name = auth.character.name;
     pl.charId = auth.character.id;
+    pl.cls = auth.character.class;
     pl.level = auth.character.level;
     pl.xp = auth.character.xp;
     pl.inv = auth.inventory;
@@ -186,6 +190,7 @@ export class ZoneRoom extends Room<ZoneState> {
   async onLeave(client: Client) {
     this.buckets.delete(client.sessionId);
     this.userIds.delete(client.sessionId);
+    for (const tr of this.traps.filter((x) => x.owner === client.sessionId)) this.removeTrap(tr, "gone"); // armadilhas somem com o dono
     const pl = this.state.players.get(client.sessionId);
     this.state.players.delete(client.sessionId);
     if (pl) await this.save(pl);
@@ -240,9 +245,24 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   // ------------------------------------------------------------------ simulação
+  // estado extra da sala (não sincronizado): projéteis, armadilhas e efeitos com atraso
+  private projs: Proj[] = [];
+  private traps: Trap[] = [];
+  private pending: { at: number; run: () => void }[] = [];
+  private seq = 0;
+
   private tick(dt: number) {
     this.t += dt;
     this.state.players.forEach((p) => this.updatePlayer(p, dt));
+    this.updateProjectiles(dt);
+    this.updateTraps();
+    if (this.pending.length) {
+      const due = this.pending.filter((x) => this.t >= x.at);
+      if (due.length) {
+        this.pending = this.pending.filter((x) => this.t < x.at);
+        due.forEach((x) => x.run());
+      }
+    }
     this.state.enemies.forEach((e, id) => this.updateEnemy(id, e, dt));
   }
 
@@ -257,6 +277,7 @@ export class ZoneRoom extends Room<ZoneState> {
       return;
     }
     p.buff = this.t < p.buffUntil;
+    p.ember = this.t < p.emberUntil;
 
     if (p.dashLeft > 0) {
       const step = Math.min(dt, p.dashLeft);
@@ -270,21 +291,41 @@ export class ZoneRoom extends Room<ZoneState> {
     const dx = p.tx - p.x, dy = p.ty - p.y;
     const d = Math.hypot(dx, dy);
     if (d < 0.01) return;
-    const step = Math.min(d, WARRIOR.speed * dt);
+    const step = Math.min(d, MOVE_SPEED * dt);
     p.x += (dx / d) * step;
     p.y += (dy / d) * step;
     p.face = Math.atan2(dy, dx);
   }
 
   // ------------------------------------------------------------------ ações do jogador
+  private classOf(p: Player): ClassDef {
+    return CLASS_DEFS[p.cls as CharClass] ?? CLASS_DEFS.warrior;
+  }
+
+  /** aliado caído mais próximo dentro do raio (para Ressurgir) */
+  private nearestDead(p: Player, radius: number): [string, Player] | null {
+    let best: [string, Player] | null = null;
+    let bestD = radius;
+    this.state.players.forEach((o, oid) => {
+      if (!o.dead) return;
+      const d = dist(o.x, o.y, p.x, p.y);
+      if (d <= bestD) { bestD = d; best = [oid, o]; }
+    });
+    return best;
+  }
+
   private doAction(id: string, p: Player, a: ActionId, ax: number, ay: number) {
-    const def: ActionDef = WARRIOR.actions[a];
+    const def: ActionDef = this.classOf(p).actions[a];
     if (this.t < (p.cdUntil[a] ?? 0) - 0.05) return; // em recarga (tolerância de rede)
     if (p.dashLeft > 0) return; // não age durante o deslocamento
 
+    // Ressurgir sem ninguém caído por perto: avisa e NÃO gasta a recarga
+    const fallen = def.kind === "revive" ? this.nearestDead(p, def.radius ?? 0) : null;
+    if (def.kind === "revive" && !fallen) return this.notify(id, "Ninguém caído por perto.");
+
     let dx = ax - p.x, dy = ay - p.y;
-    const l = Math.hypot(dx, dy);
-    if (l < 0.01) { dx = Math.cos(p.face); dy = Math.sin(p.face); } else { dx /= l; dy /= l; }
+    const aimDist = Math.hypot(dx, dy);
+    if (aimDist < 0.01) { dx = Math.cos(p.face); dy = Math.sin(p.face); } else { dx /= aimDist; dy /= aimDist; }
     p.face = Math.atan2(dy, dx);
     p.cdUntil[a] = this.t + def.cd;
     p.tx = p.x; // ação interrompe o movimento
@@ -292,20 +333,30 @@ export class ZoneRoom extends Room<ZoneState> {
 
     this.broadcast(Evt.Swing, { id, a, x: p.x, y: p.y, dir: p.face });
 
-    switch (a) {
-      case "attack":
-      case "skill1": {
+    // poder = nível * arma * Brasa de um aliado (vale para dano e cura)
+    const power = dmgMult(p.level, bonuses(p.inv).dmgPct) * (this.t < p.emberUntil ? 1 + p.emberPct / 100 : 1);
+    const dmg = (def.dmg ?? 0) * power;
+    // ponto de colocação (armadilha/chuva): onde o jogador mira, limitado ao alcance
+    const place = () => {
+      const d = Math.min(aimDist < 0.01 ? (def.placeRange ?? 0) * 0.5 : aimDist, def.placeRange ?? 0);
+      return { x: clamp(p.x + dx * d, 0, MAP_W - 1), y: clamp(p.y + dy * d, 0, MAP_H - 1) };
+    };
+
+    switch (def.kind) {
+      case "melee":
+      case "ring": {
         const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
-        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level, bonuses(p.inv).dmgPct), (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
         break;
       }
-      case "skill2": {
+      case "dashHit": {
         const ex = p.x + dx * (def.dash ?? 0), ey = p.y + dy * (def.dash ?? 0);
-        this.hitEnemies(id, (def.dmg ?? 0) * dmgMult(p.level, bonuses(p.inv).dmgPct), (e) => distToSegment(e.x, e.y, p.x, p.y, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
+        const sx = p.x, sy = p.y;
+        this.hitEnemies(id, dmg, (e) => distToSegment(e.x, e.y, sx, sy, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
         this.startDash(p, dx, dy, def);
         break;
       }
-      case "skill3": {
+      case "tauntBuff": {
         p.buffUntil = this.t + (def.buffS ?? 0);
         p.buff = true;
         this.state.enemies.forEach((e) => {
@@ -321,7 +372,69 @@ export class ZoneRoom extends Room<ZoneState> {
         this.startDash(p, dx, dy, def);
         break;
       }
+      case "projectile": {
+        const pid = `j${++this.seq}`;
+        const sx = p.x + dx * 0.6, sy = p.y + dy * 0.6;
+        const look = def.pierce ? "pierce" : p.cls === "cleric" ? "bolt" : "arrow";
+        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, hit: new Set() });
+        this.broadcast(Evt.Proj, { id: pid, x: sx, y: sy, dir: p.face, speed: def.speed ?? 12, range: def.range ?? 8, look });
+        break;
+      }
+      case "trap": {
+        const mine = this.traps.filter((tr) => tr.owner === id);
+        while (mine.length >= (def.maxActive ?? 3)) { // passou do limite: a mais antiga some
+          const old = mine.shift()!;
+          this.removeTrap(old, "gone");
+        }
+        const pos = place();
+        const tr: Trap = { id: `t${++this.seq}`, owner: id, x: pos.x, y: pos.y, r: def.radius ?? 1.5, dmg, armAt: this.t + (def.armS ?? 0.5), expireAt: this.t + (def.lifeS ?? 20) };
+        this.traps.push(tr);
+        this.broadcast(Evt.Trap, { id: tr.id, s: "set", x: tr.x, y: tr.y, r: tr.r });
+        break;
+      }
+      case "rain": {
+        const pos = place();
+        const r = def.radius ?? 2;
+        const delay = def.delayS ?? 0.8;
+        this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: delay * 1000, friendly: true });
+        this.pending.push({ at: this.t + delay, run: () => this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, pos.x, pos.y) <= r + SKELETON.radius) });
+        break;
+      }
+      case "healAoe": {
+        const amount = Math.round((def.heal ?? 0) * power);
+        this.state.players.forEach((o, oid) => {
+          if (!o.dead && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) this.healPlayer(oid, o, amount);
+        });
+        break;
+      }
+      case "emberBuff": {
+        this.state.players.forEach((o) => {
+          if (!o.dead && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) {
+            o.emberUntil = this.t + (def.buffS ?? 0);
+            o.emberPct = def.dmgPct ?? 0;
+            o.ember = true;
+          }
+        });
+        break;
+      }
+      case "revive": {
+        const [fid, f] = fallen!;
+        f.dead = false;
+        f.hp = Math.max(1, Math.ceil((f.maxHp * (def.hpPct ?? 50)) / 100));
+        f.invulnUntil = this.t + 1.5; // um instante para se reorganizar
+        f.tx = f.x;
+        f.ty = f.y;
+        this.broadcast(Evt.Heal, { id: fid, amount: f.hp, x: f.x, y: f.y, revive: true });
+        break;
+      }
     }
+  }
+
+  private healPlayer(id: string, p: Player, amount: number) {
+    const before = p.hp;
+    p.hp = Math.min(p.maxHp, p.hp + amount);
+    const healed = p.hp - before;
+    if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y });
   }
 
   private startDash(p: Player, dx: number, dy: number, def: ActionDef) {
@@ -332,26 +445,78 @@ export class ZoneRoom extends Room<ZoneState> {
     p.dashLeft = time;
   }
 
+  // ------------------------------------------------------------------ projéteis e armadilhas
+  private updateProjectiles(dt: number) {
+    for (let i = this.projs.length - 1; i >= 0; i--) {
+      const pr = this.projs[i];
+      const step = Math.min(pr.speed * dt, pr.left);
+      const nx = pr.x + pr.dx * step, ny = pr.y + pr.dy * step;
+      // alvos no trecho percorrido neste tick (teste por segmento: a flecha rápida não "atravessa" sem acertar)
+      const cands: [number, string, Enemy][] = [];
+      this.state.enemies.forEach((e, eid) => {
+        if (e.st === "dead" || pr.hit.has(eid)) return;
+        if (distToSegment(e.x, e.y, pr.x, pr.y, nx, ny) <= pr.radius + SKELETON.radius) cands.push([dist(e.x, e.y, pr.x, pr.y), eid, e]);
+      });
+      cands.sort((a, b) => a[0] - b[0]);
+      let ended = false;
+      for (const [, eid, e] of cands) {
+        pr.hit.add(eid);
+        this.damageEnemy(pr.owner, eid, e, pr.dmg);
+        if (!pr.pierce) { ended = true; break; } // flecha comum para no primeiro alvo
+      }
+      pr.x = nx;
+      pr.y = ny;
+      pr.left -= step;
+      if (ended || pr.left <= 0.001 || nx < 0 || ny < 0 || nx > MAP_W - 1 || ny > MAP_H - 1) {
+        this.projs.splice(i, 1);
+        this.broadcast(Evt.ProjEnd, { id: pr.id, x: pr.x, y: pr.y, hit: ended });
+      }
+    }
+  }
+
+  private removeTrap(tr: Trap, s: "boom" | "gone") {
+    this.traps = this.traps.filter((x) => x !== tr);
+    this.broadcast(Evt.Trap, { id: tr.id, s, x: tr.x, y: tr.y, r: tr.r });
+  }
+
+  private updateTraps() {
+    for (const tr of [...this.traps]) {
+      if (this.t >= tr.expireAt) { this.removeTrap(tr, "gone"); continue; }
+      if (this.t < tr.armAt) continue;
+      let trigger = false;
+      this.state.enemies.forEach((e) => { if (e.st !== "dead" && dist(e.x, e.y, tr.x, tr.y) <= tr.r + SKELETON.radius) trigger = true; });
+      if (!trigger) continue;
+      this.removeTrap(tr, "boom");
+      this.hitEnemies(tr.owner, tr.dmg, (e) => dist(e.x, e.y, tr.x, tr.y) <= tr.r + SKELETON.radius);
+    }
+  }
+
+  // ------------------------------------------------------------------ dano e recompensas
+  private damageEnemy(by: string, eid: string, e: Enemy, baseDmg: number) {
+    if (e.st === "dead") return;
+    const crit = Math.random() < CRIT.chance;
+    const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
+    const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult : 1)));
+    e.hp = Math.max(0, e.hp - dmg);
+    if (!e.targetId) e.targetId = by; // quem bate chama a atenção
+    this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by });
+    if (e.hp > 0) return;
+    e.st = "dead";
+    e.respawnAt = this.t + SKELETON.respawnS;
+    e.targetId = "";
+    this.broadcast(Evt.Died, { k: "e", id: eid });
+    // grupo: todo jogador vivo por perto recebe XP e faz a sua própria rolagem de loot
+    this.state.players.forEach((pl, pid) => {
+      if (pl.dead || dist(pl.x, pl.y, e.x, e.y) > SHARE_RADIUS) return;
+      this.addXp(pid, pl, XP_PER_KILL);
+      this.giveLoot(pid, pl);
+    });
+  }
+
   private hitEnemies(by: string, baseDmg: number, inArea: (e: Enemy) => boolean) {
     this.state.enemies.forEach((e, eid) => {
       if (e.st === "dead" || !inArea(e)) return;
-      const crit = Math.random() < CRIT.chance;
-      const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
-      const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult : 1)));
-      e.hp = Math.max(0, e.hp - dmg);
-      if (!e.targetId) e.targetId = by; // quem bate chama a atenção
-      this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by });
-      if (e.hp <= 0) {
-        e.st = "dead";
-        e.respawnAt = this.t + SKELETON.respawnS;
-        e.targetId = "";
-        this.broadcast(Evt.Died, { k: "e", id: eid });
-        const killer = this.state.players.get(by);
-        if (killer && !killer.dead) {
-          this.addXp(by, killer, XP_PER_KILL);
-          this.giveLoot(by, killer);
-        }
-      }
+      this.damageEnemy(by, eid, e, baseDmg);
     });
   }
 
@@ -448,13 +613,13 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private damagePlayer(id: string, p: Player, baseDmg: number) {
-    const reduction = this.t < p.buffUntil ? WARRIOR.actions.skill3.reduction : 0;
+    const reduction = this.t < p.buffUntil ? (CLASS_DEFS.warrior.actions.skill3.reduction ?? 0) : 0;
     const dmg = Math.max(1, Math.round(baseDmg * (1 - reduction)));
     p.hp = Math.max(0, p.hp - dmg);
     this.broadcast(Evt.Hit, { k: "p", id, dmg, crit: false, x: p.x, y: p.y });
     if (p.hp <= 0) {
       p.dead = true;
-      p.deadUntil = this.t + WARRIOR.respawnS;
+      p.deadUntil = this.t + RESPAWN_S;
       p.tx = p.x;
       p.ty = p.y;
       this.broadcast(Evt.Died, { k: "p", id });

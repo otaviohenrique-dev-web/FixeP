@@ -12,17 +12,22 @@ npm run dev:client   # http://localhost:5173
 
 Abra duas abas: os jogadores aparecem andando no mapa (clique para mover).
 
-## Controles de combate (Guerreiro)
+## Classes e controles de combate
 
-| Ação | Tecla | Botão na tela |
-|---|---|---|
-| Golpe | ESPAÇO | Golpe |
-| Giro (área) | 1 | Giro |
-| Carga (avanço) | 2 | Carga |
-| Grito (reduz dano e provoca) | 3 | Grito |
-| Esquiva (invulnerável por instantes) | SHIFT | Esquiva |
+As teclas são as mesmas nas três classes; muda o que cada uma faz. Todas as definições (dano, recarga, alcance)
+ficam em `packages/shared/src/index.ts` (`CLASS_DEFS`) e o servidor decide todos os resultados.
+
+| Tecla | Guerreiro (120 vida, tanque) | Arqueiro (90 vida, dano à distância) | Clérigo (100 vida, suporte) |
+|---|---|---|---|
+| ESPAÇO | Golpe corpo a corpo | Flecha | Raio sagrado |
+| 1 | Giro (área ao redor) | Perfurar (flecha que atravessa) | Cura (aliados num raio de 4) |
+| 2 | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Brasa (aliados +25% de poder por 6 s) |
+| 3 | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Reviver (levanta um aliado caído a até 8 tiles) |
+| SHIFT | Esquiva (3 tiles) | Rolamento longo (5 tiles) | Esquiva (3 tiles) |
 
 Mouse: a mira segue o ponteiro. Toque: a mira vai para o inimigo mais próximo.
+Quem cai fica 8 s no chão antes de renascer no ponto inicial, o tempo que o Clérigo tem para reviver.
+XP e loot são divididos entre todos os jogadores vivos a até 14 tiles de um abate, e cada um faz a sua rolagem.
 
 ## Mochila e equipamento
 
@@ -32,7 +37,9 @@ Mouse: a mira segue o ponteiro. Toque: a mira vai para o inimigo mais próximo.
 | Beber a primeira poção | Q (recarga de 6 s) |
 
 Esqueletos soltam equipamentos (comum, incomum e raro) e poções direto na mochila (20 espaços). Armas dão bônus de
-dano e armaduras, de vida; cada item tem nível mínimo. Tudo é decidido e validado no servidor e salvo no banco.
+poder (dano e cura) e armaduras, de vida; cada item tem nível mínimo. **Armas são exclusivas de cada classe**
+(espadas, arcos e cajados) e só caem para quem pode usá-las; armaduras e poções servem a todos. Tudo é decidido e
+validado no servidor e salvo no banco.
 
 ## Teste anti-trapaça
 
@@ -43,15 +50,16 @@ payloads malformados, flood, adulteração do estado local). Rode contra um serv
 ```
 PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 npm run start        # terminal 1 (banco em memória)
 SERVER=http://localhost:2999 npm run test:cheat                    # terminal 2: anti-trapaça (25 verificações)
-SERVER=http://localhost:2999 npm run test:persist                  # terminal 2: contas, personagem e XP (32 verificações)
-npm run test:inv:unit                                              # regras do inventário + banco, sem servidor (30 verificações)
+SERVER=http://localhost:2999 npm run test:persist                  # terminal 2: contas, personagem e XP (34 verificações)
+npm run test:inv:unit                                              # regras do inventário, classes e banco, sem servidor (44 verificações)
 ```
 
-O teste de ponta a ponta do inventário exige loot garantido (`LOOT_TEST=1`, ignorado em produção):
+Os testes de ponta a ponta do inventário e das classes exigem loot garantido (`LOOT_TEST=1`, ignorado em produção):
 
 ```
 PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 LOOT_TEST=1 npm run start   # terminal 1
 SERVER=http://localhost:2999 npm run test:inv                              # terminal 2 (16 verificações)
+SERVER=http://localhost:2999 npm run test:classes                          # terminal 2 (Arqueiro + Clérigo juntos, 33-34 verificações)
 ```
 
 No PowerShell: `$env:PORT=2999; $env:PGLITE_DIR="memory"; $env:API_RATE_MULT=100; $env:LOOT_TEST=1; npm.cmd run start`.

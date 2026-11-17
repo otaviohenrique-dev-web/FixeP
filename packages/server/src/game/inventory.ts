@@ -1,4 +1,4 @@
-import { ITEMS, INV_SLOTS, EQUIP_SLOTS, type InvStack, type EquipSlot, type InventorySnapshot } from "@frixep/shared";
+import { ITEMS, INV_SLOTS, EQUIP_SLOTS, CLASS_DEFS, type CharClass, type InvStack, type EquipSlot, type InventorySnapshot } from "@frixep/shared";
 
 /** Inventário de um jogador (só existe no servidor; o cliente recebe fotografias). Funções puras e testáveis. */
 export interface Inventory {
@@ -42,12 +42,13 @@ export function addItem(inv: Inventory, id: string, qty: number): number {
   return left;
 }
 
-export function equipFromSlot(inv: Inventory, idx: unknown, level: number): Result {
+export function equipFromSlot(inv: Inventory, idx: unknown, level: number, cls: CharClass): Result {
   if (!validSlot(idx)) return { ok: false, error: "Espaço inválido." };
   const stack = inv.slots[idx];
   if (!stack) return { ok: false, error: "Espaço vazio." };
   const def = ITEMS[stack.id];
   if (!def || (def.kind !== "weapon" && def.kind !== "armor")) return { ok: false, error: "Esse item não pode ser equipado." };
+  if (def.cls && def.cls !== cls) return { ok: false, error: `Só ${CLASS_DEFS[def.cls].name} pode usar.` };
   if (level < def.minLevel) return { ok: false, error: `Requer nível ${def.minLevel}.` };
   const prev = inv.equip[def.kind];
   inv.equip[def.kind] = stack.id;
