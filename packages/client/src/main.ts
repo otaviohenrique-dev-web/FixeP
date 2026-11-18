@@ -2,10 +2,10 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, enemyXp, ITEMS, RARITY_COLOR,
+  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
   type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type InventorySnapshot, type ChatEvent, type LootEvent, type NoticeEvent,
-  type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent,
+  type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
 import { ensureCharacter } from "./character";
@@ -50,6 +50,7 @@ class WorldScene extends Phaser.Scene {
   private prevSt = new Map<string, string>();
   private shadows!: Phaser.GameObjects.Graphics;
   private labels = new Map<string, Phaser.GameObjects.Text>();
+  private levelTags = new Map<string, Phaser.GameObjects.Text>();
   private bubbles = new Map<string, { t: Phaser.GameObjects.Text; until: number }>();
   private bars!: Phaser.GameObjects.Graphics;
   private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter; green: Phaser.GameObjects.Particles.ParticleEmitter };
@@ -124,8 +125,9 @@ class WorldScene extends Phaser.Scene {
       const mine = Number(this.me()?.level) || 1;
       // cor pela diferença para o seu nível: cinza = fácil, branco = igual, laranja = difícil, vermelho = perigoso
       const col = lv >= mine + 3 ? "#ff6a5a" : lv > mine ? "#ffb072" : lv < mine - 2 ? "#9aa3ad" : "#e8e2d0";
-      this.labels.set(`e:${id}`, this.add.text(0, 0, `Nv ${lv} ${SKELETON.name}
-+${enemyXp(lv)} XP`, { fontSize: "10px", color: col, align: "center", lineSpacing: 1 }).setOrigin(0.5, 1));
+      this.labels.set(`e:${id}`, this.add.text(0, 0, SKELETON.name, { fontSize: "10px", color: "#e8e2d0" }).setOrigin(0.5, 1));
+      // nível: só o número, à direita da barra de vida, grande e com contorno grosso
+      this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 5 }).setOrigin(0, 0.5));
     });
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
 
@@ -165,6 +167,8 @@ class WorldScene extends Phaser.Scene {
     this.room.onMessage(Evt.Telegraph, (m: TelegraphEvent) => this.onTelegraph(m));
     this.room.onMessage(Evt.Hit, (m: HitEvent) => this.onHit(m));
     this.room.onMessage(Evt.Died, (m: DiedEvent) => this.onDied(m));
+    // XP do abate: mesmo estilo do número de dano, no lugar onde o inimigo caiu
+    this.room.onMessage(Evt.Xp, (m: XpEvent) => this.floatText(m.x, m.y - 0.5, `+${m.amount} XP`, "#ffd45e", 20, true));
     this.room.onMessage(Evt.LevelUp, (m: LevelUpEvent) => this.onLevelUp(m));
 
     // mochila: registra os receptores ANTES de pedir a fotografia (evita perder a mensagem inicial)
@@ -339,6 +343,8 @@ class WorldScene extends Phaser.Scene {
     this.sprites.delete(key);
     this.labels.get(key)?.destroy();
     this.labels.delete(key);
+    this.levelTags.get(key)?.destroy();
+    this.levelTags.delete(key);
   }
 
   /** visual de uma ação, escolhido pelo TIPO da ação; `mine` = ação do próprio jogador (toca o som) */
@@ -588,6 +594,7 @@ class WorldScene extends Phaser.Scene {
       const hidden = !!o.hideWhenDead && o.dead && v.deathDone; // com sprite, a morte toca antes de sumir
       s.setVisible(!hidden);
       this.labels.get(key)?.setVisible(!hidden);
+      this.levelTags.get(key)?.setVisible(!hidden);
       if (hidden) return;
       const { sx, sy } = toScreen(x, y);
       if (Math.hypot(sx - s.x, sy - s.y) > 1.5) v.markMoving(time); // ainda chegando na posição do servidor = andando
@@ -596,7 +603,10 @@ class WorldScene extends Phaser.Scene {
         s.y += (sy - s.y) * 0.35;
       }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (key.startsWith("e:")) this.labels.get(key)?.setPosition(s.x, s.y - v.headY - 2).setDepth(s.y + 1); // 2 linhas: nível+nome e XP, logo acima da barra
+      if (key.startsWith("e:")) {
+        this.labels.get(key)?.setPosition(s.x, s.y - v.headY - 2).setDepth(s.y + 1); // nome logo acima da barra
+        this.levelTags.get(key)?.setPosition(s.x + 20, s.y - v.headY + 3).setDepth(s.y + 1); // nível à direita da barra
+      }
       else this.labels.get(key)?.setPosition(s.x, s.y - (v.headY - 27)).setDepth(s.y + 1);
       if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28, 12);
       // barra de vida (+ marca de direção só nos círculos, que não têm rosto)

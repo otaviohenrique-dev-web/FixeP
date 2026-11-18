@@ -568,7 +568,9 @@ export class ZoneRoom extends Room<ZoneState> {
     // grupo: todo jogador vivo por perto recebe XP e faz a sua própria rolagem de loot
     this.state.players.forEach((pl, pid) => {
       if (pl.dead || dist(pl.x, pl.y, e.x, e.y) > SHARE_RADIUS) return;
-      this.addXp(pid, pl, enemyXp(e.level));
+      const gain = enemyXp(e.level);
+      this.addXp(pid, pl, gain);
+      this.clients.getById(pid)?.send(Evt.Xp, { amount: gain, x: e.x, y: e.y });
       this.giveLoot(pid, pl);
     });
   }
