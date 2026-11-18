@@ -405,7 +405,7 @@ class WorldScene extends Phaser.Scene {
     const img = fr?.source?.image as CanvasImageSource | undefined;
     if (!fr || !img) return;
     // a cabeça fica na metade de cima do quadro de 64 px, no meio
-    this.hud.setPortrait(img, { x: fr.cutX + 14, y: fr.cutY + 4, w: 36, h: 36 });
+    this.hud.setPortrait(img, { x: fr.cutX + 17, y: fr.cutY + 5, w: 30, h: 30 });
   }
 
   /**
