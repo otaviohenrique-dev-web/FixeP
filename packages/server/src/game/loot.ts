@@ -17,7 +17,7 @@ function pickRarity(rng: () => number, mult = 1): Rarity {
 }
 
 /** Sorteia o que um esqueleto solta. */
-const TEST_WEAPON: Record<CharClass, string> = { warrior: "espada_enferrujada", archer: "arco_curto", cleric: "cajado_de_galho" };
+const TEST_WEAPON: Record<CharClass, string> = { warrior: "espada_enferrujada", archer: "arco_curto", cleric: "cajado_de_galho", mage: "cajado_de_aprendiz" };
 
 /** Sorteia o que um esqueleto solta para um jogador. Armas saem só da classe dele; armaduras e poções servem a todos. */
 /** `lootMult` (da zona): zonas mais perigosas dão mais itens, raridades melhores e, nas mais fundas, poções em dobro. */

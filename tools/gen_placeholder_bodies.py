@@ -1,5 +1,5 @@
 """
-Gera os CORPOS PROVISÓRIOS dos personagens (Guerreiro, Arqueiro, Clérigo) e do Esqueleto.
+Gera os CORPOS PROVISÓRIOS dos personagens (Guerreiro, Arqueiro, Clérigo, Mago) e do Esqueleto.
 
 São bonecos procedurais com silhueta própria por classe, no MESMO formato que o Aseprite exporta (PNG + JSON json-array com tags),
 para o jogo já ter corpos enquanto a arte final não chega. NÃO são a arte do jogo: a arte real, salva em assets/characters/ e
@@ -285,5 +285,6 @@ if __name__ == "__main__":
     build("warrior", "warrior", CHAR_ANIMS)
     build("archer", "archer", CHAR_ANIMS)
     build("cleric", "cleric", CHAR_ANIMS)
+    build("mage", "mage", CHAR_ANIMS)
     build("skeleton", "skeleton", SKEL_ANIMS)
     print("pronto em", os.path.normpath(OUT))

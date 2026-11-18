@@ -98,13 +98,13 @@ export interface ActPayload {
 }
 
 export interface SwingEvent { id: string; a: ActionId; x: number; y: number; dir: number }
-export interface TelegraphEvent { id: string; x: number; y: number; r: number; ms: number; friendly?: boolean }
+export interface TelegraphEvent { id: string; x: number; y: number; r: number; ms: number; friendly?: boolean; fx?: SkillFx }
 export interface HitEvent { k: "e" | "p"; id: string; dmg: number; crit: boolean; x: number; y: number; by?: string }
 export interface DiedEvent { k: "e" | "p"; id: string }
 export interface XpEvent { amount: number; x: number; y: number }
 export interface LevelUpEvent { id: string; level: number }
 export interface HealEvent { id: string; amount: number; x: number; y: number; revive?: boolean }
-export interface ProjEvent { id: string; x: number; y: number; dir: number; speed: number; range: number; look: "arrow" | "pierce" | "bolt" }
+export interface ProjEvent { id: string; x: number; y: number; dir: number; speed: number; range: number; look: "arrow" | "pierce" | "bolt" | "fire" | "arcane"; blast?: number }
 export interface ProjEndEvent { id: string; x: number; y: number; hit: boolean }
 export interface TrapEvent { id: string; s: "set" | "boom" | "gone"; x: number; y: number; r: number }
 
@@ -118,7 +118,10 @@ export const DAMAGE_VARIANCE = 0.1; // +-10%
 export const RESPAWN_S = 8; // tempo caído; dá tempo de um Clérigo ressuscitar
 export const SHARE_RADIUS = 14; // quem estiver a até 14 tiles de um abate divide XP e loot
 
-export type CharClass = "warrior" | "archer" | "cleric";
+export type CharClass = "warrior" | "archer" | "cleric" | "mage";
+
+/** Visual de skills que "caem do céu" (eixo Z): o servidor só diz qual; o cliente anima (meteoro, raio, chuva de fogo...). */
+export type SkillFx = "meteor" | "lightning" | "firerain" | "holy" | "arrows";
 
 /** Tipo de efeito de cada ação: o servidor decide o resultado, o cliente escolhe o visual. */
 export type ActionKind =
@@ -128,6 +131,7 @@ export type ActionKind =
   | "tauntBuff" // reduz dano recebido e provoca inimigos
   | "dodge" // deslocamento com invulnerabilidade
   | "projectile" // projétil em linha reta
+  | "blast" // projétil que explode ao acertar (ou no fim do alcance), ferindo uma área
   | "trap" // armadilha no chão
   | "rain" // área atingida depois de um atraso (telegrafada)
   | "pull" // puxa os inimigos de uma área para o centro (controle)
@@ -163,6 +167,8 @@ export interface ActionDef {
   pullS?: number; // tempo da puxada (Compressor de Ar)
   stunS?: number; // tempo que os inimigos ficam atordoados depois de puxados
   maxActive?: number; // limite de armadilhas ativas
+  blast?: number; // raio da explosão (kind "blast")
+  fx?: SkillFx; // visual vindo de cima (kind "rain")
   // cura / buff / ressurreição
   heal?: number;
   dmgPct?: number; // bônus de dano da Brasa (%)
@@ -211,8 +217,8 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
       attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 10, speed: 15, range: 9, radius: 0.35 },
       skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 18, speed: 20, range: 12, radius: 0.5, pierce: true },
       skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 28, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
-      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8 },
-      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 40, radius: 3.6, placeRange: 9, delayS: 1.0 },
+      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows" },
+      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 40, radius: 3.6, placeRange: 9, delayS: 1.0, fx: "arrows" },
       dodge: dodge(5, 1.6), // rolamento longo
     },
   },
@@ -223,9 +229,21 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
       attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, dmg: 8, speed: 12, range: 8, radius: 0.4 },
       skill1: { kind: "healAoe", name: "Cura", key: "Q", cd: 5, cost: 30, heal: 30, radius: 4 },
       skill2: { kind: "pull", name: "Compressor de Ar", key: "W", cd: 12, cost: 30, radius: 4.5, placeRange: 6, pullS: 0.45, stunS: 1.2 },
-      skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, dmg: 26, radius: 3, placeRange: 7, delayS: 0.6 },
+      skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, dmg: 26, radius: 3, placeRange: 7, delayS: 0.6, fx: "holy" },
       ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, heal: 80, radius: 6 },
       dodge: dodge(3, 1.4),
+    },
+  },
+  mage: {
+    id: "mage", name: "Mago", role: "Dano explosivo", maxHp: 75, color: 0xa070ff,
+    resource: { name: "Mana", icon: "drop", color: 0xa070ff, max: 140, regen: 7, perLevel: 5 },
+    actions: {
+      attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, dmg: 15, speed: 13, range: 9, radius: 0.4 },
+      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, dmg: 44, speed: 11, range: 10, radius: 0.45, blast: 2.3 },
+      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, dmg: 40, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning" },
+      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, dmg: 62, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain" },
+      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, dmg: 230, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor" },
+      dodge: dodge(4, 1.5), // passo arcano curto: o Mago tem pouco sustain, depende de manter distância
     },
   },
 };
@@ -286,7 +304,7 @@ export const dmgMult = (level: number, weaponPct = 0) => (1 + 0.05 * (level - 1)
 
 // ------------------------------------------------------------ personagem
 /** Classes jogáveis. */
-export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior", "archer", "cleric"];
+export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior", "archer", "cleric", "mage"];
 export const NAME_MIN = 3;
 export const NAME_MAX = 16;
 export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number; zone?: number }

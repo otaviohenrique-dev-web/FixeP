@@ -38,6 +38,8 @@ ASH = (C(96, 92, 90), C(168, 162, 150), C(226, 220, 204))
 GOLDC = (C(92, 64, 22), C(176, 130, 52), C(240, 200, 110))
 EMBER = (C(150, 40, 10), C(255, 118, 30), C(255, 216, 120))
 SKIN = (C(120, 80, 62), C(190, 140, 108), C(226, 182, 146))
+ARCANE = (C(24, 14, 52), C(74, 42, 140), C(138, 100, 220))
+ARC_L = (C(70, 36, 130), C(150, 96, 255), C(222, 190, 255))
 CHAR = (C(24, 24, 32), C(48, 48, 60), C(84, 84, 102))
 
 
@@ -392,7 +394,78 @@ def cleric(cv, back, p, anim):
             cv.px(gx + math.cos(ang) * (r + 5), gy + math.sin(ang) * (r + 5), EMBER[2])
 
 
-HEROES = {"warrior": warrior, "archer": archer, "cleric": cleric}
+# ======================================================================== MAGO
+def mage(cv, back, p, anim):
+    fx = -1 if back else 1
+    cx = CX + p.lean
+    by = p.bob + p.crouch + p.sink
+    hip = FEET - 12 + p.crouch
+    top = hip - 15 + by
+    sway = math.sin(p.bob * 1.4 + p.step * 0.3) * 1.5 + p.lean * -0.3
+
+    # cajado arcano: haste escura, engaste de ferro e cristal violeta flutuando
+    a = p.arm * fx
+    shx, shy = cx + 7 * fx, top + 3
+    hx, hy2 = pt(shx, shy, a * 0.5 + 0.7 * fx, 10)
+    cv.part(lambda d: thick(d, (hx, hy2 + 15), (hx, hy2 - 20), 3), WOODC)
+    gx, gy = hx, hy2 - 23
+    r = 3 + int(p.glow * 0.5)
+    halo = Image.new("RGBA", (F, F), (0, 0, 0, 0))
+    ImageDraw.Draw(halo).ellipse([gx - r - 4, gy - r - 4, gx + r + 4, gy + r + 4], fill=(170, 110, 255, 70 + p.glow * 9))
+    cv.img.alpha_composite(halo)
+    cv.part(lambda d: tl(d, [(gx - 3, gy + 5), (gx - 4, gy + 1), (gx - 2, gy - 1), (gx, gy + 2), (gx + 2, gy - 1), (gx + 4, gy + 1), (gx + 3, gy + 5)]), STEEL_D, hi=False)
+    cv.part(lambda d: tl(d, [(gx, gy - r - 2), (gx + r, gy), (gx, gy + r), (gx - r, gy)]), ARC_L, hi_col=ARC_L[2])
+    cv.px(gx - 1, gy - 1, C(245, 232, 255))
+
+    # túnica longa e esfarrapada, violeta
+    hem = FEET - 2
+    wob = sway
+    robe = [(cx - 7, top + 6), (cx + 7, top + 6), (cx + 11 + wob, hem - 3), (cx + 8 + wob, hem + 1), (cx + 4 + wob, hem - 2), (cx + wob, hem + 1),
+            (cx - 4 + wob, hem - 2), (cx - 8 + wob, hem + 1), (cx - 11 + wob, hem - 3)]
+    cv.part(lambda d: tl(d, robe), ARCANE)
+    cv.line((cx - 3, top + 10), (cx - 5 + wob * 0.5, hem - 3), ARCANE[0])
+    cv.line((cx + 3, top + 10), (cx + 5 + wob * 0.5, hem - 3), ARCANE[0])
+    cv.line((cx - 10 + wob, hem - 2), (cx + 10 + wob, hem - 2), GOLDC[0], 1)
+    cv.line((cx - 10 + wob, hem - 3), (cx + 10 + wob, hem - 3), GOLDC[1], 1)
+    for sgn in (-1, 1):
+        sx = cx + sgn * 3 + sgn * p.step * 0.5
+        cv.rect(sx - 2, FEET - 1 - max(0.0, p.step * sgn) * 0.4, sx + 2, FEET + 1 - max(0.0, p.step * sgn) * 0.4, OL)
+
+    # braço de trás
+    oa = p.off * -fx
+    ox, oy = pt(cx - 7 * fx, top + 3, oa, 9)
+    cv.part(lambda d: thick(d, (cx - 7 * fx, top + 3), (ox, oy), 4), ARCANE)
+
+    # tronco com cinto e capa curta
+    cv.part(lambda d: d.rounded_rectangle([cx - 6, top, cx + 6, top + 12], radius=3, fill=255), ARCANE)
+    if not back:
+        cv.rect(cx - 5, top + 9, cx + 5, top + 9, GOLDC[0])
+        for k in range(-4, 5, 2):
+            cv.px(cx + k, top + 10, GOLDC[2])
+        cv.rect(cx - 1, top + 3, cx + 1, top + 4, ARC_L[2])  # broche
+    cv.part(lambda d: tl(d, [(cx - 9, top - 1), (cx + 9, top - 1), (cx + 10, top + 6), (cx + 6, top + 7), (cx - 6, top + 7), (cx - 10, top + 6)]), ARC_L, hi=False)
+
+    # cabeça: rosto escondido sob o chapéu pontudo
+    hy = top - 6
+    cv.part(lambda d: d.ellipse([cx - 6, hy - 5, cx + 6, hy + 6], fill=255), SKIN)
+    if not back:
+        cv.rect(cx - 3, hy - 1, cx - 2, hy + 1, ARC_L[2])
+        cv.rect(cx + 2, hy - 1, cx + 3, hy + 1, ARC_L[2])
+        cv.part(lambda d: tl(d, [(cx - 5, hy + 3), (cx + 5, hy + 3), (cx + 3, hy + 9), (cx - 3, hy + 9)]), ASH, hi=False)  # barba
+    cv.part(lambda d: tl(d, [(cx - 11, hy - 3), (cx + 11, hy - 3), (cx + 5, hy - 5), (cx + 1 * fx + 2, hy - 15), (cx - 5, hy - 5)]), ARCANE)  # aba e cone do chapéu
+    cv.line((cx - 7, hy - 5), (cx + 7, hy - 5), GOLDC[1], 1)  # fita
+    cv.px(cx + 3 * fx, hy - 13, ARC_L[2])
+
+    # mão da frente no cajado
+    cv.part(lambda d: thick(d, (shx, shy), (hx, hy2), 4), ARCANE)
+    cv.rect(hx - 1, hy2 - 1, hx + 1, hy2 + 1, SKIN[1])
+    if p.glow:
+        for k in range(5):
+            ang = k * 1.256 + p.glow * 0.2
+            cv.px(gx + math.cos(ang) * (r + 6), gy + math.sin(ang) * (r + 6), ARC_L[2])
+
+
+HEROES = {"warrior": warrior, "archer": archer, "cleric": cleric, "mage": mage}
 
 
 def draw_hero(kind, direction, anim, pose, i, n):

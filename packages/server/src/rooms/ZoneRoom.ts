@@ -13,7 +13,7 @@ import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuse
 import { rollLoot } from "../game/loot.js";
 import { parties, type Result } from "../game/party.js";
 
-interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; hit: Set<string> }
+interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string> }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
 interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory }
 
@@ -597,12 +597,14 @@ export class ZoneRoom extends Room<ZoneState> {
         this.startDash(p, dx, dy, def);
         break;
       }
+      case "blast":
       case "projectile": {
         const pid = `j${++this.seq}`;
         const sx = p.x + dx * 0.6, sy = p.y + dy * 0.6;
-        const look = def.pierce ? "pierce" : p.cls === "cleric" ? "bolt" : "arrow";
-        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, hit: new Set() });
-        this.broadcast(Evt.Proj, { id: pid, x: sx, y: sy, dir: p.face, speed: def.speed ?? 12, range: def.range ?? 8, look });
+        const look = def.kind === "blast" ? "fire" : def.pierce ? "pierce" : p.cls === "mage" ? "arcane" : p.cls === "cleric" ? "bolt" : "arrow";
+        const blast = def.kind === "blast" ? def.blast ?? 2 : 0;
+        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, blast, hit: new Set() });
+        this.broadcast(Evt.Proj, { id: pid, x: sx, y: sy, dir: p.face, speed: def.speed ?? 12, range: def.range ?? 8, look, blast: blast || undefined });
         break;
       }
       case "trap": {
@@ -621,7 +623,7 @@ export class ZoneRoom extends Room<ZoneState> {
         const pos = place();
         const r = def.radius ?? 2;
         const delay = def.delayS ?? 0.8;
-        this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: delay * 1000, friendly: true });
+        this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: delay * 1000, friendly: true, fx: def.fx });
         this.pending.push({ at: this.t + delay, run: () => {
           this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, pos.x, pos.y) <= r + enemyKind(e.kind).radius);
           this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, pos.x, pos.y) <= r + PLAYER_RADIUS);
@@ -706,6 +708,14 @@ export class ZoneRoom extends Room<ZoneState> {
       });
       cands.sort((a, b) => a[0] - b[0]);
       let ended = false;
+      if (pr.blast > 0 && cands.length) { // projétil explosivo: não fere direto, explode no primeiro alvo atingido
+        const [, , first] = cands[0];
+        pr.x = first.x; pr.y = first.y;
+        this.explodeBlast(pr);
+        this.projs.splice(i, 1);
+        this.broadcast(Evt.ProjEnd, { id: pr.id, x: pr.x, y: pr.y, hit: true });
+        continue;
+      }
       for (const [, eid, e] of cands) {
         pr.hit.add(eid);
         if (e instanceof Player) this.damagePvp(pr.owner, eid, e, pr.dmg);
@@ -716,10 +726,17 @@ export class ZoneRoom extends Room<ZoneState> {
       pr.y = ny;
       pr.left -= step;
       if (ended || pr.left <= 0.001 || nx < 0 || ny < 0 || nx > this.zone.w - 1 || ny > this.zone.h - 1) {
+        if (pr.blast > 0) { pr.x = clamp(pr.x, 0, this.zone.w - 1); pr.y = clamp(pr.y, 0, this.zone.h - 1); this.explodeBlast(pr); ended = true; } // fim do alcance: explode no chão
         this.projs.splice(i, 1);
         this.broadcast(Evt.ProjEnd, { id: pr.id, x: pr.x, y: pr.y, hit: ended });
       }
     }
+  }
+
+  /** explosão de um projétil "blast": fere inimigos e (em PvP) jogadores numa área ao redor do ponto final */
+  private explodeBlast(pr: Proj) {
+    this.hitEnemies(pr.owner, pr.dmg, (e) => dist(e.x, e.y, pr.x, pr.y) <= pr.blast + enemyKind(e.kind).radius);
+    this.hitPlayers(pr.owner, pr.dmg, (o) => dist(o.x, o.y, pr.x, pr.y) <= pr.blast + PLAYER_RADIUS);
   }
 
   private removeTrap(tr: Trap, s: "boom" | "gone") {

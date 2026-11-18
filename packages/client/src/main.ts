@@ -3,7 +3,7 @@ import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR,
-  type CharClass, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
+  type CharClass, type SkillFx, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
@@ -72,7 +72,7 @@ class WorldScene extends Phaser.Scene {
   private joyMoving = false;
   private deadUntil = 0;
   private cls: CharClass = "warrior";
-  private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; obj: Phaser.GameObjects.Shape }>();
+  private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; blast?: number; obj: Phaser.GameObjects.Shape }>();
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
   private zoneId = 1;
   private portalG!: Phaser.GameObjects.Graphics;
@@ -431,7 +431,7 @@ class WorldScene extends Phaser.Scene {
           : known!.has(`placeholder/${name}`) // senão, o corpo provisório (assets/placeholder)
             ? { name, png: `/assets/placeholder/${name}.png`, json: `/assets/placeholder/${name}.json` }
             : null;
-    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters")].filter((s): s is AtlasSpec => !!s);
+    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("mage", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters")].filter((s): s is AtlasSpec => !!s);
     this.atlases = await loadAtlases(this, specs);
   }
 
@@ -539,14 +539,14 @@ class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- projéteis, armadilhas e cura
   private onProj(m: ProjEvent) {
-    const color = m.look === "pierce" ? 0x9fe39f : m.look === "bolt" ? 0xfff2a8 : 0xe8d9a0;
+    const color = m.look === "pierce" ? 0x9fe39f : m.look === "bolt" ? 0xfff2a8 : m.look === "fire" ? 0xff7a2a : m.look === "arcane" ? 0xb58cff : 0xe8d9a0;
     const obj: Phaser.GameObjects.Shape =
-      m.look === "bolt"
-        ? this.add.circle(0, 0, 6, color).setBlendMode(Phaser.BlendModes.ADD)
+      m.look === "bolt" || m.look === "arcane" || m.look === "fire"
+        ? this.add.circle(0, 0, m.look === "fire" ? 10 : 6, color).setBlendMode(Phaser.BlendModes.ADD)
         : this.add.ellipse(0, 0, m.look === "pierce" ? 26 : 18, m.look === "pierce" ? 6 : 4, color);
     const d = dirScreen(m.dir);
     obj.setRotation(Math.atan2(d.y, d.x)).setDepth(1e5);
-    this.projs.set(m.id, { x: m.x, y: m.y, dx: Math.cos(m.dir), dy: Math.sin(m.dir), speed: m.speed, left: m.range, obj });
+    this.projs.set(m.id, { x: m.x, y: m.y, dx: Math.cos(m.dir), dy: Math.sin(m.dir), speed: m.speed, left: m.range, blast: m.blast, obj });
   }
 
   private onProjEnd(m: ProjEndEvent) {
@@ -554,6 +554,15 @@ class WorldScene extends Phaser.Scene {
     if (!pr) return;
     pr.obj.destroy();
     this.projs.delete(m.id);
+    if (pr.blast) { // projétil explosivo: a explosão acontece onde o servidor mandou
+      const { sx, sy } = toScreen(m.x, m.y);
+      this.ring(m.x, m.y, pr.blast, 0xff8a3a, 420, 0.2);
+      this.ring(m.x, m.y, pr.blast * 0.55, 0xffe0a0, 300, 0.3);
+      this.emitters.orange.explode(34, sx, sy - 8);
+      this.emitters.gold.explode(14, sx, sy - 8);
+      this.cameras.main.shake(140, 0.005);
+      sfx.boom();
+    }
   }
 
   private onTrap(m: TrapEvent) {
@@ -599,6 +608,81 @@ class WorldScene extends Phaser.Scene {
     this.tweens.add({ targets: inner, scale: 1, duration: m.ms, ease: "Quad.easeIn" });
     this.time.delayedCall(m.ms + 120, () => { outline.destroy(); inner.destroy(); });
     if (!m.friendly) sfx.warn();
+    if (m.fx) this.skyFx(m.fx, m.x, m.y, m.r, m.ms);
+  }
+
+  /** Skills que descem do céu (eixo Z, ideia do Diablo): objetos caem em diagonal até o alvo e o impacto acontece quando o servidor aplica o dano. */
+  private skyFx(fx: SkillFx, gx: number, gy: number, r: number, ms: number) {
+    const { sx, sy } = toScreen(gx, gy);
+    const ground = (col: number, k: number) => this.ring(gx, gy, r * k, col, 420, 0.25);
+    const fall = (x0: number, y0: number, x1: number, y1: number, delay: number, dur: number, make: () => Phaser.GameObjects.Shape, land: () => void, trail?: Phaser.GameObjects.Particles.ParticleEmitter) => {
+      const o = make().setPosition(x0, y0).setDepth(1e6);
+      this.tweens.add({
+        targets: o, x: x1, y: y1, delay, duration: dur, ease: "Quad.easeIn",
+        onUpdate: () => trail?.explode(1, o.x, o.y),
+        onComplete: () => { o.destroy(); land(); },
+      });
+    };
+    switch (fx) {
+      case "meteor": {
+        const big = () => this.add.circle(0, 0, 18 + r * 2, 0xff6a1a).setStrokeStyle(4, 0xffd08a).setBlendMode(Phaser.BlendModes.ADD);
+        fall(sx + 260, sy - 620, sx, sy, 0, ms, big, () => {
+          ground(0xff6a1a, 1); ground(0xffd08a, 0.6);
+          this.emitters.orange.explode(70, sx, sy - 6); this.emitters.gold.explode(30, sx, sy - 6);
+          this.cameras.main.shake(380, 0.014); this.cameras.main.flash(160, 255, 170, 90); sfx.boom();
+        }, this.emitters.orange);
+        break;
+      }
+      case "firerain": {
+        const n = Math.round(6 + r * 3);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+          const tx = sx + Math.cos(a) * d * ELL_W / 2, ty = sy + Math.sin(a) * d * ELL_H / 2;
+          const delay = Math.random() * ms * 0.45, dur = ms * 0.55;
+          fall(tx + 150, ty - 400, tx, ty, delay, dur, () => this.add.circle(0, 0, 6, 0xff7a2a).setBlendMode(Phaser.BlendModes.ADD),
+            () => { this.emitters.orange.explode(8, tx, ty); this.ring(gx + Math.cos(a) * d, gy + Math.sin(a) * d, 0.7, 0xff8a3a, 260, 0.3); }, this.emitters.red);
+        }
+        this.time.delayedCall(ms, () => { ground(0xff7a2a, 1); this.cameras.main.shake(160, 0.006); sfx.boom(); });
+        break;
+      }
+      case "lightning": {
+        this.time.delayedCall(ms, () => {
+          const g = this.add.graphics().setDepth(1e6).setBlendMode(Phaser.BlendModes.ADD);
+          let x = sx + 40, y = sy - 640;
+          const pts: [number, number][] = [[x, y]];
+          while (y < sy) { y += 50 + Math.random() * 40; x += (sx - x) * 0.35 + (Math.random() - 0.5) * 50; pts.push([x, Math.min(y, sy)]); }
+          pts[pts.length - 1] = [sx, sy];
+          for (const [w, c, a] of [[9, 0x8a6bff, 0.5], [4, 0xe9e0ff, 1]] as const) {
+            g.lineStyle(w, c, a).beginPath().moveTo(pts[0][0], pts[0][1]);
+            for (const p of pts.slice(1)) g.lineTo(p[0], p[1]);
+            g.strokePath();
+          }
+          ground(0xbfa8ff, 1);
+          this.emitters.gold.explode(14, sx, sy - 6);
+          this.cameras.main.flash(90, 220, 200, 255); this.cameras.main.shake(140, 0.007); sfx.boom();
+          this.tweens.add({ targets: g, alpha: 0, duration: 220, onComplete: () => g.destroy() });
+        });
+        break;
+      }
+      case "holy": {
+        const beam = this.add.rectangle(sx, sy - 300, r * ELL_W * 0.5, 600, 0xfff2a8, 0).setDepth(1e6).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: beam, alpha: 0.55, duration: ms, ease: "Quad.easeIn", onComplete: () => {
+          this.emitters.gold.explode(24, sx, sy - 6); ground(0xfff2a8, 1);
+          this.tweens.add({ targets: beam, alpha: 0, scaleX: 1.4, duration: 260, onComplete: () => beam.destroy() });
+        } });
+        break;
+      }
+      case "arrows": {
+        const n = Math.round(5 + r * 3);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+          const tx = sx + Math.cos(a) * d * ELL_W / 2, ty = sy + Math.sin(a) * d * ELL_H / 2;
+          const delay = Math.random() * ms * 0.5, dur = ms * 0.5;
+          fall(tx + 90, ty - 330, tx, ty, delay, dur, () => this.add.ellipse(0, 0, 3, 24, 0xe8d9a0).setRotation(0.25), () => this.emitters.gold.explode(3, tx, ty));
+        }
+        break;
+      }
+    }
   }
 
   private floatText(gx: number, gy: number, txt: string, color: string, size: number, pop: boolean) {
