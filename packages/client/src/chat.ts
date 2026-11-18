@@ -41,7 +41,12 @@ const CSS = `
   background:linear-gradient(180deg,#22304a,#0d1522);color:var(--gold);box-shadow:inset 0 0 0 1px rgba(255,225,160,.2),0 2px 6px rgba(0,0,0,.6);touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .ch-btn svg{display:block;margin:auto}
 @media (min-width:821px) and (max-width:1100px){.ch{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);width:min(380px,calc(100vw - 24px))}}
-@media (pointer:coarse){.ch-btn{display:block}.ch{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 90px)}}
+/* celular: o chat sobe acima do arco de botões (que ocupa os 250 px de baixo, à direita) e as falas ganham fundo para ler sobre o mapa */
+@media (pointer:coarse){.ch-btn{display:block}.ch{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 262px);width:min(380px,calc(100vw - 24px))}
+  .ch-log{max-height:120px;padding:4px 6px}
+  .ch-line{padding:2px 6px;border-radius:6px;background:rgba(8,12,20,.62);width:fit-content;max-width:100%;font-size:13px}
+  .ch:not(.open) .ch-line.old{padding:0}}
+@media (pointer:coarse) and (orientation:landscape){.ch{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 70px);width:min(360px,calc(100vw - 300px))}.ch-log{max-height:96px}}
 `;
 
 const BUBBLE = `<svg viewBox="0 0 16 16" width="22" height="22" shape-rendering="crispEdges"><path fill="currentColor" d="M2 2h12v1h1v8h-1v1H9v1H8v1H7v-1H6v-1H4v-1H3v-1H2v-1H1V3h1z"/><path fill="#0c121c" d="M4 5h8v1H4zM4 8h5v1H4z"/></svg>`;
