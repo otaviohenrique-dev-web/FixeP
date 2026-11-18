@@ -82,6 +82,18 @@ quem está fora nunca é ferido por outro jogador (cura e Brasa continuam valend
 Estado sincronizado no jogador: `pvp` e `pvpChan` (0 nenhuma, 1 entrando, 2 saindo); mensagem do cliente: `pvp { on: boolean }` (validada e com limite de taxa).
 Teste: `SERVER=http://localhost:2999 npm run test:pvp -w @frixep/server` (29 verificações).
 
+### Grupo (party)
+
+Até **4 jogadores**. O grupo vive no servidor (`packages/server/src/game/party.ts`), entre as salas de zona, e **atravessa os portais**: a identidade do membro é o personagem, não a sessão.
+- **Convidar**: clique (ou toque) no jogador no mapa para abrir o menu dele; ali ficam **Convidar para grupo** (quem convida vira o líder) e **Pedir para entrar no grupo** (entra no grupo de quem aceitar; se esse jogador não tem grupo, quem aceitou vira o líder). Ver Perfil, Pedido de amizade, Sussurrar, Trocar e Bloquear aparecem desligados ("Em breve"). Também dá para digitar **`/pt nome_do_jogador`** no chat ou usar o **+** do painel.
+- **Chat do grupo**: **`/g texto`** (aparece como "[Grupo] Nome:" e chega aos membros mesmo em outra zona; mesmas regras de tamanho, limpeza e taxa do chat da zona).
+- **Painel** no canto esquerdo, abaixo do retrato: nível (com a borda da faixa), nome, coroa do líder, barras de vida e do recurso, e a zona do membro (ou "ausente"). Clicar no cabeçalho recolhe. O líder clica num colega para **passar a liderança** ou **expulsar**; **Sair** deixa o grupo. Colegas aparecem com a barra de vida azul e o nome azul sobre a cabeça.
+- **Regras** (todas validadas no servidor): convite vale 30 s; só o líder convida; recusa alvo inexistente/offline, já em grupo, o próprio jogador e grupo cheio; um convite pendente por alvo e espera de 1,5 s entre convites do mesmo jogador. Quando o líder sai, o membro mais antigo assume; com um só restante o grupo se desfaz. Quem cai do jogo fica **ausente por 45 s** (dá para recarregar a página ou atravessar um portal) e depois sai do grupo. O grupo **não é salvo no banco**.
+- **Combate**: membros do grupo **nunca se ferem em PvP**; Cura, Brasa e Reviver valem como antes. **XP**: continua rateado entre todo jogador vivo a até 14 tiles do abate, com **+10% por colega de grupo por perto** (máx. +30%); o **loot é individual** (cada um faz a sua rolagem).
+- **Limitação**: o registro de grupos fica na memória do processo, então só funciona com **uma instância** do servidor (como hoje no Render). Com várias instâncias seria preciso um armazenamento compartilhado (ex.: Redis).
+- Mensagens novas (`packages/shared/src/index.ts`): `party_invite`, `party_join`, `party_accept`, `party_decline`, `party_leave`, `party_kick`, `party_lead`, `party_chat`, `party_sync`; eventos `party`, `party_invite`, `party_invite_end`, `party_chat`. O jogador ganha o campo sincronizado `party` (id do grupo).
+- Painel e menu: `packages/client/src/party.ts`. Teste: `PARTY_TEST=1` nos **dois** lados (servidor e teste; encurta o convite para 2 s e a ausência para 3 s e tira a espera entre convites): `PARTY_TEST=1 SERVER=http://localhost:2999 npm run test:party -w @frixep/server` (63 verificações).
+
 ### Corpos provisórios
 
 Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/` (gerados por

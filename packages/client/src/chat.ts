@@ -11,6 +11,8 @@ export interface ChatOptions {
 }
 export interface ChatUi {
   add(name: string, text: string, mine: boolean): void;
+  /** mensagem do chat de grupo (/g), em outra cor */
+  addGroup(name: string, text: string, mine: boolean): void;
   /** aviso do sistema (ex.: "fale mais devagar") */
   system(text: string): void;
   isTyping(): boolean;
@@ -26,6 +28,9 @@ const CSS = `
 .ch:not(.open) .ch-line.old{opacity:0;height:0;overflow:hidden}
 .ch-line b{color:#f0dfb8;font-weight:800;margin-right:4px}
 .ch-line.me b{color:#9fd0ff}
+.ch-line.grp{color:#bfeccd}
+.ch-line.grp b{color:#8fe0b0}
+.ch-line.grp.me b{color:#9fd0ff}
 .ch-line.sys{color:#ffb3a6;font-style:italic}
 .ch-row{display:none;margin-top:6px;pointer-events:auto}
 .ch.open .ch-row{display:block}
@@ -63,7 +68,7 @@ export function mountChat(opts: ChatOptions): ChatUi {
   input.maxLength = CHAT_MAX_LEN;
   input.autocomplete = "off";
   input.spellcheck = false;
-  input.placeholder = "Falar à zona… (Enter envia, Esc fecha)";
+  input.placeholder = "Falar à zona… (/g grupo · /pt nome convida)";
   input.setAttribute("aria-label", "Mensagem de chat");
   row.appendChild(input);
   const btn = document.createElement("button");
@@ -128,6 +133,16 @@ export function mountChat(opts: ChatOptions): ChatUi {
       line.className = "ch-line" + (mine ? " me" : "");
       const who = document.createElement("b");
       who.textContent = `${name}:`;
+      const body = document.createElement("span");
+      body.textContent = text;
+      line.append(who, body);
+      push(line);
+    },
+    addGroup(name, text, mine) {
+      const line = document.createElement("div");
+      line.className = "ch-line grp" + (mine ? " me" : "");
+      const who = document.createElement("b");
+      who.textContent = `[Grupo] ${name}:`;
       const body = document.createElement("span");
       body.textContent = text;
       line.append(who, body);
