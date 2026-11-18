@@ -1,4 +1,4 @@
-import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -30,6 +30,10 @@ export interface Hud {
   setTouch(on: boolean): void;
   /** estado do PvP vindo do servidor: `on` = está no modo; `chan` 0 nenhuma, 1 entrando, 2 saindo */
   setPvp(on: boolean, chan: number): void;
+  /** quantidade de poções na bolsa (slot da poção); uma queda no estoque inicia a recarga local */
+  setPotion(count: number): void;
+  /** a poção não está em recarga? */
+  potionReady(): boolean;
   /** aviso curto em destaque no alto da tela (ex.: "Canalização interrompida") */
   alert(text: string): void;
 }
@@ -40,6 +44,7 @@ const ICON: Record<string, string> = {
   flame: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M8 1h1v2h1v2h1v1h1v3h1v3h-1v2h-2v1H6v-1H4v-2H3V9h1V7h1V6h1V3h1z"/><path fill="#fff" opacity=".55" d="M8 8h1v1h1v3H8v1H7v-2h1z"/></svg>`,
   eye: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M5 5h6v1h2v1h2v2h-2v1h-2v1H5v-1H3V9H1V7h2V6h2z"/><path fill="#0b1018" d="M7 6h2v4H7z"/><path fill="#fff" opacity=".6" d="M7 6h1v1H7z"/></svg>`,
   swords: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M2 2h3l1 1 1 1 1 1 1 1-1 1-1-1-1-1-1-1-1-1H2zM14 2h-3l-1 1-1 1-1 1-1 1 1 1 1-1 1-1 1-1 1-1h3zM3 12l2-2 1 1-2 2zm10 0l-2-2-1 1 2 2zM7 8l1 1 1-1-1-1z"/><path fill="currentColor" d="M2 13h2v1H2zm10 0h2v1h-2z"/></svg>`,
+  potion: `<svg viewBox="0 0 16 16" width="18" height="18" shape-rendering="crispEdges"><path fill="#d8e4f0" d="M6 1h4v1H9v3h1v1h1v1h1v5h-1v2H5v-2H4V7h1V6h1V5h1V2H6z"/><path fill="#d94a4a" d="M5 9h6v4H5z"/><path fill="#ff8f8f" d="M6 10h1v2H6z"/><path fill="#fff" opacity=".5" d="M6 6h1v2H6z"/></svg>`,
   drop: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M7 1h2v2h1v2h1v2h1v4h-1v2h-1v1H6v-1H5v-2H4V7h1V5h1V3h1z"/><path fill="#fff" opacity=".55" d="M6 8h1v3H6z"/></svg>`,
 };
 
@@ -120,8 +125,12 @@ const CSS = `
 .hd-dead h2{margin:0;font-size:clamp(28px,7vw,54px);font-weight:900;letter-spacing:.2em;text-indent:.2em;color:#ff6a5a;text-shadow:0 0 28px rgba(255,60,30,.6)}
 .hd-dead p{margin:0;font-size:14px;letter-spacing:.3em;text-transform:uppercase;color:#cfdcec}
 /* ---------- layout de toque: botões em arco no canto direito (polegar), a esquerda fica livre para o joystick ---------- */
-.hd-pot{display:none}
-.hd.touch .hd-pot{display:grid}
+.hd-pot{margin-left:14px;border-color:#5f9a6a}
+.hd-pot svg{position:absolute;left:50%;top:7px;margin-left:-9px;pointer-events:none}
+.hd-pot .hd-sn{position:absolute;left:0;right:0;bottom:3px;font-size:7px}
+.hd-qty{position:absolute;right:4px;top:2px;font:900 12px/1 "Cinzel",Georgia,serif;color:#b8f0c4;text-shadow:0 0 3px #000,0 1px 3px #000;pointer-events:none}
+.hd-pot.empty{filter:saturate(.3) brightness(.65)}
+.hd-pot.empty .hd-qty{color:#ff7b6b}
 .hd.touch .hd-bar{left:auto;right:max(10px,env(safe-area-inset-right));bottom:calc(max(10px,env(safe-area-inset-bottom)) + 14px);transform:none;display:block;width:224px;height:232px;padding:0;background:none;border:0;box-shadow:none}
 .hd.touch .hd-btn{position:absolute;width:54px;height:54px;border-radius:50%}
 .hd.touch .hd-btn.big{width:80px;height:80px;right:0;bottom:0}
@@ -130,8 +139,10 @@ const CSS = `
 .hd.touch .hd-a-skill3{right:13px;bottom:109px}
 .hd.touch .hd-a-ultimate{right:67px;bottom:149px;width:60px;height:60px}
 .hd.touch .hd-a-dodge{right:144px;bottom:68px;width:48px;height:48px}
-.hd.touch .hd-pot{right:8px;bottom:170px;width:40px;height:40px}
+.hd.touch .hd-pot{right:4px;bottom:166px;width:46px;height:46px;margin:0}
+.hd.touch .hd-pot .hd-sn{display:none}
 .hd.touch .hd-key{display:none}
+.hd.touch .hd-pot svg{top:9px}
 .hd.touch .hd-cost{left:0;right:0;bottom:5px;text-align:center}
 .hd-btn.ult{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.35),0 0 10px rgba(255,190,90,.25)}
 /* ---------- PvP: botão sob o retrato, barra de canalização e avisos ---------- */
@@ -251,15 +262,18 @@ export function mountHud(opts: HudOptions): Hud {
     els.set(a, { btn: b, cd: b.querySelector(".hd-cd")!, n: b.querySelector(".hd-cdn")! });
   }
 
-  if (opts.onPotion) {
-    const pb = document.createElement("button");
-    pb.type = "button";
-    pb.className = "hd-btn hd-pot";
-    pb.setAttribute("aria-label", "Beber poção (F)");
-    pb.innerHTML = `<span class="hd-key">F</span><span class="hd-sn">Poção</span>`;
-    pb.addEventListener("pointerdown", (e) => { e.preventDefault(); opts.onPotion!(); });
-    bar.append(pb);
-  }
+  // slot da poção: ao lado da barra de habilidades, com ícone, estoque e contagem de recarga (a tecla F e o toque bebem)
+  let potCount = 0, potUntil = 0;
+  const pb = document.createElement("button");
+  pb.type = "button";
+  pb.className = "hd-btn hd-pot empty";
+  pb.setAttribute("aria-label", "Beber poção (F)");
+  pb.innerHTML = `<span class="hd-key">F</span>${ICON.potion}<span class="hd-qty">0</span><span class="hd-sn">Poção</span><span class="hd-cd"></span><span class="hd-cdn"></span>`;
+  pb.addEventListener("pointerdown", (e) => { e.preventDefault(); opts.onPotion?.(); });
+  bar.append(pb);
+  const potCd = pb.querySelector<HTMLElement>(".hd-cd")!;
+  const potN = pb.querySelector<HTMLElement>(".hd-cdn")!;
+  const potQty = pb.querySelector<HTMLElement>(".hd-qty")!;
 
   function trigger(a: ActionId) {
     const now = performance.now();
@@ -280,6 +294,15 @@ export function mountHud(opts: HudOptions): Hud {
       const spent = Math.min(PVP_CHANNEL_S, (now - chanStart) / 1000);
       chanFill.style.transform = `scaleX(${spent / PVP_CHANNEL_S})`;
       chanTxt.textContent = `${pvpChan === 1 ? "Entrando em PvP" : "Saindo do PvP"} · ${Math.max(0, PVP_CHANNEL_S - spent).toFixed(1)} s`;
+    }
+    const pl = potUntil - now;
+    if (pl > 0) {
+      pb.classList.add("cool");
+      potCd.style.height = `${Math.min(100, (pl / (POTION_COOLDOWN_S * 1000)) * 100)}%`;
+      potN.textContent = pl > 950 ? String(Math.ceil(pl / 1000)) : (pl / 1000).toFixed(1);
+    } else if (pb.classList.contains("cool")) {
+      pb.classList.remove("cool");
+      potCd.style.height = "0";
     }
     for (const [a, e] of els) {
       const left = (cdUntil[a] ?? 0) - now;
@@ -352,6 +375,13 @@ export function mountHud(opts: HudOptions): Hud {
       chanBox.classList.toggle("on", chan !== 0);
       chanBox.classList.toggle("out", chan === 2);
     },
+    setPotion(count) {
+      if (count < potCount && potCount > 0) potUntil = performance.now() + POTION_COOLDOWN_S * 1000; // gastou uma: recarga (o servidor também aplica)
+      potCount = count;
+      potQty.textContent = String(count);
+      pb.classList.toggle("empty", count <= 0);
+    },
+    potionReady: () => performance.now() >= potUntil,
     alert(text) {
       alertEl.textContent = text;
       alertEl.classList.add("on");

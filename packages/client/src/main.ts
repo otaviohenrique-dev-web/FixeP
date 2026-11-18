@@ -45,6 +45,7 @@ const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number
   crypt: { bg: "#07050b", a: 0x221b2c, b: 0x2a2236, line: 0x3a2f4a, fleck: 0x54446e, border: 0x6a4a9a, portal: 0xb07aff },
 };
 const tileHash = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
+const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
 /** qual animação do personagem corresponde a cada ação (as 3 habilidades usam a mesma, "skill") */
@@ -77,6 +78,10 @@ class WorldScene extends Phaser.Scene {
   private zoneId = 1;
   private portalG!: Phaser.GameObjects.Graphics;
   private portalDefs: { x: number; y: number; r: number; color: number }[] = [];
+  private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
+  private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
+  private lockKey = ""; // alvo travado do toque ("e:id" ou "p:id"): as ações mirram nele
+  private uiScale = 1; // contra-escala dos textos quando a câmera se afasta (celular)
 
   private get state(): any { return this.room?.state; }
   private me(): any { return this.state?.players?.get(this.room.sessionId); }
@@ -99,6 +104,7 @@ class WorldScene extends Phaser.Scene {
     if (!this.state?.players) await new Promise<void>((resolve) => this.room.onStateChange.once(() => resolve()));
 
     this.makeEffects();
+    this.selG = this.add.graphics().setDepth(0.35);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
 
@@ -185,7 +191,12 @@ class WorldScene extends Phaser.Scene {
 
     // mochila: registra os receptores ANTES de pedir a fotografia (evita perder a mensagem inicial)
     this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls });
-    this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => this.inv.setSnapshot(s));
+    this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => {
+      this.inv.setSnapshot(s);
+      let n = 0;
+      for (const st of s.inv) if (st && ITEMS[st.id]?.kind === "potion") n += st.qty;
+      this.hud.setPotion(n); // slot da poção na HUD: estoque e recarga
+    });
     this.room.onMessage(Evt.Loot, (m: LootEvent) => {
       const d = ITEMS[m.id];
       if (!d) return;
@@ -225,7 +236,7 @@ class WorldScene extends Phaser.Scene {
     });
 
     // grupo: painel, convite e chat de grupo (os receptores ficam prontos ANTES de pedir o estado)
-    this.party = mountParty({ send: (t, p) => this.room.send(t, p), zoneId: this.zoneId, myName: String(this.me()?.name ?? "") });
+    this.party = mountParty({ send: (t, p) => this.room.send(t, p), zoneId: this.zoneId, myName: String(this.me()?.name ?? ""), onMenuClose: () => { this.selId = ""; } });
     this.party.setTouch(this.touchMode);
     this.room.onMessage(Evt.Party, (m: PartyEvent) => this.party.setParty(m));
     this.room.onMessage(Evt.PartyInvite, (m: PartyInviteEvent) => this.party.showInvite(m));
@@ -238,15 +249,23 @@ class WorldScene extends Phaser.Scene {
     this.room.onMessage(Evt.Pong, (m: { t: number }) => stats.onPong(m.t));
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
-      const other = this.playerAt(ptr.worldX, ptr.worldY); // clicar/tocar em outro jogador abre o menu dele em vez de andar
+      const other = this.playerAt(ptr.worldX, ptr.worldY); // clicar em outro jogador só o seleciona (círculo verde + opções ao lado do seu retrato)
       if (other) {
-        const r = this.game.canvas.getBoundingClientRect();
-        this.party.openPlayerMenu({ name: String(other.name), level: Number(other.level) || 1, cls: String(other.cls), inParty: !!other.party }, r.left + ptr.x + 14, r.top + ptr.y - 10);
+        const p = other.p;
+        this.selId = other.id;
+        this.party.selectPlayer({ name: String(p.name), level: Number(p.level) || 1, cls: String(p.cls), inParty: !!p.party });
+        if (ptr.wasTouch || this.touchMode) this.lockKey = `p:${other.id}`;
         return;
       }
-      if (ptr.wasTouch || this.touchMode) return; // no celular quem anda é o joystick (tocar no campo de visão não move)
+      if (ptr.wasTouch || this.touchMode) { // no celular quem anda é o joystick; tocar num inimigo trava a mira nele, tocar no vazio solta
+        this.lockKey = this.enemyAt(ptr.worldX, ptr.worldY) ?? "";
+        if (this.selId) this.deselect();
+        return;
+      }
+      if (this.selId) this.deselect();
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
       this.room.send(Msg.MoveTo, { x, y });
+      this.moveMarker(x, y);
     });
     // distingue toque de mouse (define como a mira é escolhida)
     const kind = (e: PointerEvent) => {
@@ -263,6 +282,7 @@ class WorldScene extends Phaser.Scene {
     };
     window.addEventListener("keydown", (e) => {
       if (isTypingTarget()) return; // digitando no chat
+      if (e.code === "Escape" && this.selId) this.deselect();
       if (e.code === "KeyF" && !e.repeat && !menuOpen()) { // F: bebe a primeira poção
         this.drinkPotion();
         return;
@@ -347,11 +367,12 @@ class WorldScene extends Phaser.Scene {
     for (const [id, b] of this.bubbles) {
       const v = this.sprites.get(`p:${id}`);
       if (!v || time > b.until) { b.t.destroy(); this.bubbles.delete(id); continue; }
-      b.t.setPosition(v.obj.x, v.obj.y - v.headY - 16).setVisible(v.obj.visible).setAlpha(Math.min(1, (b.until - time) / 600));
+      b.t.setScale(this.uiScale).setPosition(v.obj.x, v.obj.y - v.headY - 34 * this.uiScale).setVisible(v.obj.visible).setAlpha(Math.min(1, (b.until - time) / 600));
     }
   }
 
   private drinkPotion() {
+    if (!this.hud.potionReady()) return; // em recarga: o slot da HUD já mostra a contagem
     const slot = this.inv.firstPotionSlot();
     if (slot >= 0) this.room.send(Msg.InvUse, { slot });
     else this.inv.toast("Você não tem poções.", "#ffb3a6");
@@ -362,11 +383,45 @@ class WorldScene extends Phaser.Scene {
     this.hud?.setTouch(this.touchMode);
     this.joy?.setEnabled(this.touchMode);
     this.party?.setTouch(this.touchMode);
+    // celular: câmera mais afastada para enxergar mais ao redor (os textos ganham contra-escala para continuarem legíveis)
+    const zoom = this.touchMode ? TOUCH_ZOOM : 1;
+    this.cameras.main.setZoom(zoom);
+    this.uiScale = Math.min(1.25, 1 / zoom);
+    if (!this.touchMode) this.lockKey = "";
+  }
+
+  private deselect() {
+    this.selId = "";
+    this.party.closeMenu();
+  }
+
+  /** marcador de destino do clique (estilo RTS): anel que fecha sobre o ponto e some */
+  private moveMarker(gx: number, gy: number) {
+    const { sx, sy } = toScreen(gx, gy);
+    const ring = this.add.ellipse(sx, sy, 46, 23, 0x000000, 0).setStrokeStyle(2, 0xbff5c8, 0.9).setDepth(0.6).setScale(1.5);
+    const dot = this.add.ellipse(sx, sy, 8, 4, 0xbff5c8, 0.9).setDepth(0.6);
+    this.tweens.add({ targets: ring, scale: 0.55, alpha: 0, duration: 520, ease: "Cubic.easeOut", onComplete: () => ring.destroy() });
+    this.tweens.add({ targets: dot, alpha: 0, duration: 520, ease: "Quad.easeIn", onComplete: () => dot.destroy() });
+  }
+
+  /** inimigo vivo sob o ponto (pixels do mundo), como chave "e:id" */
+  private enemyAt(wx: number, wy: number): string | null {
+    let best: string | null = null, bd = Infinity;
+    this.state?.enemies?.forEach((e: any, id: string) => {
+      if (e.st === "dead") return;
+      const v = this.sprites.get(`e:${id}`);
+      if (!v || !v.obj.visible) return;
+      const s = v.obj;
+      if (Math.abs(wx - s.x) > 30 || wy < s.y - v.headY - 30 || wy > s.y + 14) return;
+      const d = Math.hypot(wx - s.x, wy - (s.y - v.headY / 2));
+      if (d < bd) { bd = d; best = `e:${id}`; }
+    });
+    return best;
   }
 
   /** outro jogador sob o ponto (em pixels do mundo): o corpo e a placa de nome/vida acima da cabeça */
-  private playerAt(wx: number, wy: number): any | null {
-    let best: any = null, bd = Infinity;
+  private playerAt(wx: number, wy: number): { id: string; p: any } | null {
+    let best: { id: string; p: any } | null = null, bd = Infinity;
     this.state?.players?.forEach((p: any, id: string) => {
       if (id === this.room.sessionId) return;
       const v = this.sprites.get(`p:${id}`);
@@ -374,7 +429,7 @@ class WorldScene extends Phaser.Scene {
       const s = v.obj;
       if (Math.abs(wx - s.x) > 28 || wy < s.y - v.headY - 36 || wy > s.y + 12) return;
       const d = Math.hypot(wx - s.x, wy - (s.y - v.headY / 2));
-      if (d < bd) { bd = d; best = p; }
+      if (d < bd) { bd = d; best = { id, p }; }
     });
     return best;
   }
@@ -658,7 +713,7 @@ class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- ações
   /** ponto de mira em tiles: mouse = ponteiro; toque = inimigo mais próximo ou direção atual */
-  private aim(): { x: number; y: number } {
+  private aim(a: ActionId): { x: number; y: number } {
     const me = this.me();
     if (!me) return { x: 0, y: 0 };
     if (!this.touchMode) {
@@ -666,21 +721,92 @@ class WorldScene extends Phaser.Scene {
       p.updateWorldPoint(this.cameras.main);
       return toGrid(p.worldX, p.worldY);
     }
-    let best: any = null;
-    let bd = 8;
-    this.state.enemies.forEach((e: any) => {
-      if (e.st === "dead") return;
-      const d = Math.hypot(e.x - me.x, e.y - me.y);
-      if (d < bd) { bd = d; best = e; }
-    });
-    if (best) return { x: best.x, y: best.y };
+    // toque: mira assistida no alvo travado, ou no inimigo / jogador em PvP mais próximo ao alcance da ação
+    const t = this.assistTarget(a);
+    if (t) return { x: t.x, y: t.y };
+    // sem alvo: direção do polegar (se está no joystick) ou para onde o personagem olha
+    const v = this.joy?.vector();
+    if (v) {
+      const g = toGrid(v.x, v.y);
+      const n = Math.hypot(g.x, g.y) || 1;
+      return { x: me.x + (g.x / n) * 3, y: me.y + (g.y / n) * 3 };
+    }
     return { x: me.x + Math.cos(me.face) * 3, y: me.y + Math.sin(me.face) * 3 };
+  }
+
+  /** até onde a ação alcança um alvo (tiles); 0 = ação sem alvo (esquiva, buffs, curas em área) */
+  private reach(a: ActionId): number {
+    const d = CLASS_DEFS[this.cls].actions[a];
+    switch (d.kind) {
+      case "melee": return (d.offset ?? 0) + (d.radius ?? 1) + 1;
+      case "dashHit": return (d.dash ?? 0) + (d.radius ?? 1);
+      case "projectile": return d.range ?? 8;
+      case "trap": case "rain": return d.placeRange ?? 8;
+      case "pull": return 6;
+      default: return 0;
+    }
+  }
+
+  /** alvos possíveis: inimigos vivos e, com você em PvP, outros jogadores em PvP que não são do seu grupo */
+  private targets(): { key: string; x: number; y: number }[] {
+    const me = this.me();
+    const out: { key: string; x: number; y: number }[] = [];
+    if (!me) return out;
+    this.state.enemies.forEach((e: any, id: string) => { if (e.st !== "dead") out.push({ key: `e:${id}`, x: e.x, y: e.y }); });
+    if (me.pvp) {
+      const mine = String(me.party ?? "");
+      this.state.players.forEach((p: any, id: string) => {
+        if (id === this.room.sessionId || p.dead || !p.pvp || (mine && p.party === mine)) return;
+        out.push({ key: `p:${id}`, x: p.x, y: p.y });
+      });
+    }
+    return out;
+  }
+
+  /** alvo travado (se ainda vale e está ao alcance) ou o mais próximo ao alcance da ação */
+  private assistTarget(a: ActionId): { key: string; x: number; y: number } | null {
+    const me = this.me();
+    const reach = this.reach(a);
+    if (!me || reach <= 0) return null;
+    let best: { key: string; x: number; y: number } | null = null, bd = reach;
+    for (const t of this.targets()) {
+      const d = Math.hypot(t.x - me.x, t.y - me.y);
+      if (t.key === this.lockKey && d <= reach) return t;
+      if (d < bd) { bd = d; best = t; }
+    }
+    if (best) this.lockKey = best.key;
+    return best;
+  }
+
+  /** solta o alvo travado se ele morreu, saiu do PvP ou está longe demais */
+  private checkLock() {
+    if (!this.lockKey) { if (this.touchMode) this.assistTarget("attack"); return; } // sem alvo: já mostra o mais próximo ao alcance do ataque
+    const me = this.me();
+    const t = this.targets().find((x) => x.key === this.lockKey);
+    if (!me || !t || Math.hypot(t.x - me.x, t.y - me.y) > 14) this.lockKey = "";
+  }
+
+  /** círculo verde sutil sob o jogador selecionado e anel vermelho sob o alvo travado (toque) */
+  private drawMarks(time: number) {
+    this.selG.clear();
+    if (this.selId) {
+      const v = this.sprites.get(`p:${this.selId}`);
+      if (!v || !this.state.players.has(this.selId)) this.deselect();
+      else if (v.obj.visible) this.selG.lineStyle(2, 0x6fe08a, 0.55 + 0.15 * Math.sin(time / 300)).strokeEllipse(v.obj.x, v.obj.y, 50, 25).fillStyle(0x6fe08a, 0.08).fillEllipse(v.obj.x, v.obj.y, 50, 25);
+    }
+    if (this.lockKey && this.touchMode) {
+      const v = this.sprites.get(this.lockKey);
+      if (v?.obj.visible) {
+        const k = 1 + 0.06 * Math.sin(time / 180);
+        this.selG.lineStyle(3, 0xff5a4a, 0.9).strokeEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k).fillStyle(0xff5a4a, 0.12).fillEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k);
+      }
+    }
   }
 
   private act(a: ActionId) {
     const me = this.me();
     if (!me || me.dead || !this.room) return;
-    const { x, y } = this.aim();
+    const { x, y } = this.aim(a);
     const payload: ActPayload = { a, ax: x, ay: y };
     this.room.send(Msg.Act, payload);
     // resposta imediata no cliente (o servidor continua sendo quem decide o resultado)
@@ -696,6 +822,8 @@ class WorldScene extends Phaser.Scene {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
     this.driveJoystick(time);
+    this.checkLock();
+    this.drawMarks(time);
     if (this.portalG) this.drawPortals(time);
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes
     this.bars.clear();
@@ -734,11 +862,11 @@ class WorldScene extends Phaser.Scene {
       if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28, 12);
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
       const pg = drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time });
-      this.labels.get(key)?.setPosition(pg.nameX, pg.nameY).setDepth(1e5 + 2);
+      this.labels.get(key)?.setPosition(pg.nameX, pg.nameY).setScale(this.uiScale).setDepth(1e5 + 2);
       const nt = this.levelTags.get(key);
       if (nt) {
         if (nt.text !== String(o.level)) nt.setText(String(o.level));
-        nt.setPosition(pg.numX, pg.numY);
+        nt.setPosition(pg.numX, pg.numY).setScale(this.uiScale);
       }
       // marca de direção só nos círculos, que não têm rosto
       if (!v.isSprite) {
