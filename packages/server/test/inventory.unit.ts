@@ -4,7 +4,7 @@ process.env.PGLITE_DIR = "memory";
 process.env.NODE_ENV = "test";
 
 import { randomUUID } from "node:crypto";
-import { INV_SLOTS, ITEMS, CLASS_DEFS, ACTION_IDS, maxHpFor } from "@frixep/shared";
+import { INV_SLOTS, ITEMS, CLASS_DEFS, ACTION_IDS, maxHpFor, maxManaFor } from "@frixep/shared";
 import { emptyInventory, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, snapshot } from "../src/game/inventory.js";
 import { rollLoot, GEAR_CHANCE, POTION_CHANCE } from "../src/game/loot.js";
 import { openDb } from "../src/db/index.js";
@@ -92,6 +92,20 @@ console.log("\n== Definições das classes ==");
   check("vida cresce 10 por nível e soma a armadura", maxHpFor("archer", 5, 15) === 90 + 40 + 15);
   check("toda arma tem classe e todo item de classe existe nas definições", Object.values(ITEMS).filter((i) => i.kind === "weapon").every((i) => i.cls && CLASS_DEFS[i.cls]));
   check("cada classe tem uma arma de cada raridade", (["warrior", "archer", "cleric"] as const).every((c) => (["common", "uncommon", "rare"] as const).every((r) => Object.values(ITEMS).some((i) => i.kind === "weapon" && i.cls === c && i.rarity === r))));
+}
+
+console.log("\n== Recurso das classes (Fúria, Foco, Mana) ==");
+{
+  for (const cls of ["warrior", "archer", "cleric"] as const) {
+    const d = CLASS_DEFS[cls];
+    check(`${d.name}: recurso "${d.resource.name}" com máximo, regeneração e ícone válidos`, d.resource.max > 0 && d.resource.regen > 0 && d.resource.perLevel >= 0 && ["flame", "eye", "drop"].includes(d.resource.icon));
+    check(`${d.name}: as 3 habilidades têm custo positivo e a Esquiva é de graça`, (["skill1", "skill2", "skill3"] as const).every((a) => (d.actions[a].cost ?? 0) > 0) && (d.actions.dodge.cost ?? 0) === 0);
+    // o custo total das 3 habilidades cabe no máximo (dá para usar todas em sequência) mas pesa na regeneração
+    const total = (["skill1", "skill2", "skill3"] as const).reduce((n, a) => n + (d.actions[a].cost ?? 0), 0);
+    check(`${d.name}: usar as 3 habilidades seguidas custa ${total} de ${d.resource.max} (cabe, mas pesa)`, total <= d.resource.max && total >= d.resource.max * 0.6);
+  }
+  check("o máximo cresce por nível: Guerreiro 100 → 112 no nível 5; Clérigo 120 → 136", maxManaFor("warrior", 1) === 100 && maxManaFor("warrior", 5) === 112 && maxManaFor("cleric", 1) === 120 && maxManaFor("cleric", 5) === 136);
+  check("o ataque básico do Guerreiro e do Arqueiro é de graça; o do Clérigo custa pouco", (CLASS_DEFS.warrior.actions.attack.cost ?? 0) === 0 && (CLASS_DEFS.archer.actions.attack.cost ?? 0) === 0 && (CLASS_DEFS.cleric.actions.attack.cost ?? 0) === 4);
 }
 
 console.log("\n== Sorteio de loot ==");

@@ -14,6 +14,8 @@ import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
 import { mountStats } from "./stats";
 
+import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
+
 const TILE_W = 64;
 const TILE_H = 32;
 // projeção iso: grade (x,y) -> tela, e inversa
@@ -33,11 +35,17 @@ const dirScreen = (ang: number) => {
 };
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
+/** qual animação do personagem corresponde a cada ação (as 3 habilidades usam a mesma, "skill") */
+const animFor = (a: ActionId): ActionAnim => (a === "attack" ? "attack" : a === "dodge" ? "dodge" : "skill");
+
 class WorldScene extends Phaser.Scene {
   private room!: Room;
   private hud!: Hud;
   private inv!: InventoryUi;
-  private sprites = new Map<string, Phaser.GameObjects.Arc>();
+  private sprites = new Map<string, ActorView>();
+  private atlases = new Map<string, ActorAtlas>();
+  private prevSt = new Map<string, string>();
+  private shadows!: Phaser.GameObjects.Graphics;
   private labels = new Map<string, Phaser.GameObjects.Text>();
   private bars!: Phaser.GameObjects.Graphics;
   private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter; green: Phaser.GameObjects.Particles.ParticleEmitter };
@@ -69,6 +77,8 @@ class WorldScene extends Phaser.Scene {
       }
     }
 
+    await this.loadArt(); // atlas de sprites (se existirem); sem eles os personagens são círculos
+
     const token = (this.sys.settings.data as { token: string }).token;
     try {
       this.room = await new Client(wsUrl).joinOrCreate("zone", { token });
@@ -80,6 +90,7 @@ class WorldScene extends Phaser.Scene {
     if (!this.state?.players) await new Promise<void>((resolve) => this.room.onStateChange.once(() => resolve()));
 
     this.makeEffects();
+    if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
 
     // colyseus.js 0.16: callbacks de coleção passam por getStateCallbacks
@@ -88,20 +99,27 @@ class WorldScene extends Phaser.Scene {
 
     st.players.onAdd((p: any, id: string) => {
       const me = id === this.room.sessionId;
-      this.sprites.set(`p:${id}`, this.add.circle(0, 0, 10, CLASS_DEFS[p.cls as CharClass]?.color ?? 0x6fa8dc).setStrokeStyle(me ? 3 : 2, me ? 0xffffff : 0x000000, me ? 0.9 : 0.5));
+      const view = new ActorView(this, this.atlases.get(p.cls as string), { color: CLASS_DEFS[p.cls as CharClass]?.color ?? 0x6fa8dc, radius: 10, mine: me });
+      const at = toScreen(p.x, p.y);
+      view.obj.setPosition(at.sx, at.sy); // nasce na posição certa (sem deslizar desde a origem)
+      this.sprites.set(`p:${id}`, view);
       this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "10px", color: "#ccc" }).setOrigin(0.5, 3.4));
-      if (me) this.cameras.main.startFollow(this.sprites.get(`p:${id}`)!, true, 0.1, 0.1);
+      if (me) this.cameras.main.startFollow(view.obj, true, 0.1, 0.1);
     });
     st.players.onRemove((_: any, id: string) => this.dropSprite(`p:${id}`));
 
     st.enemies.onAdd((e: any, id: string) => {
-      this.sprites.set(`e:${id}`, this.add.circle(0, 0, 12, 0xd8d2c0).setStrokeStyle(2, 0x000000, 0.6));
+      const view = new ActorView(this, this.atlases.get("skeleton"), { color: 0xd8d2c0, radius: 12 });
+      const at = toScreen(e.x, e.y);
+      view.obj.setPosition(at.sx, at.sy);
+      this.sprites.set(`e:${id}`, view);
       this.labels.set(`e:${id}`, this.add.text(0, 0, SKELETON.name, { fontSize: "10px", color: "#e8e2d0" }).setOrigin(0.5, 3.1));
     });
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
 
     // HUD, menu e entrada
-    this.hud = mountHud({ cls: this.cls, onAction: (a) => this.act(a) });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a) });
+    this.paintPortrait();
     mountGameMenu({
       playerName: this.me()?.name ?? "Portador",
       onLogout: async () => {
@@ -118,6 +136,11 @@ class WorldScene extends Phaser.Scene {
     });
 
     this.room.onMessage(Evt.Swing, (m: SwingEvent) => {
+      const actor = this.sprites.get(`p:${m.id}`);
+      if (actor) {
+        actor.setFace(m.dir);
+        if (m.id !== this.room.sessionId) actor.trigger(animFor(m.a), this.time.now); // a própria já tocou em act()
+      }
       // a própria ação já foi mostrada na hora; as dos outros usam a classe de quem agiu
       if (m.id !== this.room.sessionId) this.playSwing((this.state.players.get(m.id)?.cls as CharClass) ?? "warrior", m.a, m.x, m.y, m.dir, false);
     });
@@ -175,9 +198,49 @@ class WorldScene extends Phaser.Scene {
     });
   }
 
+  // ---------------------------------------------------------------- arte
+  /** Retrato = cabeça do primeiro quadro do atlas da classe (corpo provisório ou arte final). Sem atlas: inicial do nome. */
+  private paintPortrait() {
+    const at = this.atlases.get(this.cls);
+    if (!at) return;
+    const fr = this.textures.getFrame(at.key, at.firstFrame);
+    const img = fr?.source?.image as CanvasImageSource | undefined;
+    if (!fr || !img) return;
+    // a cabeça fica na metade de cima do quadro de 64 px, no meio
+    this.hud.setPortrait(img, { x: fr.cutX + 14, y: fr.cutY + 4, w: 36, h: 36 });
+  }
+
+  /**
+   * Procura os atlas em /assets (a pasta assets/ do repositório) ou, com ?atlas=debug, em /debug-atlas.
+   * O que não existir fica como círculo; a arte pode chegar aos poucos.
+   */
+  private async loadArt() {
+    const debug = new URLSearchParams(location.search).get("atlas") === "debug";
+    // a lista de atlas existentes vem do servidor: assim não pedimos arquivos que ainda não existem (sem 404 no console)
+    let known: Set<string> | null = null;
+    if (!debug) {
+      try {
+        const res = await fetch("/assets/_manifest.json", { cache: "no-cache" });
+        if ((res.headers.get("content-type") ?? "").includes("json")) known = new Set(await res.json());
+      } catch { /* sem lista: sem arte */ }
+      if (!known || known.size === 0) return; // nenhuma arte entregue ainda: círculos
+    }
+    const spec = (name: string, dir: string): AtlasSpec | null =>
+      debug
+        ? { name, png: `/debug-atlas/${name}.png`, json: `/debug-atlas/${name}.json` }
+        : known!.has(`${dir}/${name}`) // arte final tem prioridade
+          ? { name, png: `/assets/${dir}/${name}.png`, json: `/assets/${dir}/${name}.json` }
+          : known!.has(`placeholder/${name}`) // senão, o corpo provisório (assets/placeholder)
+            ? { name, png: `/assets/placeholder/${name}.png`, json: `/assets/placeholder/${name}.json` }
+            : null;
+    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("skeleton", "monsters")].filter((s): s is AtlasSpec => !!s);
+    this.atlases = await loadAtlases(this, specs);
+  }
+
   // ---------------------------------------------------------------- efeitos
   private makeEffects() {
     this.bars = this.add.graphics().setDepth(1e5);
+    this.shadows = this.add.graphics().setDepth(0.3); // sombra no chão dos sprites
     const tex = this.make.graphics({ x: 0, y: 0 }, false);
     tex.fillStyle(0xffffff, 1);
     tex.fillCircle(3, 3, 3);
@@ -346,6 +409,7 @@ class WorldScene extends Phaser.Scene {
     const mine = m.by === this.room.sessionId;
     const toMe = m.k === "p" && m.id === this.room.sessionId;
     const { sx, sy } = toScreen(m.x, m.y);
+    this.sprites.get(m.k === "e" ? `e:${m.id}` : `p:${m.id}`)?.trigger("hit", this.time.now);
     if (m.k === "e") {
       (m.crit ? this.emitters.gold : this.emitters.orange).explode(m.crit ? 16 : 9, sx, sy - 10);
       this.floatText(m.x, m.y, String(m.dmg) + (m.crit ? "!" : ""), m.crit ? "#ffd45e" : "#ffffff", m.crit ? 24 : 17, m.crit);
@@ -367,7 +431,7 @@ class WorldScene extends Phaser.Scene {
   }
 
   private onLevelUp(m: LevelUpEvent) {
-    const s = this.sprites.get(`p:${m.id}`);
+    const s = this.sprites.get(`p:${m.id}`)?.obj;
     if (!s) return;
     this.emitters.gold.explode(30, s.x, s.y - 8);
     const g = toGrid(s.x, s.y);
@@ -377,7 +441,7 @@ class WorldScene extends Phaser.Scene {
 
   private onDied(m: DiedEvent) {
     if (m.k === "e") {
-      const s = this.sprites.get(`e:${m.id}`);
+      const s = this.sprites.get(`e:${m.id}`)?.obj;
       if (s) this.emitters.orange.explode(26, s.x, s.y - 8);
       sfx.enemyDie();
     } else if (m.id === this.room.sessionId) {
@@ -415,7 +479,11 @@ class WorldScene extends Phaser.Scene {
     const payload: ActPayload = { a, ax: x, ay: y };
     this.room.send(Msg.Act, payload);
     // resposta imediata no cliente (o servidor continua sendo quem decide o resultado)
-    this.playSwing(this.cls, a, me.x, me.y, Math.atan2(y - me.y, x - me.x), true);
+    const angle = Math.atan2(y - me.y, x - me.x);
+    this.playSwing(this.cls, a, me.x, me.y, angle, true);
+    const mine = this.sprites.get(`p:${this.room.sessionId}`);
+    mine?.setFace(angle);
+    mine?.trigger(animFor(a), this.time.now);
   }
 
   // ---------------------------------------------------------------- quadro
@@ -437,39 +505,51 @@ class WorldScene extends Phaser.Scene {
       if (pr.left <= 0.001) { pr.obj.destroy(); this.projs.delete(id); }
     }
 
-    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, hidden: boolean, dim = false, ember = false) => {
-      const s = this.sprites.get(key);
-      if (!s) return;
+    this.shadows.clear();
+    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; hideWhenDead?: boolean; ember?: boolean; windup?: boolean }) => {
+      const v = this.sprites.get(key);
+      if (!v) return;
+      const s = v.obj;
+      v.setFace(face);
+      v.update(time, { dead: o.dead, windup: o.windup });
+      const hidden = !!o.hideWhenDead && o.dead && v.deathDone; // com sprite, a morte toca antes de sumir
       s.setVisible(!hidden);
       this.labels.get(key)?.setVisible(!hidden);
       if (hidden) return;
       const { sx, sy } = toScreen(x, y);
+      if (Math.hypot(sx - s.x, sy - s.y) > 1.5) v.markMoving(time); // ainda chegando na posição do servidor = andando
       if (!frozen) {
         s.x += (sx - s.x) * 0.35;
         s.y += (sy - s.y) * 0.35;
       }
-      s.setDepth(s.y).setAlpha(dim ? 0.35 : 1);
-      this.labels.get(key)?.setPosition(s.x, s.y).setDepth(s.y + 1);
-      // barra de vida + marca de direção
+      s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
+      this.labels.get(key)?.setPosition(s.x, s.y - (v.headY - 27)).setDepth(s.y + 1);
+      if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28, 12);
+      // barra de vida (+ marca de direção só nos círculos, que não têm rosto)
       const w = 30;
       const ratio = Math.max(0, hp / maxHp);
-      this.bars.fillStyle(0x000000, 0.7).fillRect(s.x - w / 2 - 1, s.y - 27, w + 2, 6);
-      this.bars.fillStyle(key.startsWith("e:") ? 0xc0392b : 0x4cc26a, 1).fillRect(s.x - w / 2, s.y - 26, w * ratio, 4);
-      const d = dirScreen(face);
-      this.bars.lineStyle(3, 0xffffff, 0.85).lineBetween(s.x, s.y, s.x + d.x * 16, s.y + d.y * 16);
-      if (ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + 8, 36, 18); // Brasa ativa
+      this.bars.fillStyle(0x000000, 0.7).fillRect(s.x - w / 2 - 1, s.y - v.headY, w + 2, 6);
+      this.bars.fillStyle(key.startsWith("e:") ? 0xc0392b : 0x4cc26a, 1).fillRect(s.x - w / 2, s.y - v.headY + 1, w * ratio, 4);
+      if (!v.isSprite) {
+        const d = dirScreen(face);
+        this.bars.lineStyle(3, 0xffffff, 0.85).lineBetween(s.x, s.y, s.x + d.x * 16, s.y + d.y * 16);
+      }
+      if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, 18); // Brasa ativa
     };
 
-    st.players.forEach((p: any, id: string) => place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, false, p.dead, p.ember));
+    st.players.forEach((p: any, id: string) => place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember }));
     st.enemies.forEach((e: any, id: string) => {
-      place(`e:${id}`, e.x, e.y, e.face, e.hp, e.maxHp, e.st === "dead");
-      const s = this.sprites.get(`e:${id}`);
-      if (s) s.setFillStyle(e.st === "windup" ? 0xff6a5a : 0xd8d2c0);
+      const key = `e:${id}`;
+      // o golpe cai quando o aviso (windup) termina: dispara a animação de ataque nessa virada
+      if (this.prevSt.get(key) === "windup" && e.st === "recover") this.sprites.get(key)?.trigger("attack", time);
+      this.prevSt.set(key, e.st);
+      place(key, e.x, e.y, e.face, e.hp, e.maxHp, { dead: e.st === "dead", hideWhenDead: true, windup: e.st === "windup" });
     });
 
     const me = this.me();
     if (me) {
       this.hud.setHp(me.hp, me.maxHp);
+      this.hud.setMana(me.mana, me.maxMana);
       this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Grito ativo" : "Brasa ativa");
       this.hud.setProgress(me.level, me.xp, xpToNext(me.level));
       if (me.dead) {

@@ -90,6 +90,7 @@ export interface ActionDef {
   name: string;
   key: string; // tecla padrão (dica na HUD)
   cd: number;
+  cost?: number; // gasto do recurso da classe (Fúria, Foco ou Mana); sem custo = 0
   dmg?: number;
   offset?: number; // centro do golpe à frente do jogador
   radius?: number;
@@ -122,7 +123,18 @@ export interface ClassDef {
   role: string;
   maxHp: number;
   color: number; // cor provisória do personagem (até a arte chegar)
+  resource: ResourceDef;
   actions: Record<ActionId, ActionDef>;
+}
+
+/** Recurso gasto pelas habilidades: cada classe tem o seu (a Esquiva e o ataque básico quase não gastam). */
+export interface ResourceDef {
+  name: string;
+  icon: "flame" | "eye" | "drop"; // ícone da barra na HUD
+  color: number;
+  max: number;
+  regen: number; // pontos por segundo
+  perLevel: number; // máximo extra por nível
 }
 
 const dodge = (dash: number, cd: number): ActionDef => ({ kind: "dodge", name: "Esquiva", key: "SHIFT", cd, dash, dashTime: 0.25, invulnS: 0.3 });
@@ -130,31 +142,34 @@ const dodge = (dash: number, cd: number): ActionDef => ({ kind: "dodge", name: "
 export const CLASS_DEFS: Record<CharClass, ClassDef> = {
   warrior: {
     id: "warrior", name: "Guerreiro", role: "Tanque", maxHp: 120, color: 0xff8a3d,
+    resource: { name: "Fúria", icon: "flame", color: 0xe0742a, max: 100, regen: 5, perLevel: 3 },
     actions: {
       attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, dmg: 12, offset: 1.0, radius: 1.25 },
-      skill1: { kind: "ring", name: "Giro", key: "1", cd: 4, dmg: 20, offset: 0, radius: 2.3 },
-      skill2: { kind: "dashHit", name: "Carga", key: "2", cd: 6, dmg: 16, dash: 4.5, dashTime: 0.25, radius: 1.1 },
-      skill3: { kind: "tauntBuff", name: "Grito", key: "3", cd: 12, buffS: 4, reduction: 0.5, tauntRadius: 6, tauntS: 3 },
+      skill1: { kind: "ring", name: "Giro", key: "1", cd: 4, cost: 25, dmg: 20, offset: 0, radius: 2.3 },
+      skill2: { kind: "dashHit", name: "Carga", key: "2", cd: 6, cost: 30, dmg: 16, dash: 4.5, dashTime: 0.25, radius: 1.1 },
+      skill3: { kind: "tauntBuff", name: "Grito", key: "3", cd: 12, cost: 35, buffS: 4, reduction: 0.5, tauntRadius: 6, tauntS: 3 },
       dodge: dodge(3, 1.4),
     },
   },
   archer: {
     id: "archer", name: "Arqueiro", role: "Dano à distância", maxHp: 90, color: 0x6fcf6f,
+    resource: { name: "Foco", icon: "eye", color: 0x6fcf6f, max: 100, regen: 6, perLevel: 3 },
     actions: {
       attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 10, speed: 15, range: 9, radius: 0.35 },
-      skill1: { kind: "projectile", name: "Perfurar", key: "1", cd: 4, dmg: 18, speed: 20, range: 12, radius: 0.5, pierce: true },
-      skill2: { kind: "trap", name: "Cilada", key: "2", cd: 8, dmg: 28, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
-      skill3: { kind: "rain", name: "Chuva", key: "3", cd: 10, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8 },
+      skill1: { kind: "projectile", name: "Perfurar", key: "1", cd: 4, cost: 20, dmg: 18, speed: 20, range: 12, radius: 0.5, pierce: true },
+      skill2: { kind: "trap", name: "Cilada", key: "2", cd: 8, cost: 25, dmg: 28, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
+      skill3: { kind: "rain", name: "Chuva", key: "3", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8 },
       dodge: dodge(5, 1.6), // rolamento longo
     },
   },
   cleric: {
     id: "cleric", name: "Clérigo", role: "Suporte", maxHp: 100, color: 0xf2e6a0,
+    resource: { name: "Mana", icon: "drop", color: 0x4aa8ff, max: 120, regen: 6, perLevel: 4 },
     actions: {
-      attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, dmg: 8, speed: 12, range: 8, radius: 0.4 },
-      skill1: { kind: "healAoe", name: "Cura", key: "1", cd: 5, heal: 30, radius: 4 },
-      skill2: { kind: "emberBuff", name: "Brasa", key: "2", cd: 12, buffS: 6, dmgPct: 25, radius: 5 },
-      skill3: { kind: "revive", name: "Reviver", key: "3", cd: 20, radius: 8, hpPct: 50 },
+      attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, dmg: 8, speed: 12, range: 8, radius: 0.4 },
+      skill1: { kind: "healAoe", name: "Cura", key: "1", cd: 5, cost: 30, heal: 30, radius: 4 },
+      skill2: { kind: "emberBuff", name: "Brasa", key: "2", cd: 12, cost: 25, buffS: 6, dmgPct: 25, radius: 5 },
+      skill3: { kind: "revive", name: "Reviver", key: "3", cd: 20, cost: 50, radius: 8, hpPct: 50 },
       dodge: dodge(3, 1.4),
     },
   },
@@ -192,6 +207,8 @@ export const XP_PER_KILL = 20;
 export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : 40 + 30 * level);
 /** Vida máxima: base da classe + 10 por nível + bônus de armadura. */
 export const maxHpFor = (cls: CharClass, level: number, armorHp = 0) => CLASS_DEFS[cls].maxHp + 10 * (level - 1) + armorHp;
+/** Máximo do recurso (Fúria/Foco/Mana): base da classe + bônus por nível. */
+export const maxManaFor = (cls: CharClass, level: number) => CLASS_DEFS[cls].resource.max + CLASS_DEFS[cls].resource.perLevel * (level - 1);
 /** Multiplicador de poder (dano e cura): +5% por nível, multiplicado pelo bônus percentual da arma. */
 export const dmgMult = (level: number, weaponPct = 0) => (1 + 0.05 * (level - 1)) * (1 + weaponPct / 100);
 

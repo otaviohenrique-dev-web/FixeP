@@ -13,6 +13,8 @@ export class Player extends Schema {
   @type("string") cls = "warrior";
   @type("boolean") buff = false; // Grito de guerra ativo
   @type("boolean") ember = false; // Brasa do Clérigo ativa
+  @type("number") mana = 0; // recurso da classe (inteiro, para a HUD)
+  @type("number") maxMana = 0;
   @type("number") level = 1;
   @type("number") xp = 0;
 
@@ -22,6 +24,7 @@ export class Player extends Schema {
   invDirty = false; // inventário ainda não salvo
   inv: Inventory = emptyInventory();
   potionCdUntil = 0;
+  manaF = 0; // valor exato (com fração); `mana` é o arredondado que vai para o cliente
   emberUntil = 0;
   emberPct = 0;
   saveChain: Promise<void> = Promise.resolve(); // salvamentos do mesmo jogador rodam em fila (dado velho não sobrescreve novo)
