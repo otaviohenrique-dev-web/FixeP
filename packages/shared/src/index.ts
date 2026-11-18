@@ -1,4 +1,5 @@
 import { ZONES, type EnemyKind } from "./zones";
+import type { Rarity } from "./items";
 // Simulação em grade ortogonal (servidor). Isométrico é só projeção no cliente.
 // MAP_W/MAP_H/SPAWN são os da zona 1; cada zona tem os seus em ZONES (zones.ts).
 export const MAP_W = 40;
@@ -15,6 +16,8 @@ export const Msg = {
   InvUnequip: "inv_unequip", // { slot: "weapon" | "armor" }
   InvUse: "inv_use", // { slot }
   InvDrop: "inv_drop", // { slot }
+  InvSort: "inv_sort", // {}: organiza a mochila (junta pilhas e ordena por tipo e raridade)
+  Pickup: "pickup", // { id }: pega um item do chão (o servidor valida distância, dono e tempo de reserva; andar até o item também pega)
   InvSync: "inv_sync", // pede a fotografia do inventário (o cliente pede depois de registrar os receptores)
   Chat: "chat", // { text }: mensagem para toda a zona (o servidor limpa o texto e usa o nome do personagem)
   Pvp: "pvp", // { on: boolean }: pede para entrar (true) ou sair (false) do modo PvP; o servidor canaliza e decide
@@ -47,6 +50,7 @@ export const Evt = {
   Inv: "inv", // fotografia completa do inventário (só para o dono)
   Loot: "loot", // item recebido
   Xp: "xp", // XP ganho num abate (só para quem recebeu)
+  Chest: "chest", // ChestEvent: o baú do chefe abriu (animação) naquele ponto
   Notice: "notice", // aviso de texto para o dono
   Chat: "chat", // { id, name, text }: mensagem de chat de um jogador, para toda a zona
   Pvp: "pvp", // { s: "start" | "cancel" | "stop" | "on" | "off" }: andamento do modo PvP, só para o dono
@@ -98,13 +102,14 @@ export interface ActPayload {
 }
 
 export interface SwingEvent { id: string; a: ActionId; x: number; y: number; dir: number }
-export interface TelegraphEvent { id: string; x: number; y: number; r: number; ms: number; friendly?: boolean }
+export interface TelegraphEvent { id: string; x: number; y: number; r: number; ms: number; friendly?: boolean; fx?: SkillFx }
 export interface HitEvent { k: "e" | "p"; id: string; dmg: number; crit: boolean; x: number; y: number; by?: string }
 export interface DiedEvent { k: "e" | "p"; id: string }
+export interface ChestEvent { x: number; y: number; rarity: Rarity; boss: string }
 export interface XpEvent { amount: number; x: number; y: number }
 export interface LevelUpEvent { id: string; level: number }
 export interface HealEvent { id: string; amount: number; x: number; y: number; revive?: boolean }
-export interface ProjEvent { id: string; x: number; y: number; dir: number; speed: number; range: number; look: "arrow" | "pierce" | "bolt" }
+export interface ProjEvent { id: string; x: number; y: number; dir: number; speed: number; range: number; look: "arrow" | "pierce" | "bolt" | "fire" | "arcane"; blast?: number }
 export interface ProjEndEvent { id: string; x: number; y: number; hit: boolean }
 export interface TrapEvent { id: string; s: "set" | "boom" | "gone"; x: number; y: number; r: number }
 
@@ -118,7 +123,18 @@ export const DAMAGE_VARIANCE = 0.1; // +-10%
 export const RESPAWN_S = 8; // tempo caído; dá tempo de um Clérigo ressuscitar
 export const SHARE_RADIUS = 14; // quem estiver a até 14 tiles de um abate divide XP e loot
 
-export type CharClass = "warrior" | "archer" | "cleric";
+// ------------------------------------------------------------ itens no chão
+export const LOOT_LOCK_S = 30; // só quem abateu (ou o grupo dele) pega nesse tempo; depois, qualquer um
+export const CHEST_LOCK_S = 60; // o mesmo para os itens do baú do chefe
+export const GROUND_TTL_S = 180; // quanto tempo o item fica no chão antes de sumir
+export const PICKUP_AUTO = 1.0; // passar a este alcance (tiles) pega o item sozinho
+export const PICKUP_REACH = 2.6; // alcance do pedido explícito de pegar
+export const GROUND_MAX = 120; // limite de itens no chão por zona (os mais antigos somem primeiro)
+
+export type CharClass = "warrior" | "archer" | "cleric" | "mage";
+
+/** Visual de skills que "caem do céu" (eixo Z): o servidor só diz qual; o cliente anima (meteoro, raio, chuva de fogo...). */
+export type SkillFx = "meteor" | "lightning" | "firerain" | "holy" | "arrows";
 
 /** Tipo de efeito de cada ação: o servidor decide o resultado, o cliente escolhe o visual. */
 export type ActionKind =
@@ -128,6 +144,7 @@ export type ActionKind =
   | "tauntBuff" // reduz dano recebido e provoca inimigos
   | "dodge" // deslocamento com invulnerabilidade
   | "projectile" // projétil em linha reta
+  | "blast" // projétil que explode ao acertar (ou no fim do alcance), ferindo uma área
   | "trap" // armadilha no chão
   | "rain" // área atingida depois de um atraso (telegrafada)
   | "pull" // puxa os inimigos de uma área para o centro (controle)
@@ -163,6 +180,8 @@ export interface ActionDef {
   pullS?: number; // tempo da puxada (Compressor de Ar)
   stunS?: number; // tempo que os inimigos ficam atordoados depois de puxados
   maxActive?: number; // limite de armadilhas ativas
+  blast?: number; // raio da explosão (kind "blast")
+  fx?: SkillFx; // visual vindo de cima (kind "rain")
   // cura / buff / ressurreição
   heal?: number;
   dmgPct?: number; // bônus de dano da Brasa (%)
@@ -211,8 +230,8 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
       attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 10, speed: 15, range: 9, radius: 0.35 },
       skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 18, speed: 20, range: 12, radius: 0.5, pierce: true },
       skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 28, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
-      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8 },
-      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 40, radius: 3.6, placeRange: 9, delayS: 1.0 },
+      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows" },
+      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 40, radius: 3.6, placeRange: 9, delayS: 1.0, fx: "arrows" },
       dodge: dodge(5, 1.6), // rolamento longo
     },
   },
@@ -223,9 +242,21 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
       attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, dmg: 8, speed: 12, range: 8, radius: 0.4 },
       skill1: { kind: "healAoe", name: "Cura", key: "Q", cd: 5, cost: 30, heal: 30, radius: 4 },
       skill2: { kind: "pull", name: "Compressor de Ar", key: "W", cd: 12, cost: 30, radius: 4.5, placeRange: 6, pullS: 0.45, stunS: 1.2 },
-      skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, dmg: 26, radius: 3, placeRange: 7, delayS: 0.6 },
+      skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, dmg: 26, radius: 3, placeRange: 7, delayS: 0.6, fx: "holy" },
       ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, heal: 80, radius: 6 },
       dodge: dodge(3, 1.4),
+    },
+  },
+  mage: {
+    id: "mage", name: "Mago", role: "Dano explosivo", maxHp: 75, color: 0xa070ff,
+    resource: { name: "Mana", icon: "drop", color: 0xa070ff, max: 140, regen: 7, perLevel: 5 },
+    actions: {
+      attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, dmg: 15, speed: 13, range: 9, radius: 0.4 },
+      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, dmg: 44, speed: 11, range: 10, radius: 0.45, blast: 2.3 },
+      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, dmg: 40, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning" },
+      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, dmg: 62, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain" },
+      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, dmg: 230, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor" },
+      dodge: dodge(4, 1.5), // passo arcano curto: o Mago tem pouco sustain, depende de manter distância
     },
   },
 };
@@ -250,14 +281,26 @@ export const SKELETON = {
 export interface EnemyKindDef {
   name: string; hpMul: number; dmgMul: number; speed: number; aggro: number; leash: number; engage: number;
   windupS: number; strikeOffset: number; strikeRadius: number; recoverS: number; respawnS: number; radius: number; color: number;
+  boss?: BossDef; // só os chefes
+  sprite?: string; // atlas emprestado (chefes usam o corpo de um monstro maior)
+  scale?: number;
 }
+/** Mecânica dos chefes: golpe normal mais forte + "pancada" em área em volta dele a cada `slamEveryS`; abaixo de `enrageAt` da vida ele fica furioso. */
+export interface BossDef { xpMul: number; slamEveryS: number; slamRadius: number; slamMul: number; slamWindupS: number; enrageAt: number; enrageSpeed: number }
 const base = { aggro: SKELETON.aggro, leash: SKELETON.leash, engage: SKELETON.engage, windupS: SKELETON.windupS, strikeOffset: SKELETON.strikeOffset,
   strikeRadius: SKELETON.strikeRadius, recoverS: SKELETON.recoverS, respawnS: SKELETON.respawnS, radius: SKELETON.radius, speed: SKELETON.speed };
-export const ENEMY_KINDS: Record<EnemyKind, EnemyKindDef> = {
+export const ENEMY_KINDS = {
   skeleton: { ...base, name: SKELETON.name, hpMul: 1, dmgMul: 1, color: 0xd8d2c0 },
   wolf: { ...base, name: "Lobo Gélido", hpMul: 0.8, dmgMul: 0.9, speed: 3.6, aggro: 8, engage: 1.5, windupS: 0.5, strikeOffset: 0.9, strikeRadius: 1.1, recoverS: 0.8, radius: 0.4, color: 0x8fb3d9 },
   wraith: { ...base, name: "Espectro", hpMul: 1.3, dmgMul: 1.4, speed: 2.0, aggro: 9, leash: 16, engage: 2.2, windupS: 0.9, strikeOffset: 1.4, strikeRadius: 1.6, recoverS: 1.2, radius: 0.5, color: 0x9a7ad0 },
-};
+} as Record<EnemyKind, EnemyKindDef>;
+const bossBase: Pick<BossDef, "slamWindupS" | "enrageAt" | "enrageSpeed"> = { slamWindupS: 1.3, enrageAt: 0.3, enrageSpeed: 1.3 };
+ENEMY_KINDS.bone_king = { ...base, name: "Rei Ossudo", hpMul: 6, dmgMul: 1.2, speed: 2.2, aggro: 9, leash: 18, engage: 2.0, strikeOffset: 1.3, strikeRadius: 1.8, radius: 0.7, respawnS: 300, color: 0xe8e0c8,
+  sprite: "skeleton", scale: 1.7, boss: { xpMul: 8, slamEveryS: 9, slamRadius: 3.4, slamMul: 1.4, ...bossBase } };
+ENEMY_KINDS.frost_alpha = { ...base, name: "Lobo Alfa", hpMul: 5, dmgMul: 1.2, speed: 3.6, aggro: 10, leash: 18, engage: 2.0, windupS: 0.6, strikeOffset: 1.2, strikeRadius: 1.6, recoverS: 0.9, radius: 0.7, respawnS: 420, color: 0xbfd8f2,
+  sprite: "wolf", scale: 1.7, boss: { xpMul: 8, slamEveryS: 8, slamRadius: 3.2, slamMul: 1.4, ...bossBase } };
+ENEMY_KINDS.crypt_lord = { ...base, name: "Soberano das Catacumbas", hpMul: 6, dmgMul: 1.3, speed: 2.3, aggro: 11, leash: 20, engage: 2.6, windupS: 0.9, strikeOffset: 1.6, strikeRadius: 2.0, recoverS: 1.1, radius: 0.8, respawnS: 600, color: 0xc9a8ff,
+  sprite: "wraith", scale: 1.8, boss: { xpMul: 10, slamEveryS: 8, slamRadius: 4, slamMul: 1.5, ...bossBase } };
 export const enemyKind = (k: string): EnemyKindDef => ENEMY_KINDS[k as EnemyKind] ?? ENEMY_KINDS.skeleton;
 
 /** Spawns da zona 1 (compatibilidade): os de cada zona ficam em ZONES. */
@@ -286,7 +329,7 @@ export const dmgMult = (level: number, weaponPct = 0) => (1 + 0.05 * (level - 1)
 
 // ------------------------------------------------------------ personagem
 /** Classes jogáveis. */
-export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior", "archer", "cleric"];
+export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior", "archer", "cleric", "mage"];
 export const NAME_MIN = 3;
 export const NAME_MAX = 16;
 export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number; zone?: number }

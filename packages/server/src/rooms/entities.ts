@@ -1,5 +1,5 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
-import { SPAWN, CLASS_DEFS, SKELETON } from "@frixep/shared";
+import { SPAWN, CLASS_DEFS, SKELETON, emptyBonuses, type GearBonuses } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 
 export class Player extends Schema {
@@ -27,6 +27,8 @@ export class Player extends Schema {
   invDirty = false; // inventário ainda não salvo
   inv: Inventory = emptyInventory();
   potionCdUntil = 0;
+  gear: GearBonuses = emptyBonuses(); // bônus e kit do equipamento (recalculado ao equipar, subir de nível etc.)
+  fullNoticeAt = 0; // aviso de "mochila cheia" com intervalo
   manaF = 0; // valor exato (com fração); `mana` é o arredondado que vai para o cliente
   emberUntil = 0;
   emberPct = 0;
@@ -70,10 +72,28 @@ export class Enemy extends Schema {
   strikeY = 0;
   recoverEnd = 0;
   respawnAt = 0;
+  nextSlam = 0; // chefe: próxima pancada em área
+  slam = false; // o golpe em preparo é a pancada em área
+  contrib = new Set<string>(); // sessões que feriram (o baú do chefe é de quem lutou)
+}
+
+/** Item no chão: visível a todos; só o dono (e o grupo dele) pega até `lockS` esgotar, depois qualquer um. */
+export class GroundItem extends Schema {
+  @type("string") itemId = "";
+  @type("number") qty = 1;
+  @type("number") x = 0;
+  @type("number") y = 0;
+  @type("string") owner = ""; // sessão do dono (quem abateu)
+  @type("string") party = ""; // grupo do dono
+  @type("number") lockS = 0; // segundos de reserva restantes NO MOMENTO em que o item apareceu (o cliente conta daí)
+  // --- só no servidor ---
+  unlockAt = 0;
+  expireAt = 0;
 }
 
 export class ZoneState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Enemy }) enemies = new MapSchema<Enemy>();
+  @type({ map: GroundItem }) items = new MapSchema<GroundItem>();
   @type("number") zoneId = 1;
 }

@@ -2,7 +2,7 @@ import { CLASS_DEFS, NAME_MAX, NAME_MIN, PLAYABLE_CLASSES, type CharClass, type 
 import { apiUrl, logout } from "./auth";
 import { mountScreen } from "./login";
 
-const CLASSES: { id: CharClass; name: string; role: string }[] = (["warrior", "archer", "cleric"] as CharClass[]).map((id) => ({
+const CLASSES: { id: CharClass; name: string; role: string }[] = ([...PLAYABLE_CLASSES] as CharClass[]).map((id) => ({
   id,
   name: CLASS_DEFS[id].name,
   role: CLASS_DEFS[id].role,
@@ -15,7 +15,7 @@ const CSS = `
   background:rgba(6,12,20,.85);border:1px solid rgba(255,150,70,.4);box-shadow:inset 0 2px 8px rgba(0,0,0,.5);outline:none;transition:border-color .18s,box-shadow .18s}
 .fc-input::placeholder{color:#5f7893;font-weight:400}
 .fc-input:focus{border-color:#ff9a4d;box-shadow:inset 0 2px 8px rgba(0,0,0,.5),0 0 18px rgba(255,120,40,.3)}
-.fc-cls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.fc-cls{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .fc-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:5px;cursor:pointer;color:#dbeaff;text-align:center;
   background:linear-gradient(180deg,rgba(24,40,60,.82),rgba(7,13,22,.9));border:1px solid rgba(160,200,240,.25);transition:border-color .18s,box-shadow .18s}
 .fc-card b{font:700 12px/1.1 "Cinzel",Georgia,serif;letter-spacing:.08em;text-transform:uppercase}

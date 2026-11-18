@@ -1,6 +1,6 @@
 import { isTypingTarget } from "./keys";
 import {
-  ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, type CharClass,
+  ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
 } from "@frixep/shared";
 
@@ -21,16 +21,24 @@ const CSS = `
 .iv-btn svg{width:22px;height:22px}
 .iv-back{position:fixed;inset:0;z-index:19;display:none;align-items:center;justify-content:center;background:rgba(2,5,11,.55);padding:12px;font-family:"Cinzel",Georgia,serif}
 .iv-back.open{display:flex}
-.iv-card{width:min(380px,100%);max-height:calc(100vh - 24px);overflow:auto;padding:16px;border-radius:8px;color:#dbeaff;
+.iv-card{width:min(660px,100%);max-height:calc(100vh - 24px);overflow:auto;padding:16px;border-radius:8px;color:#dbeaff;
   background:linear-gradient(180deg,rgba(20,34,52,.97),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4);box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 1px 0 rgba(180,220,255,.12)}
 .iv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .iv-title{margin:0;font-size:14px;font-weight:700;letter-spacing:.35em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 14px rgba(255,120,40,.5)}
 .iv-x{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#bcd8f5;background:transparent;border:1px solid rgba(160,200,240,.3);font:700 16px/1 Georgia,serif}
-.iv-eq{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
-.iv-eqs{display:flex;align-items:center;gap:8px;padding:6px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2);min-height:52px;cursor:pointer;text-align:left;color:inherit;font:inherit}
+.iv-body{display:grid;grid-template-columns:230px 1fr;gap:14px}
+@media (max-width:600px){.iv-body{grid-template-columns:1fr}.iv-eq{grid-template-columns:1fr 1fr}.iv-eqs b{font-size:10px}}
+.iv-left{display:flex;flex-direction:column;gap:6px}
+.iv-eq{display:grid;grid-template-columns:1fr;gap:5px}
+.iv-stats{white-space:pre-line}
+.iv-sort{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#8fb0cf;background:transparent;border:1px solid rgba(160,200,240,.18);display:grid;place-items:center;margin-right:8px;opacity:.75}
+.iv-sort:hover,.iv-sort:focus-visible{opacity:1;color:#fff;border-color:#ff9a4d;outline:none}
+.iv-sort svg{width:16px;height:16px}
+.iv-head-r{display:flex;align-items:center}
+.iv-eqs{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2);min-height:46px;cursor:pointer;text-align:left;color:inherit;font:inherit}
 .iv-eqs small{display:block;font:400 9px/1.2 Georgia,serif;letter-spacing:.12em;text-transform:uppercase;color:#7fa6cc}
 .iv-eqs b{display:block;font:700 11px/1.2 "Cinzel",Georgia,serif}
-.iv-stats{font:400 12px/1.4 Georgia,serif;color:#9fc0e0;margin:0 0 10px;text-align:center}
+.iv-stats{font:400 12px/1.5 Georgia,serif;color:#9fc0e0;margin:4px 0 0;text-align:left}
 .iv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .iv-slot{position:relative;aspect-ratio:1;border-radius:5px;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;
   background:rgba(6,12,20,.8);border:1px solid rgba(160,200,240,.2);transition:border-color .15s}
@@ -60,7 +68,12 @@ const ICONS = {
   weapon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4l5.5-.5-.5 5.5L9 19.5 4.5 15z"/><path d="M5 19l-2 2M7.5 16.5l-3 3"/></svg>`,
   armor: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M12 8v8"/></svg>`,
   potion: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v5l-4.5 8.5A2.5 2.5 0 0 0 7.7 20h8.6a2.5 2.5 0 0 0 2.2-3.5L14 8V3"/><path d="M7.5 15h9"/></svg>`,
+  offhand: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v7c0 5-3 8-7 9-4-1-7-4-7-9z"/></svg>`,
+  helmet: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0v5h-4v-4H8v4H4z"/></svg>`,
+  boots: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h6v8l6 3v5H5v-4l3-2z"/></svg>`,
+  cape: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l4 17H4z"/><path d="M8 3c1 3 7 3 8 0"/></svg>`,
 } as const;
+const SORT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4L4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/></svg>`;
 const BAG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1.5 12H4.5z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>`;
 
 /** Ícone final em assets/items/item_<id>.png (48x48); se o arquivo ainda não existe, mostra o desenho provisório (SVG). */
@@ -77,11 +90,18 @@ document.addEventListener("error", (e) => {
   img.replaceWith(span);
 }, true);
 
-function statsLine(d: ItemDef): string {
-  if (d.dmgPct) return `+${d.dmgPct}% de poder`;
-  if (d.hp) return `+${d.hp} de vida`;
-  if (d.heal) return `Cura ${d.heal} de vida`;
-  return "";
+/** linhas de atributos de um item (só os que ele tem) */
+function statLines(d: ItemDef): string[] {
+  const o: string[] = [];
+  if (d.dmgPct) o.push(`+${d.dmgPct}% de poder`);
+  if (d.hp) o.push(`+${d.hp} de vida`);
+  if (d.crit) o.push(`+${d.crit}% de crítico`);
+  if (d.dr) o.push(`−${d.dr}% de dano recebido`);
+  if (d.cdr) o.push(`−${d.cdr}% de recarga`);
+  if (d.mana) o.push(`+${d.mana} de recurso máximo`);
+  if (d.regen) o.push(`+${d.regen}/s de recurso`);
+  if (d.heal) o.push(`Cura ${d.heal} de vida`);
+  return o;
 }
 
 export function mountInventory(opts: { send(type: string, payload: unknown): void; getLevel(): number; getClass(): CharClass }): InventoryUi {
@@ -99,11 +119,11 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   back.className = "iv-back";
   back.innerHTML = `
     <div class="iv-card" role="dialog" aria-modal="true" aria-label="Mochila">
-      <div class="iv-head"><h2 class="iv-title">Mochila</h2><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div>
-      <div class="iv-eq"></div>
-      <p class="iv-stats"></p>
-      <div class="iv-grid" role="group" aria-label="Espaços da mochila"></div>
-      <div class="iv-det"></div>
+      <div class="iv-head"><h2 class="iv-title">Mochila</h2><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
+      <div class="iv-body">
+        <div class="iv-left"><div class="iv-eq"></div><p class="iv-stats"></p></div>
+        <div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
+      </div>
     </div>`;
   const toasts = document.createElement("div");
   toasts.className = "iv-toasts";
@@ -115,7 +135,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const gridEl = back.querySelector<HTMLElement>(".iv-grid")!;
   const detEl = back.querySelector<HTMLElement>(".iv-det")!;
 
-  let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, armor: null } };
+  let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null } };
   let sel: { kind: "slot"; i: number } | { kind: "equip"; s: EquipSlot } | null = null;
   let confirmDrop = false;
 
@@ -127,7 +147,8 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   function render() {
     // equipamento
     eqEl.innerHTML = "";
-    for (const [s, label] of [["weapon", "Arma"], ["armor", "Armadura"]] as const) {
+    for (const s of EQUIP_SLOTS) {
+      const label = EQUIP_SLOT_NAME[s];
       const id = snap.equip[s];
       const def = id ? ITEMS[id] : null;
       const b = document.createElement("button");
@@ -142,10 +163,17 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       b.onclick = () => { sel = def ? { kind: "equip", s } : null; confirmDrop = false; render(); };
       eqEl.append(b);
     }
-    // bônus totais
-    const w = snap.equip.weapon ? ITEMS[snap.equip.weapon] : null;
-    const a = snap.equip.armor ? ITEMS[snap.equip.armor] : null;
-    statsEl.textContent = `Poder +${w?.dmgPct ?? 0}%  ·  Vida +${a?.hp ?? 0}`;
+    // bônus totais do que está equipado
+    const g = gearBonuses(snap.equip, opts.getClass());
+    const lines = [`Poder +${g.dmgPct}%`, `Vida +${g.hp}`];
+    if (g.crit + (g.kit.crit ?? 0)) lines.push(`Crítico +${g.crit + (g.kit.crit ?? 0)}%`);
+    if (g.dr) lines.push(`Dano recebido −${g.dr}%`);
+    if (g.cdr) lines.push(`Recarga −${g.cdr}%`);
+    if (g.mana) lines.push(`${CLASS_DEFS[opts.getClass()].resource.name} máx. +${g.mana}`);
+    if (g.regen) lines.push(`Regeneração +${g.regen}/s`);
+    const wd = snap.equip.weapon ? ITEMS[snap.equip.weapon] : null;
+    if (wd?.wtype) lines.push(`Kit: ${WEAPON_TYPES[wd.wtype].name}`);
+    statsEl.textContent = lines.join("\n");
     // espaços
     gridEl.innerHTML = "";
     snap.inv.forEach((st, i) => {
@@ -181,10 +209,16 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     h.textContent = def.name;
     h.style.color = RARITY_COLOR[def.rarity];
     const p1 = document.createElement("p");
-    p1.textContent = `${RARITY_NAME[def.rarity]} · ${statsLine(def)}`;
+    p1.textContent = `${RARITY_NAME[def.rarity]}${def.hands ? ` · ${def.hands === 2 ? "Duas mãos" : "Uma mão"}` : ""}${statLines(def).length ? ` · ${statLines(def).join(" · ")}` : ""}`;
     const p2 = document.createElement("p");
     p2.textContent = def.desc;
     detEl.append(h, p1, p2);
+    const wtd = def.wtype ? WEAPON_TYPES[def.wtype] : null;
+    if (wtd) {
+      const pk = document.createElement("p");
+      pk.textContent = `Kit (${wtd.name}): ${kitLines(wtd.kit).join(" · ") || "sem modificadores"}`;
+      detEl.append(pk);
+    }
     if (def.cls && sel.kind === "slot") {
       const pc = document.createElement("p");
       pc.textContent = `Exclusivo: ${CLASS_DEFS[def.cls].name}`;
@@ -225,6 +259,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     detEl.append(acts);
   }
 
+  back.querySelector<HTMLElement>(".iv-sort")!.onclick = () => opts.send(Msg.InvSort, {});
   btn.onclick = toggle;
   back.querySelector<HTMLElement>(".iv-x")!.onclick = close;
   back.onclick = (e) => { if (e.target === back) close(); };

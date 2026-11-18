@@ -2,8 +2,8 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR,
-  type CharClass, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
+  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex,
+  type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
@@ -17,6 +17,8 @@ import { mountStats } from "./stats";
 import { mountJoystick } from "./touch";
 import { drawPlate, type PlateKind } from "./plate";
 import { mountChat } from "./chat";
+import { GroundLayer } from "./ground";
+import { revealItem, showRarityReveal } from "./loot-fx";
 import { mountParty, type PartyUi } from "./party";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
@@ -73,10 +75,11 @@ class WorldScene extends Phaser.Scene {
   private joyMoving = false;
   private deadUntil = 0;
   private cls: CharClass = "warrior";
-  private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; obj: Phaser.GameObjects.Shape }>();
+  private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; blast?: number; obj: Phaser.GameObjects.Shape }>();
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
   private zoneId = 1;
   private portalG!: Phaser.GameObjects.Graphics;
+  private ground!: GroundLayer;
   private portalDefs: { x: number; y: number; r: number; color: number }[] = [];
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -104,6 +107,7 @@ class WorldScene extends Phaser.Scene {
     if (!this.state?.players) await new Promise<void>((resolve) => this.room.onStateChange.once(() => resolve()));
 
     this.makeEffects();
+    this.ground = new GroundLayer(this, toScreen);
     this.selG = this.add.graphics().setDepth(0.35);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
@@ -126,7 +130,9 @@ class WorldScene extends Phaser.Scene {
 
     st.enemies.onAdd((e: any, id: string) => {
       const kd = enemyKind(String(e.kind));
-      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : 11 }); // os três monstros têm kit de sprites
+      // os monstros têm kit de sprites; os chefes emprestam o corpo de um monstro, maior
+      const view = new ActorView(this, this.atlases.get(kd.sprite ?? String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
+      if (kd.boss && view.isSprite) (view.obj as Phaser.GameObjects.Sprite).setTint(kd.color);
       const at = toScreen(e.x, e.y);
       view.obj.setPosition(at.sx, at.sy);
       this.sprites.set(`e:${id}`, view);
@@ -139,6 +145,8 @@ class WorldScene extends Phaser.Scene {
       this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
     });
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
+    st.items.onAdd((g: any, id: string) => this.ground.add(id, { itemId: String(g.itemId), qty: Number(g.qty) || 1, x: g.x, y: g.y, owner: String(g.owner), party: String(g.party), lockS: Number(g.lockS) || 0 }));
+    st.items.onRemove((_: any, id: string) => this.ground.remove(id));
 
     // HUD, menu e entrada
     this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }) });
@@ -202,7 +210,9 @@ class WorldScene extends Phaser.Scene {
       if (!d) return;
       this.inv.toast(`+ ${d.name}${m.qty > 1 ? ` x${m.qty}` : ""}`, RARITY_COLOR[d.rarity]);
       sfx.pickup();
+      if (rarityIndex(d.rarity) >= 2) revealItem(d); // raro ou melhor: animação no centro da tela, proporcional à raridade
     });
+    this.room.onMessage(Evt.Chest, (m: ChestEvent) => this.onChest(m));
     this.room.onMessage(Evt.Pvp, (m: PvpEvent) => {
       const say: Record<string, [string, string]> = {
         cancel: ["Canalização interrompida", "#ffb3a6"], stop: ["Canalização cancelada", "#e6eef9"],
@@ -264,6 +274,9 @@ class WorldScene extends Phaser.Scene {
       }
       if (this.selId) this.deselect();
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
+      const near = this.ground.nearest(x, y, 0.9); // clicar num item no chão também pede para pegá-lo (se estiver ao alcance)
+      const me = this.me();
+      if (near && me) { const g = this.state.items.get(near); if (g && Math.hypot(g.x - me.x, g.y - me.y) <= 2.6) this.room.send(Msg.Pickup, { id: near }); }
       this.room.send(Msg.MoveTo, { x, y });
       this.moveMarker(x, y);
     });
@@ -486,7 +499,7 @@ class WorldScene extends Phaser.Scene {
           : known!.has(`placeholder/${name}`) // senão, o corpo provisório (assets/placeholder)
             ? { name, png: `/assets/placeholder/${name}.png`, json: `/assets/placeholder/${name}.json` }
             : null;
-    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters")].filter((s): s is AtlasSpec => !!s);
+    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("mage", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters")].filter((s): s is AtlasSpec => !!s);
     this.atlases = await loadAtlases(this, specs);
   }
 
@@ -594,14 +607,14 @@ class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- projéteis, armadilhas e cura
   private onProj(m: ProjEvent) {
-    const color = m.look === "pierce" ? 0x9fe39f : m.look === "bolt" ? 0xfff2a8 : 0xe8d9a0;
+    const color = m.look === "pierce" ? 0x9fe39f : m.look === "bolt" ? 0xfff2a8 : m.look === "fire" ? 0xff7a2a : m.look === "arcane" ? 0xb58cff : 0xe8d9a0;
     const obj: Phaser.GameObjects.Shape =
-      m.look === "bolt"
-        ? this.add.circle(0, 0, 6, color).setBlendMode(Phaser.BlendModes.ADD)
+      m.look === "bolt" || m.look === "arcane" || m.look === "fire"
+        ? this.add.circle(0, 0, m.look === "fire" ? 10 : 6, color).setBlendMode(Phaser.BlendModes.ADD)
         : this.add.ellipse(0, 0, m.look === "pierce" ? 26 : 18, m.look === "pierce" ? 6 : 4, color);
     const d = dirScreen(m.dir);
     obj.setRotation(Math.atan2(d.y, d.x)).setDepth(1e5);
-    this.projs.set(m.id, { x: m.x, y: m.y, dx: Math.cos(m.dir), dy: Math.sin(m.dir), speed: m.speed, left: m.range, obj });
+    this.projs.set(m.id, { x: m.x, y: m.y, dx: Math.cos(m.dir), dy: Math.sin(m.dir), speed: m.speed, left: m.range, blast: m.blast, obj });
   }
 
   private onProjEnd(m: ProjEndEvent) {
@@ -609,6 +622,15 @@ class WorldScene extends Phaser.Scene {
     if (!pr) return;
     pr.obj.destroy();
     this.projs.delete(m.id);
+    if (pr.blast) { // projétil explosivo: a explosão acontece onde o servidor mandou
+      const { sx, sy } = toScreen(m.x, m.y);
+      this.ring(m.x, m.y, pr.blast, 0xff8a3a, 420, 0.2);
+      this.ring(m.x, m.y, pr.blast * 0.55, 0xffe0a0, 300, 0.3);
+      this.emitters.orange.explode(34, sx, sy - 8);
+      this.emitters.gold.explode(14, sx, sy - 8);
+      this.cameras.main.shake(140, 0.005);
+      sfx.boom();
+    }
   }
 
   private onTrap(m: TrapEvent) {
@@ -654,6 +676,81 @@ class WorldScene extends Phaser.Scene {
     this.tweens.add({ targets: inner, scale: 1, duration: m.ms, ease: "Quad.easeIn" });
     this.time.delayedCall(m.ms + 120, () => { outline.destroy(); inner.destroy(); });
     if (!m.friendly) sfx.warn();
+    if (m.fx) this.skyFx(m.fx, m.x, m.y, m.r, m.ms);
+  }
+
+  /** Skills que descem do céu (eixo Z, ideia do Diablo): objetos caem em diagonal até o alvo e o impacto acontece quando o servidor aplica o dano. */
+  private skyFx(fx: SkillFx, gx: number, gy: number, r: number, ms: number) {
+    const { sx, sy } = toScreen(gx, gy);
+    const ground = (col: number, k: number) => this.ring(gx, gy, r * k, col, 420, 0.25);
+    const fall = (x0: number, y0: number, x1: number, y1: number, delay: number, dur: number, make: () => Phaser.GameObjects.Shape, land: () => void, trail?: Phaser.GameObjects.Particles.ParticleEmitter) => {
+      const o = make().setPosition(x0, y0).setDepth(1e6);
+      this.tweens.add({
+        targets: o, x: x1, y: y1, delay, duration: dur, ease: "Quad.easeIn",
+        onUpdate: () => trail?.explode(1, o.x, o.y),
+        onComplete: () => { o.destroy(); land(); },
+      });
+    };
+    switch (fx) {
+      case "meteor": {
+        const big = () => this.add.circle(0, 0, 18 + r * 2, 0xff6a1a).setStrokeStyle(4, 0xffd08a).setBlendMode(Phaser.BlendModes.ADD);
+        fall(sx + 260, sy - 620, sx, sy, 0, ms, big, () => {
+          ground(0xff6a1a, 1); ground(0xffd08a, 0.6);
+          this.emitters.orange.explode(70, sx, sy - 6); this.emitters.gold.explode(30, sx, sy - 6);
+          this.cameras.main.shake(380, 0.014); this.cameras.main.flash(160, 255, 170, 90); sfx.boom();
+        }, this.emitters.orange);
+        break;
+      }
+      case "firerain": {
+        const n = Math.round(6 + r * 3);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+          const tx = sx + Math.cos(a) * d * ELL_W / 2, ty = sy + Math.sin(a) * d * ELL_H / 2;
+          const delay = Math.random() * ms * 0.45, dur = ms * 0.55;
+          fall(tx + 150, ty - 400, tx, ty, delay, dur, () => this.add.circle(0, 0, 6, 0xff7a2a).setBlendMode(Phaser.BlendModes.ADD),
+            () => { this.emitters.orange.explode(8, tx, ty); this.ring(gx + Math.cos(a) * d, gy + Math.sin(a) * d, 0.7, 0xff8a3a, 260, 0.3); }, this.emitters.red);
+        }
+        this.time.delayedCall(ms, () => { ground(0xff7a2a, 1); this.cameras.main.shake(160, 0.006); sfx.boom(); });
+        break;
+      }
+      case "lightning": {
+        this.time.delayedCall(ms, () => {
+          const g = this.add.graphics().setDepth(1e6).setBlendMode(Phaser.BlendModes.ADD);
+          let x = sx + 40, y = sy - 640;
+          const pts: [number, number][] = [[x, y]];
+          while (y < sy) { y += 50 + Math.random() * 40; x += (sx - x) * 0.35 + (Math.random() - 0.5) * 50; pts.push([x, Math.min(y, sy)]); }
+          pts[pts.length - 1] = [sx, sy];
+          for (const [w, c, a] of [[9, 0x8a6bff, 0.5], [4, 0xe9e0ff, 1]] as const) {
+            g.lineStyle(w, c, a).beginPath().moveTo(pts[0][0], pts[0][1]);
+            for (const p of pts.slice(1)) g.lineTo(p[0], p[1]);
+            g.strokePath();
+          }
+          ground(0xbfa8ff, 1);
+          this.emitters.gold.explode(14, sx, sy - 6);
+          this.cameras.main.flash(90, 220, 200, 255); this.cameras.main.shake(140, 0.007); sfx.boom();
+          this.tweens.add({ targets: g, alpha: 0, duration: 220, onComplete: () => g.destroy() });
+        });
+        break;
+      }
+      case "holy": {
+        const beam = this.add.rectangle(sx, sy - 300, r * ELL_W * 0.5, 600, 0xfff2a8, 0).setDepth(1e6).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: beam, alpha: 0.55, duration: ms, ease: "Quad.easeIn", onComplete: () => {
+          this.emitters.gold.explode(24, sx, sy - 6); ground(0xfff2a8, 1);
+          this.tweens.add({ targets: beam, alpha: 0, scaleX: 1.4, duration: 260, onComplete: () => beam.destroy() });
+        } });
+        break;
+      }
+      case "arrows": {
+        const n = Math.round(5 + r * 3);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+          const tx = sx + Math.cos(a) * d * ELL_W / 2, ty = sy + Math.sin(a) * d * ELL_H / 2;
+          const delay = Math.random() * ms * 0.5, dur = ms * 0.5;
+          fall(tx + 90, ty - 330, tx, ty, delay, dur, () => this.add.ellipse(0, 0, 3, 24, 0xe8d9a0).setRotation(0.25), () => this.emitters.gold.explode(3, tx, ty));
+        }
+        break;
+      }
+    }
   }
 
   private floatText(gx: number, gy: number, txt: string, color: string, size: number, pop: boolean) {
@@ -688,6 +785,25 @@ class WorldScene extends Phaser.Scene {
         sfx.hurt();
       }
     }
+  }
+
+  /** o baú do chefe abre: coluna de luz e explosão na cor da melhor raridade, mais o anúncio no centro da tela */
+  private onChest(m: ChestEvent) {
+    const { sx, sy } = toScreen(m.x, m.y);
+    const hex = RARITY_HEX[m.rarity];
+    const t = rarityIndex(m.rarity);
+    const box = this.add.rectangle(sx, sy - 6, 26, 18, 0x6b4a2e).setStrokeStyle(3, hex).setDepth(sy + 3);
+    const beam = this.add.rectangle(sx, sy - 140, 36 + t * 8, 280, hex, 0.5).setBlendMode(Phaser.BlendModes.ADD).setDepth(sy + 2);
+    this.tweens.add({ targets: beam, alpha: 0, scaleX: 2.2, duration: 1600, ease: "Cubic.easeOut", onComplete: () => beam.destroy() });
+    this.tweens.add({ targets: box, alpha: 0, delay: 1500, duration: 600, onComplete: () => box.destroy() });
+    this.ring(m.x, m.y, 2.6, hex, 900, 0.2);
+    this.ring(m.x, m.y, 1.4, 0xffffff, 600, 0.3);
+    this.emitters.gold.explode(30 + t * 8, sx, sy - 10);
+    this.cameras.main.shake(260, 0.008);
+    this.cameras.main.flash(180, (hex >> 16) & 255, (hex >> 8) & 255, hex & 255);
+    sfx.boom();
+    if (t >= 2) showRarityReveal(`Baú: ${m.boss}`, m.rarity, "Seus itens caíram ao redor");
+    else this.inv.toast(`Baú de ${m.boss}`, RARITY_COLOR[m.rarity]);
   }
 
   private onLevelUp(m: LevelUpEvent) {
@@ -822,6 +938,7 @@ class WorldScene extends Phaser.Scene {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
     this.driveJoystick(time);
+    this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
     this.checkLock();
     this.drawMarks(time);
     if (this.portalG) this.drawPortals(time);
@@ -859,7 +976,7 @@ class WorldScene extends Phaser.Scene {
         s.y += (sy - s.y) * 0.35;
       }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28, 12);
+      if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX);
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
       const pg = drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time });
       this.labels.get(key)?.setPosition(pg.nameX, pg.nameY).setScale(this.uiScale).setDepth(1e5 + 2);
