@@ -14,6 +14,8 @@ import os
 
 from PIL import Image, ImageDraw
 
+from gen_heroes import HEROES, draw_hero
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "assets", "placeholder")
 os.makedirs(OUT, exist_ok=True)
@@ -254,7 +256,10 @@ def build(name, kind, anims):
         for anim, n, ms in anims:
             start = len(images)
             for i in range(n):
-                images.append((draw_body(kind, direction, anim, i, n, None), ms))
+                if kind in HEROES:  # os 3 jogáveis: desenho dark fantasy em tools/gen_heroes.py
+                    images.append((draw_hero(kind, direction, anim, pose_for(anim, i, n), i, n), ms))
+                else:
+                    images.append((draw_body(kind, direction, anim, i, n, None), ms))
             tags.append({"name": f"{anim}_{direction}", "from": start, "to": start + n - 1, "direction": "forward"})
     cols = 10
     rows = math.ceil(len(images) / cols)

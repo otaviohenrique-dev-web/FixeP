@@ -68,7 +68,7 @@ Teste: `SERVER=http://localhost:2999 npm run test:pvp -w @frixep/server` (29 ver
 
 ### Corpos provisórios
 
-Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/` (gerados por
+Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/`. Guerreiro, Arqueiro e Clérigo têm desenho dark fantasy (aço escuro e capa carmesim; capuz e arco longo; manto de cinzas com cajado de brasa) em `tools/gen_heroes.py`; o Esqueleto continua simples. Gerados por
 `python tools/gen_placeholder_bodies.py`, precisa de Pillow). Quando o dev de arte entregar um atlas, ele passa na frente
 automaticamente. Esses PNGs ficam **fora do Git LFS** de propósito (`.gitattributes`).
 
