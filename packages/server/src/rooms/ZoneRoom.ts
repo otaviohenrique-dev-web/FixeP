@@ -3,7 +3,7 @@ import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
   MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, SPAWN, ENEMY_SPAWNS,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
-  SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
+  SKELETON, PLAYER_RADIUS, PVP_CHANNEL_S, CRIT, DAMAGE_VARIANCE, clamp,
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
@@ -107,6 +107,13 @@ export class ZoneRoom extends Room<ZoneState> {
       this.chatAt.set(client.sessionId, recent);
       this.broadcast(Evt.Chat, { id: client.sessionId, name: pl.name, text });
     });
+    // PvP: { on: boolean }. Entrar/sair exige canalizar PVP_CHANNEL_S sem receber dano (o servidor conta e cancela)
+    this.onMessage(Msg.Pvp, (client, p: { on?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || pl.dead || typeof p?.on !== "boolean") return;
+      this.requestPvp(client.sessionId, pl, p.on);
+    });
     this.onMessage(Msg.InvSync, (client) => {
       if (!this.allow(client)) return;
       const p = this.state.players.get(client.sessionId);
@@ -115,6 +122,57 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(pl, p?.slot)));
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
+  }
+
+  // ------------------------------------------------------------------ PvP
+  private pvpEvt(id: string, s: "start" | "cancel" | "stop" | "on" | "off") {
+    this.clients.getById(id)?.send(Evt.Pvp, { s });
+  }
+
+  /** liga/desliga o modo. Já estar no estado pedido não faz nada; pedir o contrário no meio da canalização a cancela. */
+  private requestPvp(id: string, p: Player, on: boolean) {
+    if (p.pvpChan !== 0) {
+      if ((p.pvpChan === 1) !== on) { p.pvpChan = 0; this.pvpEvt(id, "stop"); } // mudou de ideia: cancela sem aviso de dano
+      return;
+    }
+    if (p.pvp === on) return;
+    p.pvpChan = on ? 1 : 2;
+    p.pvpChanUntil = this.t + PVP_CHANNEL_S;
+    this.pvpEvt(id, "start");
+  }
+
+  /** qualquer dano recebido interrompe a canalização na hora */
+  private interruptPvp(id: string, p: Player) {
+    if (p.pvpChan === 0) return;
+    p.pvpChan = 0;
+    this.pvpEvt(id, "cancel");
+  }
+
+  private updatePvp(id: string, p: Player) {
+    if (p.pvpChan === 0 || this.t < p.pvpChanUntil) return;
+    p.pvp = p.pvpChan === 1;
+    p.pvpChan = 0;
+    this.pvpEvt(id, p.pvp ? "on" : "off");
+  }
+
+  /** dano de jogador em jogador: só se AMBOS estão em PvP (quem não está nunca é alvo) */
+  private canPvpHit(by: string, o: Player, oid: string): boolean {
+    if (oid === by || o.dead || !o.pvp || this.t < o.invulnUntil) return false;
+    const a = this.state.players.get(by);
+    return !!a && !a.dead && a.pvp;
+  }
+
+  private hitPlayers(by: string, baseDmg: number, inArea: (o: Player) => boolean) {
+    this.state.players.forEach((o, oid) => {
+      if (!this.canPvpHit(by, o, oid) || !inArea(o)) return;
+      this.damagePvp(by, oid, o, baseDmg);
+    });
+  }
+
+  private damagePvp(by: string, oid: string, o: Player, baseDmg: number) {
+    const crit = Math.random() < CRIT.chance;
+    const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
+    this.damagePlayer(oid, o, Math.max(1, baseDmg * variance * (crit ? CRIT.mult : 1)), by, crit);
   }
 
   // ------------------------------------------------------------------ inventário
@@ -298,7 +356,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private tick(dt: number) {
     this.t += dt;
-    this.state.players.forEach((p) => this.updatePlayer(p, dt));
+    this.state.players.forEach((p, id) => { this.updatePlayer(p, dt); this.updatePvp(id, p); });
     this.updateProjectiles(dt);
     this.updateTraps();
     if (this.pending.length) {
@@ -320,6 +378,7 @@ export class ZoneRoom extends Room<ZoneState> {
         p.mana = p.maxMana;
         p.x = p.tx = SPAWN.x;
         p.y = p.ty = SPAWN.y;
+        p.invulnUntil = this.t + 2; // um respiro ao renascer (evita ser abatido de novo no ponto de início)
       }
       return;
     }
@@ -407,12 +466,14 @@ export class ZoneRoom extends Room<ZoneState> {
       case "ring": {
         const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
         this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, cx, cy) <= (def.radius ?? 1) + PLAYER_RADIUS);
         break;
       }
       case "dashHit": {
         const ex = p.x + dx * (def.dash ?? 0), ey = p.y + dy * (def.dash ?? 0);
         const sx = p.x, sy = p.y;
         this.hitEnemies(id, dmg, (e) => distToSegment(e.x, e.y, sx, sy, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitPlayers(id, dmg, (o) => distToSegment(o.x, o.y, sx, sy, ex, ey) <= (def.radius ?? 1) + PLAYER_RADIUS);
         this.startDash(p, dx, dy, def);
         break;
       }
@@ -457,7 +518,10 @@ export class ZoneRoom extends Room<ZoneState> {
         const r = def.radius ?? 2;
         const delay = def.delayS ?? 0.8;
         this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: delay * 1000, friendly: true });
-        this.pending.push({ at: this.t + delay, run: () => this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, pos.x, pos.y) <= r + SKELETON.radius) });
+        this.pending.push({ at: this.t + delay, run: () => {
+          this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, pos.x, pos.y) <= r + SKELETON.radius);
+          this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, pos.x, pos.y) <= r + PLAYER_RADIUS);
+        } });
         break;
       }
       case "healAoe": {
@@ -512,16 +576,21 @@ export class ZoneRoom extends Room<ZoneState> {
       const step = Math.min(pr.speed * dt, pr.left);
       const nx = pr.x + pr.dx * step, ny = pr.y + pr.dy * step;
       // alvos no trecho percorrido neste tick (teste por segmento: a flecha rápida não "atravessa" sem acertar)
-      const cands: [number, string, Enemy][] = [];
+      const cands: [number, string, Enemy | Player][] = [];
       this.state.enemies.forEach((e, eid) => {
         if (e.st === "dead" || pr.hit.has(eid)) return;
         if (distToSegment(e.x, e.y, pr.x, pr.y, nx, ny) <= pr.radius + SKELETON.radius) cands.push([dist(e.x, e.y, pr.x, pr.y), eid, e]);
+      });
+      this.state.players.forEach((o, oid) => { // jogadores em PvP (as regras de quem pode ser alvo ficam em canPvpHit)
+        if (pr.hit.has(oid) || !this.canPvpHit(pr.owner, o, oid)) return;
+        if (distToSegment(o.x, o.y, pr.x, pr.y, nx, ny) <= pr.radius + PLAYER_RADIUS) cands.push([dist(o.x, o.y, pr.x, pr.y), oid, o]);
       });
       cands.sort((a, b) => a[0] - b[0]);
       let ended = false;
       for (const [, eid, e] of cands) {
         pr.hit.add(eid);
-        this.damageEnemy(pr.owner, eid, e, pr.dmg);
+        if (e instanceof Player) this.damagePvp(pr.owner, eid, e, pr.dmg);
+        else this.damageEnemy(pr.owner, eid, e, pr.dmg);
         if (!pr.pierce) { ended = true; break; } // flecha comum para no primeiro alvo
       }
       pr.x = nx;
@@ -545,9 +614,11 @@ export class ZoneRoom extends Room<ZoneState> {
       if (this.t < tr.armAt) continue;
       let trigger = false;
       this.state.enemies.forEach((e) => { if (e.st !== "dead" && dist(e.x, e.y, tr.x, tr.y) <= tr.r + SKELETON.radius) trigger = true; });
+      this.state.players.forEach((o, oid) => { if (this.canPvpHit(tr.owner, o, oid) && dist(o.x, o.y, tr.x, tr.y) <= tr.r + PLAYER_RADIUS) trigger = true; });
       if (!trigger) continue;
       this.removeTrap(tr, "boom");
       this.hitEnemies(tr.owner, tr.dmg, (e) => dist(e.x, e.y, tr.x, tr.y) <= tr.r + SKELETON.radius);
+      this.hitPlayers(tr.owner, tr.dmg, (o) => dist(o.x, o.y, tr.x, tr.y) <= tr.r + PLAYER_RADIUS);
     }
   }
 
@@ -674,11 +745,12 @@ export class ZoneRoom extends Room<ZoneState> {
     e.face = Math.atan2(dy, dx);
   }
 
-  private damagePlayer(id: string, p: Player, baseDmg: number) {
+  private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false) {
+    this.interruptPvp(id, p); // qualquer dano (inimigo, projétil, habilidade, área) cancela a canalização do PvP
     const reduction = this.t < p.buffUntil ? (CLASS_DEFS.warrior.actions.skill3.reduction ?? 0) : 0;
     const dmg = Math.max(1, Math.round(baseDmg * (1 - reduction)));
     p.hp = Math.max(0, p.hp - dmg);
-    this.broadcast(Evt.Hit, { k: "p", id, dmg, crit: false, x: p.x, y: p.y });
+    this.broadcast(Evt.Hit, { k: "p", id, dmg, crit, x: p.x, y: p.y, by });
     if (p.hp <= 0) {
       p.dead = true;
       p.deadUntil = this.t + RESPAWN_S;
