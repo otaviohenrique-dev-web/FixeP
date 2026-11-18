@@ -2,7 +2,7 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
+  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, levelTier, LEVEL_TIER_COLORS, ITEMS, RARITY_COLOR,
   type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type InventorySnapshot, type ChatEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
@@ -111,6 +111,7 @@ class WorldScene extends Phaser.Scene {
       const at = toScreen(p.x, p.y);
       view.obj.setPosition(at.sx, at.sy); // nasce na posição certa (sem deslizar desde a origem)
       this.sprites.set(`p:${id}`, view);
+      this.levelTags.set(`p:${id}`, this.add.text(0, 0, String(Number(p.level) || 1), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "12px", color: "#ffffff", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 1));
       this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "10px", color: "#ccc" }).setOrigin(0.5, 3.4));
       if (me) this.cameras.main.startFollow(view.obj, true, 0.1, 0.1);
     });
@@ -243,6 +244,27 @@ class WorldScene extends Phaser.Scene {
       if (!v || time > b.until) { b.t.destroy(); this.bubbles.delete(id); continue; }
       b.t.setPosition(v.obj.x, v.obj.y - v.headY - 16).setVisible(v.obj.visible).setAlpha(Math.min(1, (b.until - time) / 600));
     }
+  }
+
+  /** selo de nível ao lado da barra de vida; a borda muda a cada 10 níveis (bronze, prata, ouro, gelo, violeta, brasa) */
+  private drawLevelBadge(key: string, level: number) {
+    const tag = this.levelTags.get(key);
+    const v = this.sprites.get(key);
+    if (!tag || !v) return;
+    const show = v.obj.visible;
+    tag.setVisible(show);
+    if (!show) return;
+    if (tag.text !== String(level)) tag.setText(String(level));
+    const cx = v.obj.x + 32;
+    const cy = v.obj.y - v.headY + 9;
+    const tier = levelTier(level);
+    const col = LEVEL_TIER_COLORS[tier];
+    const w = level >= 100 ? 24 : 20;
+    if (tier >= 3) this.bars.lineStyle(3, col, 0.28).strokeRoundedRect(cx - w / 2 - 2, cy - 12, w + 4, 24, 7); // brilho externo
+    this.bars.fillStyle(0x0c121c, 0.95).fillRoundedRect(cx - w / 2, cy - 10, w, 20, 5);
+    this.bars.lineStyle(tier >= 1 ? 2 : 1.5, col, 1).strokeRoundedRect(cx - w / 2, cy - 10, w, 20, 5);
+    if (tier >= 2) this.bars.lineStyle(1, col, 0.7).strokeRoundedRect(cx - w / 2 + 2, cy - 8, w - 4, 16, 3); // borda dupla do ouro em diante
+    tag.setPosition(cx, cy + 1);
   }
 
   private drinkPotion() {
@@ -621,7 +643,10 @@ class WorldScene extends Phaser.Scene {
       if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, 18); // Brasa ativa
     };
 
-    st.players.forEach((p: any, id: string) => place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember }));
+    st.players.forEach((p: any, id: string) => {
+      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember });
+      this.drawLevelBadge(`p:${id}`, Number(p.level) || 1);
+    });
     st.enemies.forEach((e: any, id: string) => {
       const key = `e:${id}`;
       // o golpe cai quando o aviso (windup) termina: dispara a animação de ataque nessa virada

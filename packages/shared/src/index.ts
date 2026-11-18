@@ -223,6 +223,9 @@ export const XP_PER_KILL = 20;
 /** XP necessário para sair do nível `level` para o próximo (0 no nível máximo). */
 /** Cresce 20% a cada nível (100, 120, 144, 173, 207...; ~3,2 mil no nível 20; ~600 mil no 49). */
 export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : Math.round(100 * Math.pow(1.2, level - 1)));
+/** Faixa de borda do nível: muda a cada 10 níveis (1-9, 10-19, 20-29, 30-39, 40-49, 50). */
+export const levelTier = (level: number) => Math.min(5, Math.floor(Math.max(1, level) / 10));
+export const LEVEL_TIER_COLORS = [0x9a8460, 0xc9d3df, 0xf0c34a, 0x4cc3ee, 0xb575f5, 0xff6a3d] as const; // bronze, prata, ouro, gelo, violeta, brasa
 /** Vida máxima: base da classe + 10 por nível + bônus de armadura. */
 export const maxHpFor = (cls: CharClass, level: number, armorHp = 0) => CLASS_DEFS[cls].maxHp + 10 * (level - 1) + armorHp;
 /** Máximo do recurso (Fúria/Foco/Mana): base da classe + bônus por nível. */
