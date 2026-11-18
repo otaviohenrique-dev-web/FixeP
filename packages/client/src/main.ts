@@ -2,7 +2,7 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, levelTier, LEVEL_TIER_COLORS, ITEMS, RARITY_COLOR,
+  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
   type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
@@ -15,6 +15,7 @@ import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
 import { mountStats } from "./stats";
 import { mountJoystick } from "./touch";
+import { drawPlate, type PlateKind } from "./plate";
 import { mountChat } from "./chat";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
@@ -112,8 +113,8 @@ class WorldScene extends Phaser.Scene {
       const at = toScreen(p.x, p.y);
       view.obj.setPosition(at.sx, at.sy); // nasce na posição certa (sem deslizar desde a origem)
       this.sprites.set(`p:${id}`, view);
-      this.levelTags.set(`p:${id}`, this.add.text(0, 0, String(Number(p.level) || 1), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "12px", color: "#ffffff", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 1));
-      this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "10px", color: "#ccc" }).setOrigin(0.5, 3.4));
+      this.levelTags.set(`p:${id}`, this.add.text(0, 0, String(Number(p.level) || 1), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: "#fff6dc", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
+      this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "11px", color: "#ddd", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
       if (me) this.cameras.main.startFollow(view.obj, true, 0.1, 0.1);
     });
     st.players.onRemove((_: any, id: string) => this.dropSprite(`p:${id}`));
@@ -127,9 +128,9 @@ class WorldScene extends Phaser.Scene {
       const mine = Number(this.me()?.level) || 1;
       // cor pela diferença para o seu nível: cinza = fácil, branco = igual, laranja = difícil, vermelho = perigoso
       const col = lv >= mine + 3 ? "#ff6a5a" : lv > mine ? "#ffb072" : lv < mine - 2 ? "#9aa3ad" : "#e8e2d0";
-      this.labels.set(`e:${id}`, this.add.text(0, 0, SKELETON.name, { fontSize: "10px", color: "#e8e2d0" }).setOrigin(0.5, 1));
+      this.labels.set(`e:${id}`, this.add.text(0, 0, SKELETON.name, { fontSize: "11px", color: "#e8e2d0", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
       // nível: só o número, à direita da barra de vida, grande e com contorno grosso
-      this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 5 }).setOrigin(0, 0.5));
+      this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
     });
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
 
@@ -255,27 +256,6 @@ class WorldScene extends Phaser.Scene {
       if (!v || time > b.until) { b.t.destroy(); this.bubbles.delete(id); continue; }
       b.t.setPosition(v.obj.x, v.obj.y - v.headY - 16).setVisible(v.obj.visible).setAlpha(Math.min(1, (b.until - time) / 600));
     }
-  }
-
-  /** selo de nível ao lado da barra de vida; a borda muda a cada 10 níveis (bronze, prata, ouro, gelo, violeta, brasa) */
-  private drawLevelBadge(key: string, level: number) {
-    const tag = this.levelTags.get(key);
-    const v = this.sprites.get(key);
-    if (!tag || !v) return;
-    const show = v.obj.visible;
-    tag.setVisible(show);
-    if (!show) return;
-    if (tag.text !== String(level)) tag.setText(String(level));
-    const cx = v.obj.x + 32;
-    const cy = v.obj.y - v.headY + 9;
-    const tier = levelTier(level);
-    const col = LEVEL_TIER_COLORS[tier];
-    const w = level >= 100 ? 24 : 20;
-    if (tier >= 3) this.bars.lineStyle(3, col, 0.28).strokeRoundedRect(cx - w / 2 - 2, cy - 12, w + 4, 24, 7); // brilho externo
-    this.bars.fillStyle(0x0c121c, 0.95).fillRoundedRect(cx - w / 2, cy - 10, w, 20, 5);
-    this.bars.lineStyle(tier >= 1 ? 2 : 1.5, col, 1).strokeRoundedRect(cx - w / 2, cy - 10, w, 20, 5);
-    if (tier >= 2) this.bars.lineStyle(1, col, 0.7).strokeRoundedRect(cx - w / 2 + 2, cy - 8, w - 4, 16, 3); // borda dupla do ouro em diante
-    tag.setPosition(cx, cy + 1);
   }
 
   private drinkPotion() {
@@ -618,7 +598,7 @@ class WorldScene extends Phaser.Scene {
     }
 
     this.shadows.clear();
-    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; hideWhenDead?: boolean; ember?: boolean; windup?: boolean }) => {
+    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean }) => {
       const v = this.sprites.get(key);
       if (!v) return;
       const s = v.obj;
@@ -636,17 +616,16 @@ class WorldScene extends Phaser.Scene {
         s.y += (sy - s.y) * 0.35;
       }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (key.startsWith("e:")) {
-        this.labels.get(key)?.setPosition(s.x, s.y - v.headY - 2).setDepth(s.y + 1); // nome logo acima da barra
-        this.levelTags.get(key)?.setPosition(s.x + 20, s.y - v.headY + 3).setDepth(s.y + 1); // nível à direita da barra
-      }
-      else this.labels.get(key)?.setPosition(s.x, s.y - (v.headY - 27)).setDepth(s.y + 1);
       if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28, 12);
-      // barra de vida (+ marca de direção só nos círculos, que não têm rosto)
-      const w = 30;
-      const ratio = Math.max(0, hp / maxHp);
-      this.bars.fillStyle(0x000000, 0.7).fillRect(s.x - w / 2 - 1, s.y - v.headY, w + 2, 6);
-      this.bars.fillStyle(key.startsWith("e:") ? 0xc0392b : 0x4cc26a, 1).fillRect(s.x - w / 2, s.y - v.headY + 1, w * ratio, 4);
+      // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
+      const pg = drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time });
+      this.labels.get(key)?.setPosition(pg.nameX, pg.nameY).setDepth(1e5 + 2);
+      const nt = this.levelTags.get(key);
+      if (nt) {
+        if (nt.text !== String(o.level)) nt.setText(String(o.level));
+        nt.setPosition(pg.numX, pg.numY);
+      }
+      // marca de direção só nos círculos, que não têm rosto
       if (!v.isSprite) {
         const d = dirScreen(face);
         this.bars.lineStyle(3, 0xffffff, 0.85).lineBetween(s.x, s.y, s.x + d.x * 16, s.y + d.y * 16);
@@ -662,15 +641,14 @@ class WorldScene extends Phaser.Scene {
       }
     });
     st.players.forEach((p: any, id: string) => {
-      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember });
-      this.drawLevelBadge(`p:${id}`, Number(p.level) || 1);
+      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember, level: Number(p.level) || 1, kind: p.pvp ? "pvp" : id === this.room.sessionId ? "me" : "ally" });
     });
     st.enemies.forEach((e: any, id: string) => {
       const key = `e:${id}`;
       // o golpe cai quando o aviso (windup) termina: dispara a animação de ataque nessa virada
       if (this.prevSt.get(key) === "windup" && e.st === "recover") this.sprites.get(key)?.trigger("attack", time);
       this.prevSt.set(key, e.st);
-      place(key, e.x, e.y, e.face, e.hp, e.maxHp, { dead: e.st === "dead", hideWhenDead: true, windup: e.st === "windup" });
+      place(key, e.x, e.y, e.face, e.hp, e.maxHp, { dead: e.st === "dead", hideWhenDead: true, windup: e.st === "windup", level: Number(e.level) || 1, kind: "enemy" });
     });
 
     const me = this.me();
