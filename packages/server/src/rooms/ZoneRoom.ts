@@ -4,7 +4,7 @@ import {
   MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, SPAWN, ENEMY_SPAWNS,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
-  LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
+  LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, ZoneState } from "./entities.js";
@@ -97,6 +97,9 @@ export class ZoneRoom extends Room<ZoneState> {
   private refreshStats(p: Player, fill = false) {
     p.maxHp = maxHpFor(this.classOf(p).id, p.level, bonuses(p.inv).hp);
     p.hp = fill ? p.maxHp : Math.min(p.hp, p.maxHp);
+    p.maxMana = maxManaFor(this.classOf(p).id, p.level);
+    p.manaF = fill ? p.maxMana : Math.min(p.manaF, p.maxMana);
+    p.mana = Math.floor(p.manaF);
   }
 
   private invOp(client: Client, op: (p: Player) => { ok: true } | { ok: false; error: string }) {
@@ -276,6 +279,8 @@ export class ZoneRoom extends Room<ZoneState> {
       if (this.t >= p.deadUntil) {
         p.dead = false;
         p.hp = p.maxHp;
+        p.manaF = p.maxMana;
+        p.mana = p.maxMana;
         p.x = p.tx = SPAWN.x;
         p.y = p.ty = SPAWN.y;
       }
@@ -283,6 +288,11 @@ export class ZoneRoom extends Room<ZoneState> {
     }
     p.buff = this.t < p.buffUntil;
     p.ember = this.t < p.emberUntil;
+    if (p.manaF < p.maxMana) { // regenera o recurso; só mexe no valor sincronizado quando o inteiro muda
+      p.manaF = Math.min(p.maxMana, p.manaF + this.classOf(p).resource.regen * dt);
+      const m = Math.floor(p.manaF);
+      if (m !== p.mana) p.mana = m;
+    }
 
     if (p.dashLeft > 0) {
       const step = Math.min(dt, p.dashLeft);
@@ -327,6 +337,14 @@ export class ZoneRoom extends Room<ZoneState> {
     // Ressurgir sem ninguém caído por perto: avisa e NÃO gasta a recarga
     const fallen = def.kind === "revive" ? this.nearestDead(p, def.radius ?? 0) : null;
     if (def.kind === "revive" && !fallen) return this.notify(id, "Ninguém caído por perto.");
+
+    // custo do recurso: sem o suficiente a ação NÃO acontece e a recarga NÃO é gasta
+    const cost = def.cost ?? 0;
+    if (cost > 0) {
+      if (p.manaF < cost) return this.notify(id, `${this.classOf(p).resource.name} insuficiente.`);
+      p.manaF -= cost;
+      p.mana = Math.floor(p.manaF);
+    }
 
     let dx = ax - p.x, dy = ay - p.y;
     const aimDist = Math.hypot(dx, dy);

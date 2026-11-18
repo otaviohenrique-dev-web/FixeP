@@ -13,3 +13,5 @@ assets/**/*.png filter=lfs diff=lfs merge=lfs -text
 *.ase filter=lfs diff=lfs merge=lfs -text
 # PDFs sao binarios: nunca converter quebras de linha
 *.pdf binary
+# Corpos provisorios: PNG pequenos, fora do LFS (o Render pode nao baixar LFS)
+assets/placeholder/*.png -filter -diff -merge binary

@@ -29,6 +29,27 @@ Mouse: a mira segue o ponteiro. Toque: a mira vai para o inimigo mais próximo.
 Quem cai fica 8 s no chão antes de renascer no ponto inicial, o tempo que o Clérigo tem para reviver.
 XP e loot são divididos entre todos os jogadores vivos a até 14 tiles de um abate, e cada um faz a sua rolagem.
 
+### Recurso de cada classe e HUD
+
+Cada classe tem um **recurso** que as habilidades gastam e que regenera sozinho (o servidor controla; sem recurso a habilidade não sai e a recarga não é gasta):
+
+| Classe | Recurso | Máx. | Regen./s | Custos |
+|---|---|---|---|---|
+| Guerreiro | Fúria | 100 | 5 | Giro 25, Carga 30, Grito 35 |
+| Arqueiro | Foco | 100 | 6 | Perfurar 20, Cilada 25, Chuva 35 |
+| Clérigo | Mana | 120 | 6 | Raio 4, Cura 30, Brasa 25, Reviver 50 |
+
+A Esquiva e os ataques básicos do Guerreiro e do Arqueiro são de graça. O máximo cresce a cada nível (`maxManaFor`).
+A HUD (`packages/client/src/hud.ts`) tem: retrato, nome, vida (coração) e recurso no canto superior esquerdo; as 5 habilidades embaixo
+(tecla, custo, recarga, escurece sem recurso); e uma linha fina de XP na largura toda com o nível. O visual é original do FrixeP.
+Teste: `SERVER=http://localhost:2999 npm run test:mana -w @frixep/server` (17 verificações).
+
+### Corpos provisórios
+
+Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/` (gerados por
+`python tools/gen_placeholder_bodies.py`, precisa de Pillow). Quando o dev de arte entregar um atlas, ele passa na frente
+automaticamente. Esses PNGs ficam **fora do Git LFS** de propósito (`.gitattributes`).
+
 ## Mochila e equipamento
 
 | Ação | Tecla |
@@ -51,7 +72,7 @@ payloads malformados, flood, adulteração do estado local). Rode contra um serv
 PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 npm run start        # terminal 1 (banco em memória)
 SERVER=http://localhost:2999 npm run test:cheat                    # terminal 2: anti-trapaça (25 verificações)
 SERVER=http://localhost:2999 npm run test:persist                  # terminal 2: contas, personagem e XP (34 verificações)
-npm run test:inv:unit                                              # regras do inventário, classes e banco, sem servidor (44 verificações)
+npm run test:inv:unit                                              # regras do inventário, classes e banco, sem servidor (55 verificações)
 ```
 
 Os testes de ponta a ponta do inventário e das classes exigem loot garantido (`LOOT_TEST=1`, ignorado em produção):
@@ -80,3 +101,28 @@ Para publicar sem o painel por padrão, defina `VITE_SHOW_STATS=0` na montagem d
 
 > **Atenção ao rodar servidores de teste:** o `.env` agora tem a `DATABASE_URL` do Supabase e ela tem prioridade sobre `PGLITE_DIR`.
 > Para testes locais **não carregue o `.env`** (rode `npx tsx src/index.ts` com `JWT_SECRET` inline) ou use `DB_SCHEMA=frixep_test`.
+
+## Arte no jogo (sprites)
+
+O jogo desenha **sprites animados** quando encontra o atlas do personagem e **círculos** quando não encontra, então a arte pode
+chegar aos poucos (por exemplo, só o Guerreiro primeiro). Basta salvar o PNG + JSON exportados do Aseprite e recarregar a página:
+
+| Arquivo (em `assets/`) | O que vira no jogo |
+|---|---|
+| `characters/warrior.png` + `.json` | Guerreiro |
+| `characters/archer.png` + `.json` | Arqueiro |
+| `characters/cleric.png` + `.json` | Clérigo |
+| `monsters/skeleton.png` + `.json` | Esqueleto |
+
+As **tags** do Aseprite definem as animações (`idle_se`, `walk_ne`, `attack_se`...). Convenção completa em
+`docs/GUIA_ARTE_INICIAL.pdf`. Direções ausentes são espelhadas (SW usa SE, NW usa NE) ou substituídas pela mais próxima.
+Se um JSON estiver fora do padrão, o console do navegador (F12) explica o motivo; se o PNG vier quebrado do GitHub, rode `git lfs pull`.
+
+**Atlas de depuração** (bonecos provisórios, só para testar o carregador; **não é arte do jogo** e não vai para o Git):
+
+```
+python tools/gen_debug_atlas.py          # precisa de Python e Pillow
+# depois abra http://localhost:5173/?atlas=debug
+```
+
+Testes da lógica do carregador: `npm run test:sprites -w @frixep/client` (40 verificações).

@@ -52,3 +52,8 @@ Os valores abaixo são **propostas**. O artista pode ajustar, mas qualquer mudan
 
 O plano de entregas iniciais (marcos M0 a M8, tempos de animação, tamanhos dos efeitos e convenção de exportação) está em `docs/GUIA_ARTE_INICIAL.pdf`.
 Modelos prontos (grade isométrica 64x32, quadro de personagem 64x64 com o ponto dos pés e paleta inicial) em `assets/source/templates/`.
+
+## 9. Ver a arte dentro do jogo
+
+O carregador de sprites já existe: salve os atlas exportados em `assets/characters/` e `assets/monsters/` e recarregue o jogo (veja o README, seção "Arte no jogo").
+Sem atlas, o personagem continua sendo um círculo. Se algo estiver fora do padrão, o console do navegador (F12) explica o motivo.

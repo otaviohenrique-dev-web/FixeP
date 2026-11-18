@@ -12,6 +12,7 @@
     "test:persist": "node test/persistence.mjs",
     "test:inv": "node test/inventory.mjs",
     "test:classes": "node test/classes.mjs",
+    "test:mana": "node test/mana.mjs",
     "test:inv:unit": "tsx test/inventory.unit.ts"
   },
   "dependencies": {
