@@ -131,8 +131,7 @@ class WorldScene extends Phaser.Scene {
     st.enemies.onAdd((e: any, id: string) => {
       const kd = enemyKind(String(e.kind));
       // os monstros têm kit de sprites; os chefes emprestam o corpo de um monstro, maior
-      const view = new ActorView(this, this.atlases.get(kd.sprite ?? String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
-      if (kd.boss && view.isSprite) (view.obj as Phaser.GameObjects.Sprite).setTint(kd.color);
+      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
       const at = toScreen(e.x, e.y);
       view.obj.setPosition(at.sx, at.sy);
       this.sprites.set(`e:${id}`, view);
@@ -499,7 +498,7 @@ class WorldScene extends Phaser.Scene {
           : known!.has(`placeholder/${name}`) // senão, o corpo provisório (assets/placeholder)
             ? { name, png: `/assets/placeholder/${name}.png`, json: `/assets/placeholder/${name}.json` }
             : null;
-    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("mage", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters")].filter((s): s is AtlasSpec => !!s);
+    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("mage", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters"), spec("bone_king", "monsters"), spec("frost_alpha", "monsters"), spec("crypt_lord", "monsters")].filter((s): s is AtlasSpec => !!s);
     this.atlases = await loadAtlases(this, specs);
   }
 
