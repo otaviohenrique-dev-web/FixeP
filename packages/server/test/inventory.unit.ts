@@ -82,7 +82,7 @@ console.log("\n== Armas por classe ==");
 
 console.log("\n== Definições das classes ==");
 {
-  const kinds = new Set(["melee", "ring", "dashHit", "tauntBuff", "dodge", "projectile", "trap", "rain", "healAoe", "emberBuff", "revive"]);
+  const kinds = new Set(["melee", "ring", "dashHit", "tauntBuff", "dodge", "projectile", "trap", "rain", "pull", "healAoe", "emberBuff", "revive"]);
   for (const cls of ["warrior", "archer", "cleric"] as const) {
     const d = CLASS_DEFS[cls];
     const acts = ACTION_IDS.map((a) => d.actions[a]);

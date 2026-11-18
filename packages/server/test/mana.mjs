@@ -84,12 +84,13 @@ console.log("\n== Arqueiro e Clérigo: recursos próprios ==");
   const C = await spawn("cleric");
   check("Clérigo: Mana 120 / 120", C.me().maxMana === 120 && C.me().mana === 120, `${C.me().mana}/${C.me().maxMana}`);
   C.act("skill2"); await sleep(150);
-  check("Brasa gasta 25 de Mana", C.me().mana >= 94 && C.me().mana <= 97, `mana ${C.me().mana}`);
+  check("Compressor de Ar gasta 30 de Mana", C.me().mana >= 89 && C.me().mana <= 92, `mana ${C.me().mana}`);
   const m = C.me().mana;
-  C.act("skill3"); await sleep(250); // Reviver sem ninguém caído: não deve gastar nada
-  check("Reviver sem ninguém caído não gasta Mana", C.me().mana >= m, `${m} → ${C.me().mana}`);
+  C.act("skill3"); await sleep(250);
+  check("Julgamento gasta 30 de Mana", C.me().mana >= m - 31 && C.me().mana <= m - 28, `${m} → ${C.me().mana}`);
+  const m2 = C.me().mana;
   C.act("attack"); await sleep(150);
-  check("o Raio (ataque básico) custa pouco (4)", C.me().mana >= m - 5 && C.mine("attack") === 1, `${m} → ${C.me().mana}`);
+  check("o Raio (ataque básico) custa pouco (4)", C.me().mana >= m2 - 5 && C.mine("attack") === 1, `${m2} → ${C.me().mana}`);
   C.room.leave();
 }
 

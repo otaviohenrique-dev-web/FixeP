@@ -62,6 +62,9 @@ export class Enemy extends Schema {
   targetId = "";
   tauntId = "";
   tauntUntil = 0;
+  pullUntil = 0; // sendo puxado (Compressor de Ar) até este instante
+  pullX = 0;
+  pullY = 0;
   windupEnd = 0;
   strikeX = 0;
   strikeY = 0;

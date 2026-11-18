@@ -130,6 +130,7 @@ export type ActionKind =
   | "projectile" // projétil em linha reta
   | "trap" // armadilha no chão
   | "rain" // área atingida depois de um atraso (telegrafada)
+  | "pull" // puxa os inimigos de uma área para o centro (controle)
   | "healAoe" // cura aliados em volta
   | "emberBuff" // aliados causam mais dano por um tempo
   | "revive"; // levanta um aliado caído
@@ -159,6 +160,8 @@ export interface ActionDef {
   armS?: number; // tempo para armar
   lifeS?: number; // duração da armadilha
   delayS?: number; // atraso da chuva
+  pullS?: number; // tempo da puxada (Compressor de Ar)
+  stunS?: number; // tempo que os inimigos ficam atordoados depois de puxados
   maxActive?: number; // limite de armadilhas ativas
   // cura / buff / ressurreição
   heal?: number;
@@ -219,8 +222,8 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     actions: {
       attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, dmg: 8, speed: 12, range: 8, radius: 0.4 },
       skill1: { kind: "healAoe", name: "Cura", key: "Q", cd: 5, cost: 30, heal: 30, radius: 4 },
-      skill2: { kind: "emberBuff", name: "Brasa", key: "W", cd: 12, cost: 25, buffS: 6, dmgPct: 25, radius: 5 },
-      skill3: { kind: "revive", name: "Reviver", key: "E", cd: 20, cost: 50, radius: 8, hpPct: 50 },
+      skill2: { kind: "pull", name: "Compressor de Ar", key: "W", cd: 12, cost: 30, radius: 4.5, placeRange: 6, pullS: 0.45, stunS: 1.2 },
+      skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, dmg: 26, radius: 3, placeRange: 7, delayS: 0.6 },
       ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, heal: 80, radius: 6 },
       dodge: dodge(3, 1.4),
     },
