@@ -36,8 +36,8 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-const shape = (c: { name: string; class: string; level: number; xp: number } | null) =>
-  c ? { name: c.name, class: c.class, level: c.level, xp: c.xp } : null;
+const shape = (c: { name: string; class: string; level: number; xp: number; zone?: number } | null) =>
+  c ? { name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? 1 } : null;
 
 export function apiRouter(repo: Repo): Router {
   const r = Router();

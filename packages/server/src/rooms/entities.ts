@@ -39,6 +39,7 @@ export class Player extends Schema {
   invulnUntil = 0;
   buffUntil = 0;
   deadUntil = 0;
+  traveling = false; // travessia aprovada: o jogador não age nem é alvo até sair da sala
   pvpChanUntil = 0; // fim da canalização (relógio da simulação)
 }
 
@@ -70,4 +71,5 @@ export class Enemy extends Schema {
 export class ZoneState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Enemy }) enemies = new MapSchema<Enemy>();
+  @type("number") zoneId = 1;
 }

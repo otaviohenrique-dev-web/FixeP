@@ -11,6 +11,7 @@ export interface CharacterRow {
   class: CharClass;
   level: number;
   xp: number;
+  zone: number;
 }
 
 /** Normaliza o nome para a chave de unicidade: sem acento, sem maiúsculas, espaços colapsados. */
@@ -50,7 +51,7 @@ export class Repo {
 
   async getCharacter(accountId: string): Promise<CharacterRow | null> {
     const { rows } = await this.db.query<CharacterRow>(
-      "select id, account_id, name, class, level, xp from characters where account_id = $1 order by created_at limit 1",
+      "select id, account_id, name, class, level, xp, zone from characters where account_id = $1 order by created_at limit 1",
       [accountId],
     );
     return rows[0] ?? null;
@@ -69,7 +70,7 @@ export class Repo {
         if (Number(n) > 0) return { ok: false as const, error: "has_character" as const };
         const id = randomUUID();
         await q("insert into characters (id, account_id, name, name_key, class) values ($1, $2, $3, $4, $5)", [id, accountId, name, nameKey(name), cls]);
-        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0 } };
+        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone: 1 } };
       });
     } catch (e: any) {
       if (e?.code === "23505") return { ok: false, error: "name_taken" }; // violação da unicidade de name_key
@@ -79,6 +80,10 @@ export class Repo {
 
   async saveProgress(charId: string, level: number, xp: number): Promise<void> {
     await this.db.query("update characters set level = $2, xp = $3, updated_at = now() where id = $1", [charId, level, xp]);
+  }
+
+  async setZone(charId: string, zone: number): Promise<void> {
+    await this.db.query("update characters set zone = $2, updated_at = now() where id = $1", [charId, zone]);
   }
 
   async loadInventory(charId: string): Promise<Inventory> {

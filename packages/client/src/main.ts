@@ -2,8 +2,8 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
-  type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
+  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR,
+  type CharClass, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
@@ -37,6 +37,13 @@ const dirScreen = (ang: number) => {
   const l = Math.hypot(dx, dy) || 1;
   return { x: dx / l, y: dy / l };
 };
+/** Cores provisórias de cada tema de zona (sem arte externa): chão em losangos 64x32 gerados por código. */
+const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number; fleck: number; border: number; portal: number }> = {
+  ash: { bg: "#0b0b10", a: 0x25242b, b: 0x2c2b33, line: 0x3a3945, fleck: 0x4a4852, border: 0x6b5a45, portal: 0xc9a86a },
+  frost: { bg: "#08111a", a: 0x2b3e52, b: 0x334a60, line: 0x4a6a84, fleck: 0xe3f0fa, border: 0x8fc4e8, portal: 0x7fd0ff },
+  crypt: { bg: "#07050b", a: 0x221b2c, b: 0x2a2236, line: 0x3a2f4a, fleck: 0x54446e, border: 0x6a4a9a, portal: 0xb07aff },
+};
+const tileHash = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
 /** qual animação do personagem corresponde a cada ação (as 3 habilidades usam a mesma, "skill") */
@@ -65,33 +72,23 @@ class WorldScene extends Phaser.Scene {
   private cls: CharClass = "warrior";
   private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; obj: Phaser.GameObjects.Shape }>();
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
+  private zoneId = 1;
+  private portalG!: Phaser.GameObjects.Graphics;
+  private portalDefs: { x: number; y: number; r: number; color: number }[] = [];
 
   private get state(): any { return this.room?.state; }
   private me(): any { return this.state?.players?.get(this.room.sessionId); }
 
   async create() {
-    const g = this.add.graphics();
-    g.lineStyle(1, 0x2a2a3a, 1);
-    for (let x = 0; x < MAP_W; x++) {
-      for (let y = 0; y < MAP_H; y++) {
-        const { sx, sy } = toScreen(x, y);
-        g.strokePoints(
-          [
-            new Phaser.Math.Vector2(sx, sy - TILE_H / 2),
-            new Phaser.Math.Vector2(sx + TILE_W / 2, sy),
-            new Phaser.Math.Vector2(sx, sy + TILE_H / 2),
-            new Phaser.Math.Vector2(sx - TILE_W / 2, sy),
-          ],
-          true,
-        );
-      }
-    }
+    this.zoneId = (this.sys.settings.data as { zone?: number }).zone ?? 1;
+    const zone = ZONES[this.zoneId] ?? ZONES[1];
+    this.drawZoneMap(zone);
 
     await this.loadArt(); // atlas de sprites (se existirem); sem eles os personagens são círculos
 
     const token = (this.sys.settings.data as { token: string }).token;
     try {
-      this.room = await new Client(wsUrl).joinOrCreate("zone", { token });
+      this.room = await new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token });
     } catch {
       logout(); // token inválido/recusado: volta ao login
       return;
@@ -120,7 +117,8 @@ class WorldScene extends Phaser.Scene {
     st.players.onRemove((_: any, id: string) => this.dropSprite(`p:${id}`));
 
     st.enemies.onAdd((e: any, id: string) => {
-      const view = new ActorView(this, this.atlases.get("skeleton"), { color: 0xd8d2c0, radius: 12 });
+      const kd = enemyKind(String(e.kind));
+      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : 11 }); // só o Esqueleto tem arte; os outros são corpos provisórios
       const at = toScreen(e.x, e.y);
       view.obj.setPosition(at.sx, at.sy);
       this.sprites.set(`e:${id}`, view);
@@ -128,7 +126,7 @@ class WorldScene extends Phaser.Scene {
       const mine = Number(this.me()?.level) || 1;
       // cor pela diferença para o seu nível: cinza = fácil, branco = igual, laranja = difícil, vermelho = perigoso
       const col = lv >= mine + 3 ? "#ff6a5a" : lv > mine ? "#ffb072" : lv < mine - 2 ? "#9aa3ad" : "#e8e2d0";
-      this.labels.set(`e:${id}`, this.add.text(0, 0, SKELETON.name, { fontSize: "11px", color: "#e8e2d0", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
+      this.labels.set(`e:${id}`, this.add.text(0, 0, kd.name, { fontSize: "11px", color: "#e8e2d0", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
       // nível: só o número, à direita da barra de vida, grande e com contorno grosso
       this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
     });
@@ -148,6 +146,15 @@ class WorldScene extends Phaser.Scene {
       },
     });
     let leaving = false;
+    // travessia aprovada pelo servidor: sai desta sala e recarrega entrando na sala da nova zona (mesmo token)
+    this.room.onMessage(Evt.Travel, async (m: TravelEvent) => {
+      if (leaving) return;
+      leaving = true;
+      this.showLoading(`Viajando para ${ZONES[m.zone]?.name ?? "outra zona"}…`);
+      try { await this.room.leave(true); } catch { /* já desconectado */ }
+      location.reload();
+    });
+    this.zoneBanner(zone.name);
     this.room.onLeave((code) => {
       if (leaving) return;
       if (code === 4001) logout(); // outra aba assumiu a conta: vai ao login sem disputar a sessão
@@ -237,6 +244,63 @@ class WorldScene extends Phaser.Scene {
       (document.activeElement as HTMLElement | null)?.blur?.(); // ESPAÇO não deve "clicar" no botão focado
       this.hud.trigger(a);
     });
+  }
+
+  /** chão da zona: losangos 64x32 em xadrez com variação por código, detalhes e borda do mapa */
+  private drawZoneMap(zone: (typeof ZONES)[number]) {
+    const th = THEMES[zone.theme];
+    this.cameras.main.setBackgroundColor(th.bg);
+    const g = this.add.graphics().setDepth(-10);
+    const V = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
+    for (let x = 0; x < zone.w; x++) {
+      for (let y = 0; y < zone.h; y++) {
+        const { sx, sy } = toScreen(x, y);
+        const h = tileHash(x, y);
+        const base = (x + y) % 2 ? th.a : th.b;
+        g.fillStyle(base, 1).fillPoints([V(sx, sy - TILE_H / 2), V(sx + TILE_W / 2, sy), V(sx, sy + TILE_H / 2), V(sx - TILE_W / 2, sy)], true);
+        if (h < 0.12) g.fillStyle(th.fleck, zone.theme === "frost" ? 0.5 : 0.28).fillEllipse(sx + (h - 0.06) * 200, sy, 10 + h * 40, 4 + h * 14); // neve, cinza ou lajes soltas
+        g.lineStyle(1, th.line, 0.45).strokePoints([V(sx, sy - TILE_H / 2), V(sx + TILE_W / 2, sy), V(sx, sy + TILE_H / 2), V(sx - TILE_W / 2, sy)], true);
+      }
+    }
+    const c = (x: number, y: number) => { const p = toScreen(x, y); return V(p.sx, p.sy); };
+    g.lineStyle(3, th.border, 0.9).strokePoints([c(-0.5, -0.5), c(zone.w - 0.5, -0.5), c(zone.w - 0.5, zone.h - 0.5), c(-0.5, zone.h - 0.5)], true);
+    // portais: anel pulsante (desenhado a cada quadro) e nome do destino
+    this.portalG = this.add.graphics().setDepth(0.5);
+    this.portalDefs = zone.portals.map((p) => ({ x: p.x, y: p.y, r: p.r, color: THEMES[ZONES[p.to].theme].portal }));
+    zone.portals.forEach((p) => {
+      const at = toScreen(p.x, p.y);
+      this.add.text(at.sx, at.sy - p.r * TILE_H - 18, `➜ ${ZONES[p.to].name}`, { fontFamily: "Cinzel, Georgia, serif", fontSize: "13px", color: "#f4ecd2", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5);
+    });
+  }
+
+  private drawPortals(time: number) {
+    this.portalG.clear();
+    for (const p of this.portalDefs) {
+      const { sx, sy } = toScreen(p.x, p.y);
+      const pulse = 0.5 + 0.5 * Math.sin(time / 350);
+      const w = ELL_W * p.r, h = ELL_H * p.r;
+      this.portalG.fillStyle(p.color, 0.1 + 0.1 * pulse).fillEllipse(sx, sy, w, h);
+      this.portalG.lineStyle(3, p.color, 0.6 + 0.4 * pulse).strokeEllipse(sx, sy, w, h);
+      this.portalG.lineStyle(2, p.color, 0.5).strokeEllipse(sx, sy, w * (0.45 + 0.3 * pulse), h * (0.45 + 0.3 * pulse));
+    }
+  }
+
+  /** tela escura curta durante a travessia */
+  private showLoading(text: string) {
+    const d = document.createElement("div");
+    d.textContent = text;
+    d.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#05060a;color:#e8dfc4;font:600 22px Cinzel,Georgia,serif;letter-spacing:.06em;opacity:0;transition:opacity .25s";
+    document.body.appendChild(d);
+    requestAnimationFrame(() => (d.style.opacity = "1"));
+  }
+
+  /** nome da zona ao entrar (some sozinho) */
+  private zoneBanner(name: string) {
+    const d = document.createElement("div");
+    d.textContent = name;
+    d.style.cssText = "position:fixed;top:18%;left:0;right:0;text-align:center;z-index:50;pointer-events:none;color:#f1e6c4;font:600 34px Cinzel,Georgia,serif;letter-spacing:.14em;text-shadow:0 2px 10px #000,0 0 24px #000";
+    document.body.appendChild(d);
+    d.animate([{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 1, offset: 0.75 }, { opacity: 0 }], { duration: 3200 }).finished.then(() => d.remove(), () => d.remove());
   }
 
   /** balão de fala sobre a cabeça (some em 6 s; uma fala nova troca a anterior) */
@@ -582,6 +646,7 @@ class WorldScene extends Phaser.Scene {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
     this.driveJoystick(time);
+    if (this.portalG) this.drawPortals(time);
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes
     this.bars.clear();
 
@@ -672,7 +737,7 @@ class WorldScene extends Phaser.Scene {
 
 // Primeiro o login; o Phaser só inicia depois que há um token válido.
 const token = await ensureLogin();
-await ensureCharacter(token); // sem personagem, mostra a criação antes de entrar no jogo
+const character = await ensureCharacter(token); // sem personagem, mostra a criação antes de entrar no jogo
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: "game",
@@ -681,7 +746,7 @@ new Phaser.Game({
   scene: [],
   callbacks: {
     postBoot: (game) => {
-      game.scene.add("world", WorldScene, true, { token });
+      game.scene.add("world", WorldScene, true, { token, zone: character.zone ?? 1 });
     },
   },
 });
