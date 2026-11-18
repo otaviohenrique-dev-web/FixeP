@@ -848,7 +848,7 @@ class WorldScene extends Phaser.Scene {
         s.y += (sy - s.y) * 0.35;
       }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28, 12);
+      if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX);
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
       const pg = drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time });
       this.labels.get(key)?.setPosition(pg.nameX, pg.nameY).setDepth(1e5 + 2);

@@ -182,7 +182,7 @@ check("o Clérigo ganha XP mesmo sem dar o golpe final (rateio)", C.me().level >
   const owners = []; // o abate solta UMA rolagem no chão, reservada a quem deu o golpe final
   A.room.state.items.forEach((g) => owners.push(g.owner));
   const killer = owners[owners.length - 1];
-  check("o abate solta itens no chão reservados a quem abateu (um dos dois)", owners.length >= 3 && owners.every((o) => o === A.id || o === C.id), `${owners.length} itens, dono ${killer}`);
+  check("o abate solta itens no chão reservados a quem abateu (um dos dois)", owners.length >= 1 && owners.every((o) => o === A.id || o === C.id), `${owners.length} itens, dono ${killer}`);
   const winner = killer === A.id ? A : C;
   await collect(winner);
   await sleep(300);

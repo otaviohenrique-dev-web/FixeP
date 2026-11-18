@@ -27,7 +27,7 @@ const CSS = `
 .iv-title{margin:0;font-size:14px;font-weight:700;letter-spacing:.35em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 14px rgba(255,120,40,.5)}
 .iv-x{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#bcd8f5;background:transparent;border:1px solid rgba(160,200,240,.3);font:700 16px/1 Georgia,serif}
 .iv-body{display:grid;grid-template-columns:230px 1fr;gap:14px}
-@media (max-width:600px){.iv-body{grid-template-columns:1fr}}
+@media (max-width:600px){.iv-body{grid-template-columns:1fr}.iv-eq{grid-template-columns:1fr 1fr}.iv-eqs b{font-size:10px}}
 .iv-left{display:flex;flex-direction:column;gap:6px}
 .iv-eq{display:grid;grid-template-columns:1fr;gap:5px}
 .iv-stats{white-space:pre-line}

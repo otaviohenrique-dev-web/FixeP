@@ -14,24 +14,26 @@ Abra duas abas: os jogadores aparecem andando no mapa (clique para mover).
 
 ## Classes e controles de combate
 
-As teclas são as mesmas nas três classes; muda o que cada uma faz. Todas as definições (dano, recarga, alcance)
+As teclas são as mesmas nas quatro classes; muda o que cada uma faz. Todas as definições (dano, recarga, alcance)
 ficam em `packages/shared/src/index.ts` (`CLASS_DEFS`) e o servidor decide todos os resultados.
 
-| Tecla | Guerreiro (120 vida, tanque) | Arqueiro (90 vida, dano à distância) | Clérigo (100 vida, suporte) |
-|---|---|---|---|
-| ESPAÇO | Golpe corpo a corpo | Flecha | Raio sagrado |
-| Q | Giro (área ao redor) | Perfurar (flecha que atravessa) | Cura (aliados num raio de 4) |
-| W | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Compressor de Ar (puxa os inimigos de uma área para o ponto mirado e os atordoa por 1,2 s) |
-| E | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Julgamento (dano em área média, atinge após 0,6 s) |
-| R (ultimate) | Terremoto (área grande, 80 de Fúria, recarga 40 s) | Salva Final (chuva enorme, 80 de Foco, 40 s) | Luz Divina (cura forte num raio de 6, 90 de Mana, 45 s) |
-| SHIFT | Esquiva (3 tiles) | Rolamento longo (5 tiles) | Esquiva (3 tiles) |
+| Tecla | Guerreiro (120 vida, tanque) | Arqueiro (90 vida, dano à distância) | Clérigo (100 vida, suporte) | Mago (75 vida, dano explosivo) |
+|---|---|---|---|---|
+| ESPAÇO | Golpe corpo a corpo | Flecha | Raio sagrado | Dardo Arcano |
+| Q | Giro (área ao redor) | Perfurar (flecha que atravessa) | Cura (aliados num raio de 4) | Bola de Fogo (projétil que explode em área) |
+| W | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Compressor de Ar (puxa os inimigos de uma área para o ponto mirado e os atordoa por 1,2 s) | Relâmpago (raio do céu, quase instantâneo) |
+| E | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Julgamento (dano em área média, atinge após 0,6 s) | Chuva de Fogo (área grande, 0,9 s) |
+| R (ultimate) | Terremoto (área grande, 80 de Fúria, recarga 40 s) | Salva Final (chuva enorme, 80 de Foco, 40 s) | Luz Divina (cura forte num raio de 6, 90 de Mana, 45 s) | **Meteoro** (o maior dano do jogo: 230 base, raio 4,2, cai após 1,5 s, 100 de Mana, 45 s) |
+| SHIFT | Esquiva (3 tiles) | Rolamento longo (5 tiles) | Esquiva (3 tiles) | Passo arcano (4 tiles) |
+
+O **Mago** tem o maior dano e o menor sustain (75 de vida, nenhuma cura). Suas habilidades **descem do céu** (eixo Z, ideia do Diablo): o servidor manda `fx` no telégrafo (`meteor`, `lightning`, `firerain`; `holy` e `arrows` para Clérigo e Arqueiro) e o cliente anima a queda em diagonal e o impacto (`skyFx` em `main.ts`, genérico por enquanto).
 
 **F** bebe uma poção. Mouse: clique no chão para andar e a mira segue o ponteiro.
 
 **Celular:** joystick flutuante com o polegar esquerdo (toque em qualquer ponto da metade de baixo à esquerda e arraste; tocar no campo de visão não anda mais);
 botões em arco no canto direito (ataque grande, Q, W, E, R, esquiva e poção). A mira vai para o inimigo mais próximo.
 Quem cai fica 8 s no chão antes de renascer no ponto inicial.
-XP e loot são divididos entre todos os jogadores vivos a até 14 tiles de um abate, e cada um faz a sua rolagem.
+O XP é dividido entre todos os jogadores vivos a até 14 tiles de um abate; o loot cai no chão (veja "Mochila, equipamento, raridades e chefes").
 
 ### Recurso de cada classe e HUD
 
@@ -42,6 +44,7 @@ Cada classe tem um **recurso** que as habilidades gastam e que regenera sozinho 
 | Guerreiro | Fúria | 100 | 5 | Giro 25, Carga 30, Grito 35 |
 | Arqueiro | Foco | 100 | 6 | Perfurar 20, Cilada 25, Chuva 35 |
 | Clérigo | Mana | 120 | 6 | Raio 4, Cura 30, Compressor de Ar 30, Julgamento 30 |
+| Mago | Mana (violeta) | 140 | 7 | Dardo 4, Bola de Fogo 30, Relâmpago 28, Chuva de Fogo 45, Meteoro 100 |
 
 A Esquiva e os ataques básicos do Guerreiro e do Arqueiro são de graça. O máximo cresce a cada nível (`maxManaFor`).
 A HUD (`packages/client/src/hud.ts`) tem: retrato, nome, vida (coração) e recurso no canto superior esquerdo; as 5 habilidades embaixo
@@ -54,11 +57,11 @@ Três zonas, cada uma é uma sala própria no servidor (dados em `packages/share
 
 | Zona | Tema | Inimigos (nível) | Recursos |
 |---|---|---|---|
-| 1. Cinzas | ruínas escuras | Esqueletos 1 a 3 | normais |
-| 2. Floresta Gélida | neve e gelo | Lobos Gélidos e Esqueletos 6 a 10 | x1,6 |
-| 3. Catacumbas | pedra roxa | Espectros e Esqueletos 12 a 20 | x2,4 (poções em dobro) |
+| 1. Cinzas | ruínas escuras | Esqueletos 1 a 3; chefe **Rei Ossudo** (nv 6) | itens até **incomum** |
+| 2. Floresta Gélida | neve e gelo | Lobos Gélidos e Esqueletos 6 a 10; chefe **Lobo Alfa** (nv 11) | itens até **raro** (baú até épico) |
+| 3. Catacumbas | pedra roxa | Espectros e Esqueletos 12 a 20; chefe **Soberano das Catacumbas** (nv 21) | itens até **épico** (baú até mítico) |
 
-- **Sem faixa de nível**: qualquer jogador pode ir quando quiser. As zonas mais fundas são muito punitivas, mas soltam mais itens e raridades melhores.
+- **Sem faixa de nível**: qualquer jogador pode ir quando quiser. As zonas mais fundas são muito punitivas, mas soltam mais itens e raridades melhores (`drops` e `boss` em `zones.ts`).
 - **Travessia como no Albion**: basta andar até o anel brilhante do portal (sem apertar nada). O servidor valida a posição, grava a zona do personagem (coluna `characters.zone`, migração `004_zone.sql`) e manda o cliente entrar na sala nova. Quem pede a sala de outra zona é recusado (403).
 - Ao reconectar, o personagem volta para a zona em que estava; ao morrer, renasce no início da mesma zona. Uma sessão por conta vale em todas as zonas.
 - O mapa de cada zona é desenhado por código (cores provisórias por tema); o Lobo Gélido tem kit de sprites próprio (`python tools/gen_wolf.py` recria `assets/placeholder/wolf.*`; arte final em `assets/monsters/wolf.*` tem prioridade) e o Espectro das Catacumbas também (`python tools/gen_wraith.py`, `assets/placeholder/wraith.*`).
@@ -96,7 +99,7 @@ Até **4 jogadores**. O grupo vive no servidor (`packages/server/src/game/party.
 
 ### Corpos provisórios
 
-Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/`. Guerreiro, Arqueiro e Clérigo têm desenho dark fantasy (aço escuro e capa carmesim; capuz e arco longo; manto de cinzas com cajado de brasa) em `tools/gen_heroes.py`; o Esqueleto continua simples. Gerados por
+Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/`. Guerreiro, Arqueiro, Clérigo e Mago (chapéu pontudo e cristal violeta) têm desenho dark fantasy (aço escuro e capa carmesim; capuz e arco longo; manto de cinzas com cajado de brasa) em `tools/gen_heroes.py`; o Esqueleto continua simples. Gerados por
 `python tools/gen_placeholder_bodies.py`, precisa de Pillow). Quando o dev de arte entregar um atlas, ele passa na frente
 automaticamente. Esses PNGs ficam **fora do Git LFS** de propósito (`.gitattributes`).
 
@@ -117,17 +120,44 @@ Para trocar por arte desenhada à mão basta substituir os PNGs com os mesmos no
   e brasa com gema e brilho pulsante (50). O retrato na HUD usa a mesma moldura (cor, rebites, gema, brilho) com o nível num selo no canto, e no lugar da barra de vida (que já está na placa) fica a **barra da faixa**: `Gelo · 33 / 40` mostra quanto falta para a próxima borda. A barra é verde para você, verde-clara para aliados e vermelha para inimigos e jogadores em PvP.
 - Quem fala no chat da zona também vê o balão de fala sobre a cabeça do personagem por 6 s.
 
-## Mochila e equipamento
+## Mochila, equipamento, raridades e chefes
 
 | Ação | Tecla |
 |---|---|
 | Abrir/fechar a mochila | I ou B (ESC fecha) |
-| Beber a primeira poção | Q (recarga de 6 s) |
+| Beber a primeira poção | F (recarga de 6 s) |
 
-Esqueletos soltam equipamentos (comum, incomum e raro) e poções direto na mochila (20 espaços). Armas dão bônus de
-poder (dano e cura) e armaduras, de vida; cada item tem nível mínimo. **Armas são exclusivas de cada classe**
-(espadas, arcos e cajados) e só caem para quem pode usá-las; armaduras e poções servem a todos. Tudo é decidido e
-validado no servidor e salvo no banco.
+**Raridades** (`packages/shared/src/items.ts`): comum (cinza), incomum (verde), raro (azul), épico (dourado radiante), lendário (vermelho brilhante), mítico (púrpura pulsante).
+Raridade maior exige mais nível e dá mais bônus. Quase todo o catálogo é **gerado por tabelas** (famílias x raridades); o id é `<família>_<raridade>` (ex.: `montante_epic`, `mage_helmet_rare`).
+
+**Equipamento** (6 espaços, painel à esquerda da mochila): arma, mão secundária, elmo, armadura, botas e capa. Cada item é **exclusivo de uma classe**: qualquer classe pode *dropar*
+itens de qualquer classe (então os da sua classe são ainda mais valiosos), mas só a classe do item equipa e só então ele vale. Os bônus: poder (%), vida, crítico, redução de dano, redução de recarga (botas, teto 30%), recurso máximo e regeneração (capa).
+O botão discreto no topo da mochila (setas) **organiza**: junta pilhas e ordena por tipo, raridade e nome (mensagem `inv_sort`).
+
+**Tipos de arma e kit**: cada classe tem 3 ou mais tipos, com requisito de nível mais alto nos mais exigentes. O tipo concede um **kit** de modificadores (dano, recarga, custo, área, alcance, cura, crítico, e ajustes só de uma habilidade), aplicado no servidor por `effectiveAction`:
+
+| Classe | Tipos (mãos) | Foco |
+|---|---|---|
+| Guerreiro | Montante (2), Espada Larga (2), Lâmina Rúnica (2), Espada de Uma Mão (1, com escudo ou adaga) | golpes pesados / equilíbrio e crítico / habilidades baratas / rapidez |
+| Arqueiro | Arco Longo (2), Arco Curto (1), Besta (1); mão secundária: Aljava | alcance / velocidade / dano e crítico |
+| Clérigo | Cajado Sagrado (2), Cetro (1), Maça (1); mão secundária: Escudo Sagrado ou Relicário | cura / dano e velocidade / misto |
+| Mago | Cajado Arcano (2), Varinha (1), Orbe Instável (2); mão secundária: Tomo Arcano ou Orbe Flutuante | explosões maiores / conjuração rápida e barata / Bola de Fogo e Meteoro |
+
+Arma de duas mãos libera a mão secundária (o item volta à mochila); com arma de duas mãos não se equipa a secundária. Não há atributos no jogo, então o requisito é só de **nível**.
+
+**Drops no chão** (`ZoneRoom`): o abate solta os itens no chão, visíveis a todos na cor da raridade (brilho; coluna de luz de raro para cima). Só **quem abateu e o grupo dele** pegam por 30 s (baú do chefe: 60 s);
+um **anel em volta do item esvazia como relógio** e um número mostra os segundos (colorido para quem pode pegar, cinza para os outros). Depois disso qualquer um pega; o item some em 3 min. Para pegar, basta andar até ele (ou clicar nele de perto: `pickup { id }`).
+**Raridade do drop**: cada zona tem um **teto** (tabela `drops` em `zones.ts`): impossível épico na zona 1. Taxas baixas: 7%/9%/11% de equipamento por abate e 8%/10%/12% de poção; raro ou melhor fica abaixo de ~2% dos abates. Lendário e mítico **só saem de baús de chefe**.
+**Animação de raridade**: ao receber item raro ou melhor, o centro da tela mostra um efeito que cresce com a raridade (`packages/client/src/loot-fx.ts`): raro, anel azul; épico, raios dourados; lendário, chamas e anéis vermelhos; mítico, aura púrpura pulsante com estrelas.
+
+**Chefes** (um por zona, `boss` em `zones.ts`): aparecem sempre em campo, com 5 a 6 vezes a vida de um inimigo do mesmo nível, golpe mais forte, **pancada em área** telegrafada em volta deles (a cada 8 a 9 s) e **fúria** abaixo de 30% de vida (mais rápidos, pancadas mais seguidas). Dão 8 a 10 vezes o XP.
+Ao morrer reaparecem em 5 / 7 / 10 min (`respawnS`) e o servidor avisa a todos ("Rei Ossudo despertou!"). **O baú** só existe quando o chefe morre: **cada jogador que lutou** (e está por perto) ganha a sua própria rolagem, reservada a ele, e o cliente mostra a explosão do baú (`chest`).
+Zona 1: 2 itens, no máximo incomuns; zona 2: 3 itens, o primeiro pelo menos raro, até épico; zona 3: 3 itens, o primeiro pelo menos épico, com lendário (~18%) e mítico (~2%).
+
+**Itens antigos**: os 13 itens da primeira versão são traduzidos ao carregar o inventário (`migrateItemId`: espada → Espada de Uma Mão; arco/cajado → equivalente; armadura → a da classe do personagem, mesma raridade) e gravados de novo no próximo salvamento. A migração `006_equipamentos.sql` libera os novos espaços de equipamento e a `005_mago.sql`, a classe `mage`.
+Os ícones novos ainda não existem (`assets/items/item_<id>.png`); enquanto isso o cliente mostra um desenho provisório por tipo de item.
+
+Tudo é decidido e validado no servidor e salvo no banco. **Ainda não feito**: efeitos visuais finais das armas (as skills são genéricas), ícones dos itens novos e arte própria dos chefes (usam o corpo do monstro maior, em escala e cor diferentes).
 
 ## Teste anti-trapaça
 
@@ -139,18 +169,26 @@ payloads malformados, flood, adulteração do estado local). Rode contra um serv
 PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 npm run start        # terminal 1 (banco em memória)
 SERVER=http://localhost:2999 npm run test:cheat                    # terminal 2: anti-trapaça (25 verificações)
 SERVER=http://localhost:2999 npm run test:persist                  # terminal 2: contas, personagem e XP (34 verificações)
-npm run test:inv:unit                                              # regras do inventário, classes e banco, sem servidor (55 verificações)
+npm run test:inv:unit                                              # regras de itens, drops, chefes, classes e banco, sem servidor (109 verificações)
 ```
 
 Os testes de ponta a ponta do inventário e das classes exigem loot garantido (`LOOT_TEST=1`, ignorado em produção):
 
 ```
 PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 LOOT_TEST=1 npm run start   # terminal 1
-SERVER=http://localhost:2999 npm run test:inv                              # terminal 2 (16 verificações)
+SERVER=http://localhost:2999 npm run test:inv                              # terminal 2 (17 verificações)
+SERVER=http://localhost:2999 npm run test:mago                             # terminal 2 (Mago: 16 verificações)
 SERVER=http://localhost:2999 npm run test:classes                          # terminal 2 (Arqueiro + Clérigo juntos, 33-34 verificações)
 ```
 
-No PowerShell: `$env:PORT=2999; $env:PGLITE_DIR="memory"; $env:API_RATE_MULT=100; $env:LOOT_TEST=1; npm.cmd run start`.
+Itens no chão e chefe (servidor com `LOOT_LOCK_S=3 BOSS_TEST=1`: reserva de 3 s e chefe de 1 de vida, só fora de produção):
+
+```
+PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 LOOT_TEST=1 LOOT_LOCK_S=3 BOSS_TEST=1 npm run start
+SERVER=http://localhost:2999 npm run test:loot                             # 21 verificações
+```
+
+Reinicie o servidor entre as suítes. No PowerShell: `$env:PORT=2999; $env:PGLITE_DIR="memory"; $env:API_RATE_MULT=100; $env:LOOT_TEST=1; npm.cmd run start`.
 Saem com código 1 se qualquer verificação falhar. Veja também `docs/DEPLOY_SUPABASE_RENDER.md`.
 
 

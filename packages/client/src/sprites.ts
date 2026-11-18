@@ -121,7 +121,8 @@ export class ActorView {
       this.sprite = scene.add.sprite(0, 0, atlas.key, atlas.firstFrame).setOrigin(PIVOT_X / FRAME, PIVOT_Y / FRAME);
       this.obj = this.sprite;
       this.isSprite = true;
-      this.headY = 58;
+      this.headY = 58 * (opts.scale ?? 1);
+      if (opts.scale) this.sprite.setScale(opts.scale);
       this.show("idle");
     } else {
       this.arc = scene.add.circle(0, 0, opts.radius, opts.color).setStrokeStyle(opts.mine ? 3 : 2, opts.mine ? 0xffffff : 0x000000, opts.mine ? 0.9 : 0.5);

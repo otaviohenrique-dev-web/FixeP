@@ -15,7 +15,7 @@ const CSS = `
 .rv-ring{width:60px;height:60px;border:3px solid var(--c);box-shadow:0 0 18px var(--c),inset 0 0 14px var(--c);opacity:0;animation:rv-ring 1.3s ease-out forwards;animation-delay:var(--dl,0s)}
 .rv-spark{position:absolute;left:50%;top:50%;width:5px;height:5px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c);opacity:0;animation:rv-spark var(--sd) ease-out forwards;animation-delay:var(--sl)}
 .rv-txt{position:relative;display:flex;flex-direction:column;gap:4px;align-items:center;animation:rv-pop var(--d) ease-out forwards}
-.rv-tier{font-size:12px;font-weight:700;letter-spacing:.5em;text-transform:uppercase;color:var(--c);text-shadow:0 0 12px var(--c),0 2px 4px #000}
+.rv-tier{font-size:12px;font-weight:700;letter-spacing:.5em;text-transform:uppercase;color:#fff;text-shadow:0 0 10px var(--c),0 0 4px var(--c),0 0 18px var(--c),0 2px 4px #000}
 .rv-name{font-size:21px;font-weight:700;letter-spacing:.06em;color:#fff;text-shadow:0 0 14px var(--c),0 0 4px var(--c),0 2px 6px #000;max-width:92vw}
 .rv.t3 .rv-name,.rv.t4 .rv-name,.rv.t5 .rv-name{font-size:26px}
 .rv.t5 .rv-aura{animation:rv-pulse 1.1s ease-in-out infinite,rv-fade var(--d) linear forwards}

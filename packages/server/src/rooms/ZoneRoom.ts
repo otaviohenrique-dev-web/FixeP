@@ -337,7 +337,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const party = this.state.players.get(owner)?.party ?? "";
     drops.forEach((d, i) => {
       const g = new GroundItem();
-      const ang = (i / Math.max(1, drops.length)) * Math.PI * 2 + Math.random() * 0.6, rad = drops.length > 1 ? 0.7 + Math.random() * 0.5 : 0;
+      const ang = (i / Math.max(1, drops.length)) * Math.PI * 2 + Math.random() * 0.6, rad = drops.length > 1 ? 1.2 + Math.random() * 0.4 : 0; // afastados o bastante para os nomes não se sobrepor
       g.itemId = d.id; g.qty = d.qty;
       g.x = clamp(x + Math.cos(ang) * rad, 0, this.zone.w - 1);
       g.y = clamp(y + Math.sin(ang) * rad, 0, this.zone.h - 1);
