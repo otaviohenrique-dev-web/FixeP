@@ -282,7 +282,6 @@ export interface EnemyKindDef {
   name: string; hpMul: number; dmgMul: number; speed: number; aggro: number; leash: number; engage: number;
   windupS: number; strikeOffset: number; strikeRadius: number; recoverS: number; respawnS: number; radius: number; color: number;
   boss?: BossDef; // só os chefes
-  sprite?: string; // atlas emprestado (chefes usam o corpo de um monstro maior)
   scale?: number;
 }
 /** Mecânica dos chefes: golpe normal mais forte + "pancada" em área em volta dele a cada `slamEveryS`; abaixo de `enrageAt` da vida ele fica furioso. */
@@ -296,11 +295,11 @@ export const ENEMY_KINDS = {
 } as Record<EnemyKind, EnemyKindDef>;
 const bossBase: Pick<BossDef, "slamWindupS" | "enrageAt" | "enrageSpeed"> = { slamWindupS: 1.3, enrageAt: 0.3, enrageSpeed: 1.3 };
 ENEMY_KINDS.bone_king = { ...base, name: "Rei Ossudo", hpMul: 6, dmgMul: 1.2, speed: 2.2, aggro: 9, leash: 18, engage: 2.0, strikeOffset: 1.3, strikeRadius: 1.8, radius: 0.7, respawnS: 300, color: 0xe8e0c8,
-  sprite: "skeleton", scale: 1.7, boss: { xpMul: 8, slamEveryS: 9, slamRadius: 3.4, slamMul: 1.4, ...bossBase } };
+  scale: 1.7, boss: { xpMul: 8, slamEveryS: 9, slamRadius: 3.4, slamMul: 1.4, ...bossBase } };
 ENEMY_KINDS.frost_alpha = { ...base, name: "Lobo Alfa", hpMul: 5, dmgMul: 1.2, speed: 3.6, aggro: 10, leash: 18, engage: 2.0, windupS: 0.6, strikeOffset: 1.2, strikeRadius: 1.6, recoverS: 0.9, radius: 0.7, respawnS: 420, color: 0xbfd8f2,
-  sprite: "wolf", scale: 1.7, boss: { xpMul: 8, slamEveryS: 8, slamRadius: 3.2, slamMul: 1.4, ...bossBase } };
+  scale: 1.7, boss: { xpMul: 8, slamEveryS: 8, slamRadius: 3.2, slamMul: 1.4, ...bossBase } };
 ENEMY_KINDS.crypt_lord = { ...base, name: "Soberano das Catacumbas", hpMul: 6, dmgMul: 1.3, speed: 2.3, aggro: 11, leash: 20, engage: 2.6, windupS: 0.9, strikeOffset: 1.6, strikeRadius: 2.0, recoverS: 1.1, radius: 0.8, respawnS: 600, color: 0xc9a8ff,
-  sprite: "wraith", scale: 1.8, boss: { xpMul: 10, slamEveryS: 8, slamRadius: 4, slamMul: 1.5, ...bossBase } };
+  scale: 1.8, boss: { xpMul: 10, slamEveryS: 8, slamRadius: 4, slamMul: 1.5, ...bossBase } };
 export const enemyKind = (k: string): EnemyKindDef => ENEMY_KINDS[k as EnemyKind] ?? ENEMY_KINDS.skeleton;
 
 /** Spawns da zona 1 (compatibilidade): os de cada zona ficam em ZONES. */
