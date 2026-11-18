@@ -17,6 +17,8 @@ export interface PartyOptions {
   /** nome da zona em que o jogador está agora (para só mostrar a zona de quem está em outra) */
   zoneId: number;
   myName: string;
+  /** o menu do jogador selecionado foi fechado (Esc, X ou uma opção escolhida) */
+  onMenuClose?(): void;
 }
 export interface MenuTarget { name: string; level: number; cls: string; inParty: boolean }
 export interface PartyUi {
@@ -25,6 +27,8 @@ export interface PartyUi {
   endInvite(): void;
   /** abre o menu do jogador ao lado de (x, y) em pixels da tela */
   openPlayerMenu(t: MenuTarget, x: number, y: number): void;
+  /** jogador selecionado no mundo: as opções aparecem fixas ao lado do retrato do próprio jogador (HUD) */
+  selectPlayer(t: MenuTarget): void;
   closeMenu(): void;
   setTouch(on: boolean): void;
   /** o jogador está em grupo, e é o líder? (o cliente só usa para habilitar botões; o servidor valida de verdade) */
@@ -40,6 +44,15 @@ const mixWhite = (n: number, t: number) => {
 const CSS = `
 .pt{position:fixed;z-index:15;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 128px);width:min(232px,54vw);
   font-family:"Cinzel",Georgia,serif;color:#e6eef9;pointer-events:none;--gold:#c9a45c;--gold-d:#7a5f2e;--ink:#0c121c;--ink2:#161f2e}
+.pt-tog{pointer-events:auto;position:relative;display:grid;place-items:center;width:30px;height:30px;padding:0;border-radius:8px;cursor:pointer;color:#e9c98a;
+  background:linear-gradient(180deg,rgba(34,48,74,.88),rgba(13,21,34,.88));border:2px solid var(--gold-d);box-shadow:0 0 0 1px #000,0 2px 6px rgba(0,0,0,.55);
+  font:700 18px/1 "Cinzel",Georgia,serif;opacity:.75;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.pt-tog:hover,.pt.open .pt-tog{opacity:1;border-color:#f0cf86}
+.pt-tog:focus-visible{outline:2px solid #ffd9a0;outline-offset:2px}
+.pt-tog b{position:absolute;right:-6px;top:-6px;min-width:15px;height:15px;padding:0 3px;box-sizing:border-box;border-radius:8px;background:#2e7a45;border:1px solid #000;color:#fff;font:700 9px/13px "Cinzel",Georgia,serif;text-align:center;display:none}
+.pt.in .pt-tog b{display:block}
+.pt-body{display:none;margin-top:6px}
+.pt.open .pt-body{display:block}
 .pt-head{pointer-events:auto;display:flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:10px;cursor:pointer;user-select:none;
   background:linear-gradient(180deg,var(--ink2),var(--ink));border:2px solid var(--gold-d);box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,225,160,.22),0 4px 12px rgba(0,0,0,.6)}
 .pt-title{flex:1;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#f0dfb8;text-shadow:0 1px 3px #000;white-space:nowrap}
@@ -56,7 +69,6 @@ const CSS = `
   color:#f4ecd8;font:600 12px/1 "Cinzel",Georgia,serif;outline:none}
 .pt-in::placeholder{color:#7d8aa0}
 .pt-list{display:flex;flex-direction:column;gap:5px;margin-top:6px}
-.pt.min .pt-list{display:none}
 .pt-row{pointer-events:auto;position:relative;display:flex;gap:7px;align-items:center;padding:5px 7px 5px 6px;border-radius:10px;
   background:linear-gradient(180deg,rgba(22,31,46,.94),rgba(12,18,28,.94));border:2px solid var(--gold-d);box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,225,160,.16),0 3px 8px rgba(0,0,0,.55)}
 .pt-row.me{border-color:#5f87b8}
@@ -94,6 +106,9 @@ const CSS = `
 .pt-menu{position:fixed;z-index:19;min-width:200px;max-width:min(260px,92vw);padding:8px;display:none;flex-direction:column;gap:3px;border-radius:12px;font-family:"Cinzel",Georgia,serif;
   background:linear-gradient(180deg,#1b2840,#0c121c);border:2px solid #c9a45c;box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,225,160,.25),0 10px 26px rgba(0,0,0,.7)}
 .pt-menu.on{display:flex}
+.pt-menu.dock{left:calc(max(12px,env(safe-area-inset-left)) + min(300px,64vw) + 12px);top:max(12px,env(safe-area-inset-top));z-index:17}
+.pt-menu .pt-x{position:absolute;right:6px;top:6px;width:24px;height:24px;padding:0;border-radius:6px;border:1px solid var(--gold-d,#7a5f2e);background:transparent;color:#cfdcec;cursor:pointer;font:700 12px/1 Georgia,serif}
+@media (max-width:640px),(pointer:coarse) and (max-width:900px){.pt-menu.dock{left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 176px);max-width:min(260px,62vw)}}
 .pt-menu-h{display:flex;align-items:center;gap:8px;padding:2px 4px 8px;border-bottom:1px solid rgba(201,164,92,.35);margin-bottom:4px}
 .pt-menu-h .nm{font:700 13px/1.1 "Cinzel",Georgia,serif;letter-spacing:.06em;color:#f0dfb8;word-break:break-word}
 .pt-menu-h .sub{font:600 10px/1.2 "Cinzel",Georgia,serif;color:#9fb4cf;letter-spacing:.06em}
@@ -119,7 +134,7 @@ export function mountParty(opts: PartyOptions): PartyUi {
   root.className = "pt";
   const head = document.createElement("div");
   head.className = "pt-head";
-  head.title = "Grupo (clique para recolher)";
+  head.title = "Grupo (clique para fechar)";
   const title = document.createElement("div");
   title.className = "pt-title";
   const titleTxt = document.createElement("span");
@@ -146,7 +161,20 @@ export function mountParty(opts: PartyOptions): PartyUi {
   add.append(input, go);
   const list = document.createElement("div");
   list.className = "pt-list";
-  root.append(head, add, list);
+  const tog = document.createElement("button");
+  tog.type = "button";
+  tog.className = "pt-tog";
+  tog.title = "Grupo";
+  tog.setAttribute("aria-label", "Abrir ou fechar o painel de grupo");
+  tog.setAttribute("aria-expanded", "false");
+  const togIc = document.createElement("span");
+  togIc.textContent = "+";
+  const togN = document.createElement("b");
+  tog.append(togIc, togN);
+  const body = document.createElement("div");
+  body.className = "pt-body";
+  body.append(head, add, list);
+  root.append(tog, body); // o painel nasce recolhido: só o quadradinho "+" fica na tela
   document.body.append(root);
 
   function btn(text: string, label: string): HTMLButtonElement {
@@ -165,7 +193,14 @@ export function mountParty(opts: PartyOptions): PartyUi {
   const meInfo = () => members.find((m) => m.name === opts.myName);
 
   const stop = (e: Event) => e.stopPropagation();
-  head.addEventListener("click", () => root.classList.toggle("min"));
+  const setOpen = (on: boolean) => {
+    root.classList.toggle("open", on);
+    togIc.textContent = on ? "−" : "+";
+    tog.setAttribute("aria-expanded", String(on));
+    if (!on) root.classList.remove("adding");
+  };
+  tog.addEventListener("click", () => setOpen(!root.classList.contains("open")));
+  head.addEventListener("click", () => setOpen(false));
   for (const b of [addBtn, leaveBtn, go]) b.addEventListener("click", stop);
   add.addEventListener("click", stop);
   addBtn.addEventListener("click", () => {
@@ -231,10 +266,10 @@ export function mountParty(opts: PartyOptions): PartyUi {
     root.classList.toggle("in", inParty);
     leaveBtn.style.display = inParty ? "" : "none";
     count.textContent = inParty ? `${members.length}/${PARTY_MAX}` : "";
+    togN.textContent = String(members.length);
     const me = meInfo();
     addBtn.style.display = !inParty || me?.leader ? "" : "none"; // só o líder (ou quem não tem grupo) convida
     addBtn.disabled = inParty && members.length >= PARTY_MAX;
-    if (!inParty) root.classList.remove("min");
     const names = new Set(members.map((m) => m.name));
     for (const [n, r] of rows) if (!names.has(n)) { r.el.remove(); rows.delete(n); }
     for (const m of members) {
@@ -296,7 +331,15 @@ export function mountParty(opts: PartyOptions): PartyUi {
   menu.className = "pt-menu";
   menu.setAttribute("role", "menu");
   document.body.append(menu);
-  function closeMenu() { menu.classList.remove("on"); }
+  let docked = false;
+  function closeMenu() {
+    const was = menu.classList.contains("on");
+    menu.classList.remove("on", "dock");
+    menu.style.left = menu.style.top = "";
+    const d = docked;
+    docked = false;
+    if (was && d) opts.onMenuClose?.();
+  }
   function item(label: string, onClick: (() => void) | null, hint?: string, sep = false) {
     const b = document.createElement("button");
     b.type = "button";
@@ -308,7 +351,9 @@ export function mountParty(opts: PartyOptions): PartyUi {
     else b.addEventListener("click", () => { closeMenu(); onClick(); });
     return b;
   }
-  function openMenu(t: MenuTarget, x: number, y: number, mode: "player" | "member") {
+  function openMenu(t: MenuTarget, x: number, y: number, mode: "player" | "member" | "dock") {
+    menu.classList.remove("dock");
+    docked = false;
     menu.replaceChildren();
     const h = document.createElement("div");
     h.className = "pt-menu-h";
@@ -328,6 +373,15 @@ export function mountParty(opts: PartyOptions): PartyUi {
     who.append(nm, sub);
     h.append(lv, who);
     menu.append(h);
+    if (mode === "dock") {
+      const xb = document.createElement("button");
+      xb.type = "button";
+      xb.className = "pt-x";
+      xb.setAttribute("aria-label", "Fechar opções");
+      xb.textContent = "✕";
+      xb.addEventListener("click", closeMenu);
+      menu.append(xb);
+    }
     const send = (type: string) => () => opts.send(type, { name: t.name });
     if (mode === "member") {
       menu.append(item("Passar liderança", send("party_lead")), item("Expulsar do grupo", send("party_kick")));
@@ -345,12 +399,18 @@ export function mountParty(opts: PartyOptions): PartyUi {
       );
     }
     menu.classList.add("on");
+    if (mode === "dock") { // fixo ao lado do retrato do jogador: sem posição calculada
+      docked = true;
+      menu.classList.add("dock");
+      menu.style.left = menu.style.top = "";
+      return;
+    }
     const w = menu.offsetWidth, hgt = menu.offsetHeight;
     menu.style.left = `${Math.max(6, Math.min(window.innerWidth - w - 6, x))}px`;
     menu.style.top = `${Math.max(6, Math.min(window.innerHeight - hgt - 6, y))}px`;
   }
   // clicar fora (ou Esc) fecha o menu
-  window.addEventListener("pointerdown", (e) => { if (menu.classList.contains("on") && !menu.contains(e.target as Node)) closeMenu(); }, true);
+  window.addEventListener("pointerdown", (e) => { if (menu.classList.contains("on") && !docked && !menu.contains(e.target as Node)) closeMenu(); }, true);
   window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); }, true);
 
   function state() {
@@ -380,6 +440,7 @@ export function mountParty(opts: PartyOptions): PartyUi {
     },
     endInvite,
     openPlayerMenu: (t, x, y) => openMenu(t, x, y, "player"),
+    selectPlayer: (t) => openMenu(t, 0, 0, "dock"),
     closeMenu,
     setTouch(on) { root.classList.toggle("touch", on); },
     state,
