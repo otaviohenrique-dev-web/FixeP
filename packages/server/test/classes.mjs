@@ -71,7 +71,19 @@ await until(() => e1.st === "dead", 30000, 300).then(async (dead) => {
 });
 check("o Arqueiro derruba o esqueleto só com ataques à distância", e1.st === "dead", `${dano}+ acertos`);
 await sleep(500);
-check("o Arqueiro recebe XP e loot da classe (arco)", A.me().xp >= 20 && A.ev.loot.some((l) => l.id === "arco_curto"), `xp ${A.me().xp}, loot ${A.ev.loot.map((l) => l.id)}`);
+// os itens caem no chão: anda até cada um (andar até o item pega sozinho)
+async function collect(P, ms = 9000) {
+  const t = Date.now();
+  while (P.room.state.items.size > 0 && Date.now() - t < ms) {
+    let g = null;
+    P.room.state.items.forEach((x) => { g ??= x; });
+    P.room.send("move_to", { x: g.x, y: g.y });
+    await sleep(300);
+  }
+}
+await collect(A);
+await sleep(300);
+check("o Arqueiro recebe XP e loot (o item do chão é dele; qualquer classe pode cair, aqui o teste solta o arco)", A.me().xp >= 20 && A.ev.loot.some((l) => l.id === "arco_curto_common"), `xp ${A.me().xp}, loot ${A.ev.loot.map((l) => l.id)}`);
 
 console.log("\n== 3. Clérigo: Compressor de Ar, Julgamento e ataque ==");
 // ambos vão para perto do esqueleto e2 (31,24): A fica no alcance de aggro, C um pouco atrás (dentro do raio de cura 4)
@@ -166,8 +178,17 @@ await sleep(700);
 }
 check("o Arqueiro também ganha XP do abate", A.me().level > lvA0 || A.me().xp > xpA0, `xp ${xpA0} → ${A.me().xp}`);
 check("o Clérigo ganha XP mesmo sem dar o golpe final (rateio)", C.me().level > lvC0 || C.me().xp > xpC0, `xp ${xpC0} → ${C.me().xp} (nv ${C.me().level})`);
-check("o Clérigo recebe loot da sua classe (cajado)", C.ev.loot.slice(lootC0).some((l) => l.id === "cajado_de_galho"), `${C.ev.loot.slice(lootC0).map((l) => l.id)}`);
-check("o Arqueiro recebe loot da sua classe (arco)", A.ev.loot.slice(lootA0).some((l) => l.id === "arco_curto"), `${A.ev.loot.slice(lootA0).map((l) => l.id)}`);
+{
+  const owners = []; // o abate solta UMA rolagem no chão, reservada a quem deu o golpe final
+  A.room.state.items.forEach((g) => owners.push(g.owner));
+  const killer = owners[owners.length - 1];
+  check("o abate solta itens no chão reservados a quem abateu (um dos dois)", owners.length >= 3 && owners.every((o) => o === A.id || o === C.id), `${owners.length} itens, dono ${killer}`);
+  const winner = killer === A.id ? A : C;
+  await collect(winner);
+  await sleep(300);
+  const got = winner.ev.loot.slice(winner === A ? lootA0 : lootC0).map((l) => l.id);
+  check("o dono do abate pega os itens ao andar até eles", got.includes(winner === A ? "arco_curto_common" : "cetro_common"), got.join(","));
+}
 
 console.log("\n== 7. Estabilidade ==");
 check("ninguém foi desconectado pelo limite de taxa", A.ev.left === null && C.ev.left === null, `A=${A.ev.left} C=${C.ev.left}`);

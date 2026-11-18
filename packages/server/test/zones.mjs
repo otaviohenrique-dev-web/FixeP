@@ -27,7 +27,8 @@ async function join(room, tk = token) {
   r.onLeave((c) => (ev.left = c));
   return { r, ev, me: () => r.state.players.get(r.sessionId) };
 }
-const enemies = (r) => { const a = []; r.state.enemies.forEach((e) => a.push({ kind: e.kind, level: e.level, hp: e.hp, maxHp: e.maxHp })); return a; };
+const enemies = (r) => { const a = []; r.state.enemies.forEach((e) => ["bone_king", "frost_alpha", "crypt_lord"].includes(e.kind) || a.push({ kind: e.kind, level: e.level, hp: e.hp, maxHp: e.maxHp })); return a; };
+const bossOf = (r) => { let b = null; r.state.enemies.forEach((e, id) => { if (id === "boss") b = e.kind; }); return b; };
 const levels = (r) => enemies(r).map((e) => e.level).sort((a, b) => a - b).join(",");
 const kinds = (r) => { const c = {}; enemies(r).forEach((e) => (c[e.kind] = (c[e.kind] ?? 0) + 1)); return JSON.stringify(c); };
 const waitFor = async (fn, ms) => { for (let t = 0; t < ms; t += 100) { if (fn()) return true; await sleep(100); } return false; };
@@ -36,6 +37,7 @@ const near = (p, x, y, d = 2) => Math.hypot(p.x - x, p.y - y) <= d;
 console.log("\n== Zona 1 (Cinzas) ==");
 let A = await join("zone");
 check("nasce na zona 1, no ponto de nascimento", A.r.state.zoneId === 1 && near(A.me(), 20, 20, 0.5), `zona ${A.r.state.zoneId} em (${A.me().x}, ${A.me().y})`);
+check("cada zona tem o seu chefe (Rei Ossudo, Lobo Alfa, Soberano das Catacumbas)", bossOf(A.r) === "bone_king", bossOf(A.r));
 check("inimigos da zona 1: 5 esqueletos, níveis 1,1,1,2,3", levels(A.r) === "1,1,1,2,3" && kinds(A.r) === '{"skeleton":5}', `${levels(A.r)} ${kinds(A.r)}`);
 check("API informa a zona do personagem (1)", (await zoneApi()) === 1);
 

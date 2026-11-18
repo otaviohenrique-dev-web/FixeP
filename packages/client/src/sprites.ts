@@ -115,7 +115,7 @@ export class ActorView {
   private first = true;
   private prevNow = 0;
 
-  constructor(private scene: Phaser.Scene, private atlas: ActorAtlas | undefined, opts: { color: number; radius: number; mine?: boolean }) {
+  constructor(private scene: Phaser.Scene, private atlas: ActorAtlas | undefined, opts: { color: number; radius: number; mine?: boolean; scale?: number }) {
     this.baseColor = opts.color;
     if (atlas) {
       this.sprite = scene.add.sprite(0, 0, atlas.key, atlas.firstFrame).setOrigin(PIVOT_X / FRAME, PIVOT_Y / FRAME);

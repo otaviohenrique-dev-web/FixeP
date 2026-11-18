@@ -30,6 +30,16 @@ async function enter() {
   await sleep(400);
   return { room, st, me: () => room.state.players.get(room.sessionId) };
 }
+// os itens caem no chão: anda até cada um (andar até o item pega sozinho)
+async function collect(room, ms = 9000) {
+  const t = Date.now();
+  while (room.state.items.size > 0 && Date.now() - t < ms) {
+    let g = null;
+    room.state.items.forEach((x) => { g ??= x; });
+    room.send("move_to", { x: g.x, y: g.y });
+    await sleep(300);
+  }
+}
 const count = (snap, id) => snap.inv.filter((s) => s?.id === id).reduce((n, s) => n + s.qty, 0);
 const slotOf = (snap, id) => snap.inv.findIndex((s) => s?.id === id);
 
@@ -49,16 +59,19 @@ while (e1.st !== "dead" && Date.now() - t0 < 40000 && !me().dead) {
   await sleep(700);
 }
 await sleep(500);
+check("os itens caem no CHÃO (ainda não estão na mochila)", e1.st === "dead" && room.state.items.size + st.loot.length === 3 && room.state.items.size >= 1, `${room.state.items.size} no chão, ${st.loot.length} recebidos`);
+await collect(room);
+await sleep(300);
 check("matar o esqueleto concede os itens ao matador", e1.st === "dead" && st.loot.length === 3, `${st.loot.length} drops: ${st.loot.map((l) => l.id + "x" + l.qty).join(", ")}`);
-check("o inventário recebido contém os itens e a poção empilhada", st.snap && slotOf(st.snap, "espada_enferrujada") >= 0 && slotOf(st.snap, "gibao_surrado") >= 0 && count(st.snap, "pocao_de_vida") === 2);
+check("o inventário recebido contém os itens e a poção empilhada", st.snap && slotOf(st.snap, "espada_1m_common") >= 0 && slotOf(st.snap, "warrior_armor_common") >= 0 && count(st.snap, "pocao_de_vida") === 2, JSON.stringify(st.snap.inv.filter(Boolean)));
 
 console.log("\n== 3. Equipar ==");
-room.send("inv_equip", { slot: slotOf(st.snap, "espada_enferrujada") });
+room.send("inv_equip", { slot: slotOf(st.snap, "espada_1m_common") });
 await sleep(300);
-check("equipar a arma move o item para o equipamento", st.snap.equip.weapon === "espada_enferrujada" && slotOf(st.snap, "espada_enferrujada") === -1);
-room.send("inv_equip", { slot: slotOf(st.snap, "gibao_surrado") });
+check("equipar a arma move o item para o equipamento", st.snap.equip.weapon === "espada_1m_common" && slotOf(st.snap, "espada_1m_common") === -1);
+room.send("inv_equip", { slot: slotOf(st.snap, "warrior_armor_common") });
 await sleep(400);
-check("equipar a armadura aumenta a vida máxima (+15)", st.snap.equip.armor === "gibao_surrado" && me().maxHp === 135, `maxHp ${me().maxHp}`);
+check("equipar a armadura aumenta a vida máxima (+15)", st.snap.equip.armor === "warrior_armor_common" && me().maxHp === 135, `maxHp ${me().maxHp}`);
 
 console.log("\n== 4. Entradas maliciosas ==");
 {
@@ -116,8 +129,8 @@ console.log("\n== 6. Descartar e desequipar ==");
   check("descartar remove o espaço inteiro", count(st.snap, "pocao_de_vida") === 0 && potBefore > 0);
   room.send("inv_unequip", { slot: "armor" });
   await sleep(400);
-  check("desequipar a armadura devolve o item e reduz a vida máxima", st.snap.equip.armor === null && slotOf(st.snap, "gibao_surrado") >= 0 && me().maxHp === 120, `maxHp ${me().maxHp}`);
-  room.send("inv_equip", { slot: slotOf(st.snap, "gibao_surrado") });
+  check("desequipar a armadura devolve o item e reduz a vida máxima", st.snap.equip.armor === null && slotOf(st.snap, "warrior_armor_common") >= 0 && me().maxHp === 120, `maxHp ${me().maxHp}`);
+  room.send("inv_equip", { slot: slotOf(st.snap, "warrior_armor_common") });
   await sleep(300);
 }
 

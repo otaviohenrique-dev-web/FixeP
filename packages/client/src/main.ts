@@ -2,8 +2,8 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR,
-  type CharClass, type SkillFx, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
+  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex,
+  type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
@@ -17,6 +17,8 @@ import { mountStats } from "./stats";
 import { mountJoystick } from "./touch";
 import { drawPlate, type PlateKind } from "./plate";
 import { mountChat } from "./chat";
+import { GroundLayer } from "./ground";
+import { revealItem, showRarityReveal } from "./loot-fx";
 import { mountParty, type PartyUi } from "./party";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
@@ -76,6 +78,7 @@ class WorldScene extends Phaser.Scene {
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
   private zoneId = 1;
   private portalG!: Phaser.GameObjects.Graphics;
+  private ground!: GroundLayer;
   private portalDefs: { x: number; y: number; r: number; color: number }[] = [];
 
   private get state(): any { return this.room?.state; }
@@ -99,6 +102,7 @@ class WorldScene extends Phaser.Scene {
     if (!this.state?.players) await new Promise<void>((resolve) => this.room.onStateChange.once(() => resolve()));
 
     this.makeEffects();
+    this.ground = new GroundLayer(this, toScreen);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
 
@@ -120,7 +124,9 @@ class WorldScene extends Phaser.Scene {
 
     st.enemies.onAdd((e: any, id: string) => {
       const kd = enemyKind(String(e.kind));
-      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : 11 }); // os três monstros têm kit de sprites
+      // os monstros têm kit de sprites; os chefes emprestam o corpo de um monstro, maior
+      const view = new ActorView(this, this.atlases.get(kd.sprite ?? String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
+      if (kd.boss && view.isSprite) (view.obj as Phaser.GameObjects.Sprite).setTint(kd.color);
       const at = toScreen(e.x, e.y);
       view.obj.setPosition(at.sx, at.sy);
       this.sprites.set(`e:${id}`, view);
@@ -133,6 +139,8 @@ class WorldScene extends Phaser.Scene {
       this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
     });
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
+    st.items.onAdd((g: any, id: string) => this.ground.add(id, { itemId: String(g.itemId), qty: Number(g.qty) || 1, x: g.x, y: g.y, owner: String(g.owner), party: String(g.party), lockS: Number(g.lockS) || 0 }));
+    st.items.onRemove((_: any, id: string) => this.ground.remove(id));
 
     // HUD, menu e entrada
     this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }) });
@@ -191,7 +199,9 @@ class WorldScene extends Phaser.Scene {
       if (!d) return;
       this.inv.toast(`+ ${d.name}${m.qty > 1 ? ` x${m.qty}` : ""}`, RARITY_COLOR[d.rarity]);
       sfx.pickup();
+      if (rarityIndex(d.rarity) >= 2) revealItem(d); // raro ou melhor: animação no centro da tela, proporcional à raridade
     });
+    this.room.onMessage(Evt.Chest, (m: ChestEvent) => this.onChest(m));
     this.room.onMessage(Evt.Pvp, (m: PvpEvent) => {
       const say: Record<string, [string, string]> = {
         cancel: ["Canalização interrompida", "#ffb3a6"], stop: ["Canalização cancelada", "#e6eef9"],
@@ -246,6 +256,9 @@ class WorldScene extends Phaser.Scene {
       }
       if (ptr.wasTouch || this.touchMode) return; // no celular quem anda é o joystick (tocar no campo de visão não move)
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
+      const near = this.ground.nearest(x, y, 0.9); // clicar num item no chão também pede para pegá-lo (se estiver ao alcance)
+      const me = this.me();
+      if (near && me) { const g = this.state.items.get(near); if (g && Math.hypot(g.x - me.x, g.y - me.y) <= 2.6) this.room.send(Msg.Pickup, { id: near }); }
       this.room.send(Msg.MoveTo, { x, y });
     });
     // distingue toque de mouse (define como a mira é escolhida)
@@ -719,6 +732,25 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** o baú do chefe abre: coluna de luz e explosão na cor da melhor raridade, mais o anúncio no centro da tela */
+  private onChest(m: ChestEvent) {
+    const { sx, sy } = toScreen(m.x, m.y);
+    const hex = RARITY_HEX[m.rarity];
+    const t = rarityIndex(m.rarity);
+    const box = this.add.rectangle(sx, sy - 6, 26, 18, 0x6b4a2e).setStrokeStyle(3, hex).setDepth(sy + 3);
+    const beam = this.add.rectangle(sx, sy - 140, 36 + t * 8, 280, hex, 0.5).setBlendMode(Phaser.BlendModes.ADD).setDepth(sy + 2);
+    this.tweens.add({ targets: beam, alpha: 0, scaleX: 2.2, duration: 1600, ease: "Cubic.easeOut", onComplete: () => beam.destroy() });
+    this.tweens.add({ targets: box, alpha: 0, delay: 1500, duration: 600, onComplete: () => box.destroy() });
+    this.ring(m.x, m.y, 2.6, hex, 900, 0.2);
+    this.ring(m.x, m.y, 1.4, 0xffffff, 600, 0.3);
+    this.emitters.gold.explode(30 + t * 8, sx, sy - 10);
+    this.cameras.main.shake(260, 0.008);
+    this.cameras.main.flash(180, (hex >> 16) & 255, (hex >> 8) & 255, hex & 255);
+    sfx.boom();
+    if (t >= 2) showRarityReveal(`Baú: ${m.boss}`, m.rarity, "Seus itens caíram ao redor");
+    else this.inv.toast(`Baú de ${m.boss}`, RARITY_COLOR[m.rarity]);
+  }
+
   private onLevelUp(m: LevelUpEvent) {
     const s = this.sprites.get(`p:${m.id}`)?.obj;
     if (!s) return;
@@ -780,6 +812,7 @@ class WorldScene extends Phaser.Scene {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
     this.driveJoystick(time);
+    this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
     if (this.portalG) this.drawPortals(time);
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes
     this.bars.clear();

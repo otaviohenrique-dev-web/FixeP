@@ -2,7 +2,9 @@
 // Não há faixa de nível: qualquer jogador pode atravessar quando quiser; as zonas mais fundas são MUITO mais punitivas
 // (inimigos de nível alto) e, em troca, concentram mais recursos (`lootMult` maior = mais itens e raridades melhores).
 
-export type EnemyKind = "skeleton" | "wolf" | "wraith";
+import type { Rarity } from "./items";
+
+export type EnemyKind = "skeleton" | "wolf" | "wraith" | "bone_king" | "frost_alpha" | "crypt_lord";
 export type ZoneTheme = "ash" | "frost" | "crypt";
 
 export interface PortalDef { x: number; y: number; r: number; to: number }
@@ -16,7 +18,17 @@ export interface ZoneDef {
   arrive: Record<number, { x: number; y: number }>; // onde se chega vindo de cada zona (fora do raio dos portais)
   portals: readonly PortalDef[]; // basta pisar neles: o servidor decide a travessia
   enemies: readonly { kind: EnemyKind; x: number; y: number; level: number }[];
-  lootMult: number; // multiplicador de chance de itens (e de raridade) ao abater inimigos da zona
+  lootMult: number; // dificuldade relativa da zona (informativo; os números reais ficam em `drops` e `boss`)
+  drops: ZoneDrops; // o que os inimigos comuns soltam
+  boss: ZoneBoss; // o chefe da zona (um por zona) e o baú que ele solta
+}
+
+/** Drops de inimigos comuns: chance de equipamento/poção por abate e pesos das raridades. Raridade que não está na tabela NUNCA cai aqui (teto da zona). */
+export interface ZoneDrops { gear: number; potion: number; weights: Partial<Record<Rarity, number>> }
+/** Chefe: aparece sempre; ao cair, volta depois de `respawnS`. O baú dá `count` itens (o primeiro, no mínimo `min`) e a tabela é o teto da zona. */
+export interface ZoneBoss {
+  kind: EnemyKind; x: number; y: number; level: number; respawnS: number; name: string;
+  chest: { count: number; min: Rarity; weights: Partial<Record<Rarity, number>> };
 }
 
 export const PORTAL_RADIUS = 1.6;
@@ -37,6 +49,8 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "skeleton", x: 11, y: 12, level: 3 },
     ],
     lootMult: 1,
+    drops: { gear: 0.07, potion: 0.08, weights: { common: 85, uncommon: 15 } },
+    boss: { kind: "bone_king", name: "Rei Ossudo", x: 33, y: 7, level: 6, respawnS: 300, chest: { count: 2, min: "uncommon", weights: { common: 45, uncommon: 55 } } },
   },
   2: {
     id: 2, name: "Floresta Gélida", theme: "frost", w: 44, h: 44,
@@ -57,6 +71,8 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "wolf", x: 38, y: 28, level: 10 },
     ],
     lootMult: 1.6,
+    drops: { gear: 0.09, potion: 0.1, weights: { common: 62, uncommon: 30, rare: 8 } },
+    boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 30, rare: 52, epic: 18 } } },
   },
   3: {
     id: 3, name: "Catacumbas", theme: "crypt", w: 44, h: 44,
@@ -74,6 +90,8 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "wraith", x: 22, y: 38, level: 20 },
     ],
     lootMult: 2.4,
+    drops: { gear: 0.11, potion: 0.12, weights: { common: 50, uncommon: 35, rare: 13, epic: 2 } },
+    boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "epic", weights: { rare: 25, epic: 55, legendary: 18, mythic: 2 } } },
   },
 };
 

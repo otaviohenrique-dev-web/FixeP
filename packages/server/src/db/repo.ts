@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, type CharClass } from "@frixep/shared";
+import { NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 import type { Db } from "./index.js";
 
@@ -86,21 +86,27 @@ export class Repo {
     await this.db.query("update characters set zone = $2, updated_at = now() where id = $1", [charId, zone]);
   }
 
-  async loadInventory(charId: string): Promise<Inventory> {
+  async loadInventory(charId: string, cls: CharClass = "warrior"): Promise<Inventory> {
     const inv = emptyInventory();
     const items = await this.db.query<{ slot: number; item_id: string; qty: number }>(
       "select slot, item_id, qty from inventory_items where character_id = $1",
       [charId],
     );
     for (const r of items.rows) {
-      const def = ITEMS[r.item_id]; // item removido do jogo é ignorado em vez de quebrar a entrada
+      const id = migrateItemId(r.item_id, cls); // item da primeira versão vira o equivalente atual
+      const def = ITEMS[id]; // item removido do jogo é ignorado em vez de quebrar a entrada
       if (!def || r.slot < 0 || r.slot >= INV_SLOTS || inv.slots[r.slot]) continue;
-      inv.slots[r.slot] = { id: r.item_id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
+      if (id !== r.item_id) inv.migrated = true;
+      inv.slots[r.slot] = { id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
     }
     const eq = await this.db.query<{ slot: string; item_id: string }>("select slot, item_id from equipment where character_id = $1", [charId]);
     for (const r of eq.rows) {
-      const def = ITEMS[r.item_id];
-      if (def && (EQUIP_SLOTS as readonly string[]).includes(r.slot) && def.kind === r.slot) inv.equip[r.slot as "weapon" | "armor"] = r.item_id;
+      const id = migrateItemId(r.item_id, cls);
+      const def = ITEMS[id];
+      if (def && (EQUIP_SLOTS as readonly string[]).includes(r.slot) && def.kind === r.slot) {
+        inv.equip[r.slot as EquipSlot] = id;
+        if (id !== r.item_id) inv.migrated = true;
+      }
     }
     return inv;
   }
