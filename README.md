@@ -86,7 +86,7 @@ Para trocar por arte desenhada à mão basta substituir os PNGs com os mesmos no
   Vida, dano e XP crescem com o nível do inimigo (`enemyHp`, `enemyDmg`, `enemyXp`); o nível de cada ponto de nascimento fica em `ENEMY_SPAWNS`.
 - Jogadores e inimigos têm uma **placa** sobre a cabeça (`packages/client/src/plate.ts`): nome em cima; embaixo, o selo de nível à esquerda e a barra de vida segmentada.
   A moldura do selo muda a cada 10 níveis: bronze (1-9), prata (10-19), ouro com rebites (20-29), azul-gelo com brilho (30-39), violeta com gema e brilho (40-49)
-  e brasa com gema e brilho pulsante (50). A moldura do retrato na HUD acompanha. A barra é verde para você, verde-clara para aliados e vermelha para inimigos e jogadores em PvP.
+  e brasa com gema e brilho pulsante (50). O retrato na HUD usa a mesma moldura (cor, rebites, gema, brilho) com o nível num selo no canto, e no lugar da barra de vida (que já está na placa) fica a **barra da faixa**: `Gelo · 33 / 40` mostra quanto falta para a próxima borda. A barra é verde para você, verde-clara para aliados e vermelha para inimigos e jogadores em PvP.
 - Quem fala no chat da zona também vê o balão de fala sobre a cabeça do personagem por 6 s.
 
 ## Mochila e equipamento

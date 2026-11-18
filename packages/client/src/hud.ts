@@ -35,6 +35,7 @@ export interface Hud {
 }
 
 const ICON: Record<string, string> = {
+  crown: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h2v2h1V4h2V3h1V2h2v1h1v1h2v3h1V5h2v7H1z"/><path fill="#fff" opacity=".4" d="M2 6h1v5H2zM7 3h2v1H7z"/></svg>`,
   heart: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M2 3h4v1h1v1h2V4h1V3h4v1h1v4h-1v1h-1v1h-1v1h-1v1H9v1H7v-1H6v-1H5v-1H4V9H3V8H2z"/><path fill="#fff" opacity=".45" d="M3 4h2v1H3z"/></svg>`,
   flame: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M8 1h1v2h1v2h1v1h1v3h1v3h-1v2h-2v1H6v-1H4v-2H3V9h1V7h1V6h1V3h1z"/><path fill="#fff" opacity=".55" d="M8 8h1v1h1v3H8v1H7v-2h1z"/></svg>`,
   eye: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M5 5h6v1h2v1h2v2h-2v1h-2v1H5v-1H3V9H1V7h2V6h2z"/><path fill="#0b1018" d="M7 6h2v4H7z"/><path fill="#fff" opacity=".6" d="M7 6h1v1H7z"/></svg>`,
@@ -42,6 +43,7 @@ const ICON: Record<string, string> = {
   drop: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M7 1h2v2h1v2h1v2h1v4h-1v2h-1v1H6v-1H5v-2H4V7h1V5h1V3h1z"/><path fill="#fff" opacity=".55" d="M6 8h1v3H6z"/></svg>`,
 };
 
+const TIER_NAMES = ["Bronze", "Prata", "Ouro", "Gelo", "Violeta", "Brasa"];
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 
 const CSS = `
@@ -52,7 +54,20 @@ const CSS = `
   box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,225,160,.22),0 6px 16px rgba(0,0,0,.6)}
 /* ---------- unidade (retrato + barras) ---------- */
 .hd-unit{position:absolute;left:max(12px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));display:flex;gap:10px;align-items:flex-start;width:min(300px,64vw)}
-.hd-portrait{flex:none;width:68px;height:68px;overflow:hidden;border-color:var(--gold)}
+.hd-pwrap{position:relative;flex:none;width:72px;height:72px;--tc:#9a8460;--tl:#dccfb0}
+.hd-portrait{position:absolute;inset:0;overflow:hidden;border:3px solid var(--tc);border-radius:11px;box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,255,255,.14),0 6px 16px rgba(0,0,0,.6)}
+.hd-pwrap.t0{--tc:#9a8460;--tl:#dccfb0}.hd-pwrap.t1{--tc:#c9d3df;--tl:#f4f8ff}.hd-pwrap.t2{--tc:#f0c34a;--tl:#fff0b8}
+.hd-pwrap.t3{--tc:#4cc3ee;--tl:#d4f4ff}.hd-pwrap.t4{--tc:#b575f5;--tl:#ecd7ff}.hd-pwrap.t5{--tc:#ff6a3d;--tl:#ffd9b8}
+.hd-pwrap.t3 .hd-portrait,.hd-pwrap.t4 .hd-portrait,.hd-pwrap.t5 .hd-portrait{box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,255,255,.14),0 0 14px var(--tc),0 6px 16px rgba(0,0,0,.6)}
+.hd-pwrap.t5 .hd-portrait{animation:hd-glow 1.6s ease-in-out infinite}
+@keyframes hd-glow{0%,100%{box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,255,255,.14),0 0 8px var(--tc),0 6px 16px rgba(0,0,0,.6)}50%{box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,255,255,.14),0 0 22px var(--tc),0 6px 16px rgba(0,0,0,.6)}}
+/* rebites nos cantos (ouro em diante) e gema no topo (violeta e brasa), como no selo da placa */
+.hd-riv{display:none;position:absolute;width:6px;height:6px;background:var(--tl);border-radius:1px;box-shadow:0 0 0 1px #000;z-index:2}
+.hd-riv:nth-of-type(1){left:-2px;top:-2px}.hd-riv:nth-of-type(2){right:-2px;top:-2px}.hd-riv:nth-of-type(3){left:-2px;bottom:-2px}.hd-riv:nth-of-type(4){right:-2px;bottom:-2px}
+.hd-pwrap.t2 .hd-riv,.hd-pwrap.t3 .hd-riv,.hd-pwrap.t4 .hd-riv,.hd-pwrap.t5 .hd-riv{display:block}
+.hd-gem{display:none;position:absolute;left:50%;top:-10px;width:14px;height:14px;margin-left:-7px;transform:rotate(45deg);background:linear-gradient(135deg,var(--tl),var(--tc) 60%);border:2px solid #05080d;border-radius:2px;z-index:3}
+.hd-pwrap.t4 .hd-gem,.hd-pwrap.t5 .hd-gem{display:block}
+.hd-lvb{position:absolute;right:-6px;bottom:-6px;min-width:26px;height:22px;padding:0 4px;display:grid;place-items:center;border-radius:6px;background:#0d1420;border:3px solid var(--tc);box-shadow:0 0 0 1px #000;font:900 13px/1 "Cinzel",Georgia,serif;color:var(--tl);z-index:4;text-shadow:0 1px 2px #000}
 .hd-portrait canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none}
 .hd-portrait.has canvas{display:block}
 .hd-portrait.has .hd-ini{display:none}
@@ -66,7 +81,8 @@ const CSS = `
 .hd-fill,.hd-lag{position:absolute;inset:0;transform-origin:left;transform:scaleX(1)}
 .hd-fill{transition:transform .15s}
 .hd-lag{background:rgba(255,230,180,.5);transition:transform .7s .25s}
-.hd-hp .hd-fill{background:linear-gradient(180deg,#ee5a3b,#8d1a0c)}
+.hd-tr .hd-fill{background:linear-gradient(180deg,var(--tl),var(--tc))}
+.hd-tr .hd-txt{letter-spacing:.14em;text-transform:uppercase}
 .hd-track::after{content:"";position:absolute;left:0;right:0;top:0;height:40%;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0))}
 .hd-txt{position:absolute;inset:0;display:grid;place-items:center;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-shadow:0 1px 3px #000,0 0 4px #000}
 .hd-buff{margin-top:2px;font:700 9px/1 "Cinzel",Georgia,serif;letter-spacing:.25em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 10px rgba(255,120,40,.6);opacity:0;transition:opacity .2s}
@@ -139,10 +155,10 @@ const CSS = `
 .hd-alert{position:absolute;left:50%;top:calc(max(12px,env(safe-area-inset-top)) + 118px);transform:translateX(-50%);padding:8px 16px;border-radius:10px;max-width:88vw;text-align:center;pointer-events:none;opacity:0;transition:opacity .25s;
   font:700 12px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#ffb0a0;background:linear-gradient(180deg,#3a1414,#160808);border:2px solid #c0392b;box-shadow:0 6px 16px rgba(0,0,0,.6)}
 .hd-alert.on{opacity:1}
-.hd.pvp .hd-portrait{border-color:#c0392b;box-shadow:0 0 0 1px #000,0 0 12px rgba(220,60,40,.55)}
+.hd.pvp .hd-pwrap{filter:drop-shadow(0 0 7px rgba(235,70,50,.9))}
 @media (max-width:820px){
   .hd-bar{gap:10px}.hd-btn{width:48px;height:48px}.hd-btn.big{width:56px;height:56px}.hd-sn{font-size:7px}
-  .hd-portrait{width:56px;height:56px}.hd-track{height:16px}
+  .hd-pwrap{width:60px;height:60px}.hd-track{height:16px}
 }
 `;
 
@@ -159,10 +175,10 @@ export function mountHud(opts: HudOptions): Hud {
   root.className = "hd";
   root.innerHTML = `
     <div class="hd-unit">
-      <div class="hd-frame hd-portrait"><canvas width="48" height="48"></canvas><span class="hd-ini"></span></div>
+      <div class="hd-pwrap t0"><div class="hd-frame hd-portrait"><canvas width="48" height="48"></canvas><span class="hd-ini"></span></div><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-gem"></i><span class="hd-lvb">1</span></div>
       <div class="hd-bars">
         <div class="hd-name"><span class="hd-nm"></span><small>${cdef.name}</small></div>
-        <div class="hd-meter hd-hp"><span class="ic" style="color:#ee5a3b">${ICON.heart}</span><div class="hd-track"><div class="hd-lag"></div><div class="hd-fill"></div><div class="hd-txt hd-hp-t"></div></div></div>
+        <div class="hd-meter hd-tr"><span class="ic" style="color:var(--tc)">${ICON.crown}</span><div class="hd-track"><div class="hd-fill"></div><div class="hd-txt hd-tr-t"></div></div></div>
         <div class="hd-meter hd-rs"><span class="ic" style="color:${resColor}">${ICON[res.icon] ?? ""}</span><div class="hd-track"><div class="hd-fill" style="background:linear-gradient(180deg,${resColor},color-mix(in srgb,${resColor} 45%,#000))"></div><div class="hd-txt hd-rs-t"></div></div></div>
         <div class="hd-buff">Grito ativo</div>
       </div>
@@ -186,9 +202,10 @@ export function mountHud(opts: HudOptions): Hud {
   const portrait = q(".hd-portrait");
   const pCanvas = q<HTMLCanvasElement>(".hd-portrait canvas");
   q(".hd-ini").textContent = (opts.name ?? cdef.name).slice(0, 1).toUpperCase();
-  const hpFill = q(".hd-hp .hd-fill");
-  const hpLag = q(".hd-hp .hd-lag");
-  const hpTxt = q(".hd-hp-t");
+  const pwrap = q(".hd-pwrap");
+  const lvb = q(".hd-lvb");
+  const trFill = q(".hd-tr .hd-fill");
+  const trTxt = q(".hd-tr-t");
   const rsFill = q(".hd-rs .hd-fill");
   const rsTxt = q(".hd-rs-t");
   const buff = q(".hd-buff");
@@ -284,11 +301,8 @@ export function mountHud(opts: HudOptions): Hud {
 
   return {
     trigger,
-    setHp(hp, max) {
-      const r = Math.max(0, Math.min(1, hp / max));
-      hpFill.style.transform = `scaleX(${r})`;
-      hpLag.style.transform = `scaleX(${r})`;
-      hpTxt.textContent = `${Math.ceil(hp)} / ${max}`;
+    setHp() {
+      /* a vida agora fica só na placa sobre a cabeça (plate.ts): sem barra repetida aqui */
     },
     setMana(cur, max) {
       curRes = cur;
@@ -298,9 +312,14 @@ export function mountHud(opts: HudOptions): Hud {
     },
     setProgress(level, xp, need) {
       const tier = levelTier(level);
-      const tc = hex(LEVEL_TIER_COLORS[tier]);
-      portrait.style.borderColor = tc; // a moldura do retrato acompanha a faixa de nível
-      portrait.style.boxShadow = tier >= 3 ? `0 0 0 1px #000,0 0 12px ${tc}aa,0 6px 16px rgba(0,0,0,.6)` : "";
+      pwrap.className = `hd-pwrap t${tier}`; // a moldura do retrato (cor, rebites, gema, brilho) acompanha a faixa de nível
+      lvb.textContent = String(level);
+      // barra da faixa: quanto falta para a próxima borda (o incentivo para continuar subindo)
+      const start = tier === 0 ? 1 : tier * 10;
+      const next = (tier + 1) * 10;
+      const rr = need > 0 ? Math.min(1, xp / need) : 1;
+      if (tier >= 5) { trFill.style.transform = "scaleX(1)"; trTxt.textContent = `${TIER_NAMES[tier]} · máx`; }
+      else { trFill.style.transform = `scaleX(${Math.min(1, (level - start + rr) / (next - start))})`; trTxt.textContent = `${TIER_NAMES[tier]} · ${level} / ${next}`; }
       const r = need > 0 ? Math.min(1, xp / need) : 1;
       lvTxt.textContent = need > 0 ? `NV ${level}  ·  ${Math.floor(xp)} / ${need}` : `NV ${level}  ·  MÁX`;
       xpFill.style.transform = `scaleX(${r})`;
