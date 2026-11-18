@@ -9,7 +9,10 @@ import {
   maxHpFor, maxManaFor, rarityIndex, gearBonuses, effectiveAction, migrateItemId, kitLines, type CharClass, type Rarity,
 } from "@frixep/shared";
 import { emptyInventory, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, snapshot, sortInventory, migrateInventory } from "../src/game/inventory.js";
-import { rollMobLoot, rollChestLoot, pickGear } from "../src/game/loot.js";
+import { rollMobLoot as rollMobLootAll, rollChestLoot as rollChestLootAll, pickGear } from "../src/game/loot.js";
+// as moedas (sacolas e Óbolos) são testadas em economy.unit.ts; aqui só o equipamento e a poção
+const rollMobLoot: typeof rollMobLootAll = (...a) => rollMobLootAll(...a).filter((d) => ITEMS[d.id]);
+const rollChestLoot: typeof rollChestLootAll = (...a) => rollChestLootAll(...a).filter((d) => ITEMS[d.id]);
 import { openDb } from "../src/db/index.js";
 import { Repo } from "../src/db/repo.js";
 

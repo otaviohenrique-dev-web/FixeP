@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
-import type { Db } from "./index.js";
+import type { Db, Tx } from "./index.js";
+
+export interface InvRows { items: { slot: number; id: string; qty: number }[]; eq: { slot: string; id: string }[]; iron: number; obols: number }
 
 export type { CharClass };
 export interface CharacterRow {
@@ -99,6 +101,9 @@ export class Repo {
       if (id !== r.item_id) inv.migrated = true;
       inv.slots[r.slot] = { id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
     }
+    const w = await this.db.query<{ iron: number; obols: number }>("select iron, obols from characters where id = $1", [charId]);
+    inv.iron = Math.max(0, Number(w.rows[0]?.iron) || 0);
+    inv.obols = Math.max(0, Number(w.rows[0]?.obols) || 0);
     const eq = await this.db.query<{ slot: string; item_id: string }>("select slot, item_id from equipment where character_id = $1", [charId]);
     for (const r of eq.rows) {
       const id = migrateItemId(r.item_id, cls);
@@ -111,22 +116,41 @@ export class Repo {
     return inv;
   }
 
-  /** Troca o inventário salvo pelo estado atual, numa transação. A fotografia é copiada ANTES de qualquer espera. */
+  /** Fotografia do que será gravado (copiada na hora, antes de qualquer espera). */
+  inventoryRows(inv: Inventory): InvRows {
+    return {
+      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty }] : [])),
+      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]! }] : [])),
+      iron: inv.iron, obols: inv.obols,
+    };
+  }
+
+  private async writeInventory(q: Tx["query"], charId: string, r: InvRows) {
+    await q("select pg_advisory_xact_lock(hashtext($1))", [`inv:${charId}`]);
+    await q("delete from inventory_items where character_id = $1", [charId]);
+    await q("delete from equipment where character_id = $1", [charId]);
+    await q("update characters set iron = $2, obols = $3 where id = $1", [charId, r.iron, r.obols]);
+    if (r.items.length) {
+      const ph = r.items.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
+      await q(`insert into inventory_items (character_id, slot, item_id, qty) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty])]);
+    }
+    if (r.eq.length) {
+      const ph = r.eq.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(",");
+      await q(`insert into equipment (character_id, slot, item_id) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id])]);
+    }
+  }
+
+  /** Troca o inventário (e o saldo) salvo pelo estado atual, numa transação. A fotografia é copiada ANTES de qualquer espera. */
   async saveInventory(charId: string, inv: Inventory): Promise<void> {
-    const rows = inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty }] : []));
-    const eq = EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]! }] : []));
+    const rows = this.inventoryRows(inv);
+    await this.db.tx(({ query: q }) => this.writeInventory(q, charId, rows));
+  }
+
+  /** Grava DOIS personagens na MESMA transação (a troca entre jogadores: ou grava os dois lados ou nenhum, sem duplicar nem perder item). */
+  async saveInventoryPair(a: [string, InvRows], b: [string, InvRows]): Promise<void> {
     await this.db.tx(async ({ query: q }) => {
-      await q("select pg_advisory_xact_lock(hashtext($1))", [`inv:${charId}`]);
-      await q("delete from inventory_items where character_id = $1", [charId]);
-      await q("delete from equipment where character_id = $1", [charId]);
-      if (rows.length) {
-        const ph = rows.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
-        await q(`insert into inventory_items (character_id, slot, item_id, qty) values ${ph}`, [charId, ...rows.flatMap((r) => [r.slot, r.id, r.qty])]);
-      }
-      if (eq.length) {
-        const ph = eq.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(",");
-        await q(`insert into equipment (character_id, slot, item_id) values ${ph}`, [charId, ...eq.flatMap((r) => [r.slot, r.id])]);
-      }
+      for (const [id, r] of [a, b].sort((x, y) => (x[0] < y[0] ? -1 : 1))) await this.writeInventory(q, id, r); // ordem fixa: sem impasse entre trocas
     });
   }
 }
+

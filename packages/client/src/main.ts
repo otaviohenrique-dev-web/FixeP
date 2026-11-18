@@ -2,9 +2,9 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex,
+  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
+  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -18,6 +18,8 @@ import { mountJoystick } from "./touch";
 import { drawPlate, type PlateKind } from "./plate";
 import { mountChat } from "./chat";
 import { GroundLayer } from "./ground";
+import { NpcLayer } from "./npcs";
+import { mountEconomy, type EconomyUi } from "./economy";
 import { revealItem, showRarityReveal } from "./loot-fx";
 import { mountParty, type PartyUi } from "./party";
 
@@ -80,6 +82,9 @@ class WorldScene extends Phaser.Scene {
   private zoneId = 1;
   private portalG!: Phaser.GameObjects.Graphics;
   private ground!: GroundLayer;
+  private npcs!: NpcLayer;
+  private econ!: EconomyUi;
+  private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private portalDefs: { x: number; y: number; r: number; color: number }[] = [];
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -108,6 +113,7 @@ class WorldScene extends Phaser.Scene {
 
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
+    this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId));
     this.selG = this.add.graphics().setDepth(0.35);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
@@ -131,7 +137,8 @@ class WorldScene extends Phaser.Scene {
     st.enemies.onAdd((e: any, id: string) => {
       const kd = enemyKind(String(e.kind));
       // os monstros têm kit de sprites; os chefes emprestam o corpo de um monstro, maior
-      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
+      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
+
       const at = toScreen(e.x, e.y);
       view.obj.setPosition(at.sx, at.sy);
       this.sprites.set(`e:${id}`, view);
@@ -197,9 +204,20 @@ class WorldScene extends Phaser.Scene {
     this.room.onMessage(Evt.LevelUp, (m: LevelUpEvent) => this.onLevelUp(m));
 
     // mochila: registra os receptores ANTES de pedir a fotografia (evita perder a mensagem inicial)
-    this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls });
+    this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
+    // economia: saldo na HUD, comerciante, ferreira, troca e confirmação de quebrar
+    this.econ = mountEconomy({ send: (t, p) => this.room.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c) });
+    this.room.onMessage(Evt.Coins, (m: CoinsEvent) => {
+      if (m.iron) this.floatText(m.x, m.y - 0.9, `+${m.iron} Tostões`, "#cfd4dc", 16, false);
+      if (m.obols) { this.floatText(m.x, m.y - 1.3, `+${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color, 18, true); this.inv.toast(`+ ${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color); }
+      sfx.pickup();
+    });
+    this.room.onMessage(Evt.Trade, (m: TradeEvent) => this.econ.setTrade(m));
+    this.room.onMessage(Evt.TradeInvite, (m: { from: string }) => this.econ.showTradeInvite(String(m.from)));
+    this.room.onMessage(Evt.TradeInviteEnd, () => this.econ.endTradeInvite());
     this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => {
       this.inv.setSnapshot(s);
+      this.econ.setSnapshot(s);
       let n = 0;
       for (const st of s.inv) if (st && ITEMS[st.id]?.kind === "potion") n += st.qty;
       this.hud.setPotion(n); // slot da poção na HUD: estoque e recarga
@@ -222,7 +240,7 @@ class WorldScene extends Phaser.Scene {
       if (m.s === "cancel") this.hud.alert(t[0]);
       else this.inv.toast(t[0], t[1]);
     });
-    this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), "#ffb3a6"));
+    this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"));
     this.room.send(Msg.InvSync, {});
 
     // chat da zona (Enter abre/envia, Esc fecha; o servidor decide nome e texto)
@@ -258,6 +276,14 @@ class WorldScene extends Phaser.Scene {
     this.room.onMessage(Evt.Pong, (m: { t: number }) => stats.onPong(m.t));
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
+      const npc = this.npcs.hit(ptr.worldX, ptr.worldY); // clicar num NPC: conversa se estiver perto; senão, anda até ele
+      if (npc) {
+        const me = this.me();
+        if (me && Math.hypot(me.x - npc.x, me.y - npc.y) <= NPC_REACH) this.econ.openNpc(npc);
+        else if (me) { this.pendingNpc = npc; this.room.send(Msg.MoveTo, { x: npc.x, y: npc.y + 1.8 }); this.moveMarker(npc.x, npc.y + 1.8); }
+        return;
+      }
+      this.pendingNpc = null;
       const other = this.playerAt(ptr.worldX, ptr.worldY); // clicar em outro jogador só o seleciona (círculo verde + opções ao lado do seu retrato)
       if (other) {
         const p = other.p;
@@ -938,6 +964,14 @@ class WorldScene extends Phaser.Scene {
     if (!st?.players || !st?.enemies) return;
     this.driveJoystick(time);
     this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
+    const meNow = this.me();
+    if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
+      this.npcs.update(time, meNow.x, meNow.y);
+      const near = this.npcs.inReach(meNow.x, meNow.y);
+      this.econ.setNearNpc(near);
+      if (this.pendingNpc && near?.id === this.pendingNpc.id) { this.econ.openNpc(this.pendingNpc); this.pendingNpc = null; }
+      if (this.econ.isNpcOpen() && !near) this.econ.closeNpc();
+    }
     this.checkLock();
     this.drawMarks(time);
     if (this.portalG) this.drawPortals(time);

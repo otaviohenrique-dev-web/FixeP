@@ -42,6 +42,8 @@ export class Player extends Schema {
   invulnUntil = 0;
   buffUntil = 0;
   deadUntil = 0;
+  trading = false; // numa troca: a mochila fica travada (nada se move) até fechar a janela
+  dropAt = 0; // último item solto no chão (limite de frequência)
   traveling = false; // travessia aprovada: o jogador não age nem é alvo até sair da sala
   pvpChanUntil = 0; // fim da canalização (relógio da simulação)
 }
@@ -89,6 +91,8 @@ export class GroundItem extends Schema {
   // --- só no servidor ---
   unlockAt = 0;
   expireAt = 0;
+  noAutoSid = ""; // quem soltou o item não o pega sozinho até noAutoUntil (senão voltaria na hora); o pedido explícito de pegar vale
+  noAutoUntil = 0;
 }
 
 export class ZoneState extends Schema {

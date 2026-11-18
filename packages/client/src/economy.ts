@@ -1,0 +1,569 @@
+import { isTypingTarget } from "./keys";
+import {
+  ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
+  rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
+  type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide,
+} from "@frixep/shared";
+
+/**
+ * Interface da economia (DOM): saldo de moedas, comerciante, ferreira, troca entre jogadores e confirmação de quebrar.
+ * O servidor decide tudo (distância, saldo, espaço, chance): aqui só se mostram os mesmos números e se pedem as ações.
+ */
+export interface EconomyUi {
+  setSnapshot(s: InventorySnapshot): void;
+  openNpc(npc: NpcDef): void;
+  closeNpc(): void;
+  isNpcOpen(): boolean;
+  /** NPC ao alcance (ou null): mostra o botão "Falar com ..." (celular e teclado) */
+  setNearNpc(npc: NpcDef | null): void;
+  setTrade(ev: TradeEvent): void;
+  showTradeInvite(from: string): void;
+  endTradeInvite(): void;
+  isTrading(): boolean;
+  /** abre o diálogo de confirmação de quebrar o item do espaço `slot` */
+  confirmBreak(slot: number): void;
+}
+
+const CSS = `
+.ec-wallet{position:fixed;top:max(14px,env(safe-area-inset-top));right:118px;z-index:20;display:flex;gap:10px;align-items:center;height:44px;padding:0 12px;border-radius:22px;
+  background:rgba(8,16,28,.7);border:1px solid rgba(160,200,240,.3);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font:700 13px/1 "Cinzel",Georgia,serif;color:#e6eef9;pointer-events:none}
+.ec-wallet span{display:flex;align-items:center;gap:4px}
+.ec-wallet img,.ec-coin{width:20px;height:20px;image-rendering:pixelated;flex:none}
+.ec-wallet .o{color:#ff8a7a}
+.ec-back{position:fixed;inset:0;z-index:21;display:none;align-items:center;justify-content:center;background:rgba(2,5,11,.6);padding:12px;font-family:"Cinzel",Georgia,serif}
+.ec-back.open{display:flex}
+.ec-card{width:min(640px,100%);max-height:calc(100vh - 24px);display:flex;flex-direction:column;border-radius:8px;color:#dbeaff;
+  background:linear-gradient(180deg,rgba(20,34,52,.98),rgba(6,12,20,.99));border:1px solid rgba(255,150,70,.45);box-shadow:0 18px 50px rgba(0,0,0,.75),inset 0 1px 0 rgba(180,220,255,.12)}
+.ec-head{display:flex;align-items:center;gap:10px;padding:12px 14px 8px}
+.ec-title{margin:0;flex:1;font-size:14px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 14px rgba(255,120,40,.5)}
+.ec-title small{display:block;margin-top:3px;font:400 11px/1.2 Georgia,serif;letter-spacing:.02em;text-transform:none;color:#9fc0e0;text-shadow:none}
+.ec-x{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#bcd8f5;background:transparent;border:1px solid rgba(160,200,240,.3);font:700 16px/1 Georgia,serif}
+.ec-x:focus-visible,.ec-btn:focus-visible,.ec-tab:focus-visible,.ec-near:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
+.ec-bal{display:flex;gap:14px;padding:0 14px 8px;font:700 12px/1 "Cinzel",Georgia,serif}
+.ec-bal span{display:flex;align-items:center;gap:5px}
+.ec-tabs{display:flex;gap:6px;padding:0 14px 8px}
+.ec-tab{flex:1;min-height:36px;border-radius:5px;cursor:pointer;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:#9fc0e0;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2)}
+.ec-tab[aria-selected=true]{color:#fff;border-color:#ff9a4d;background:rgba(255,140,60,.12)}
+.ec-list{overflow:auto;padding:0 14px 10px;display:flex;flex-direction:column;gap:5px;min-height:120px}
+.ec-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.18)}
+.ec-row.sel{border-color:#ffd08a;box-shadow:0 0 12px rgba(255,170,80,.3)}
+.ec-row.dis{opacity:.5}
+.ec-ic{width:40px;height:40px;flex:none;image-rendering:pixelated;object-fit:contain}
+.ec-info{flex:1;min-width:0}
+.ec-info b{display:block;font:700 12px/1.25 "Cinzel",Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ec-info small{display:block;font:400 11px/1.3 Georgia,serif;color:#9fc0e0}
+.ec-price{display:flex;align-items:center;gap:4px;font:700 12px/1 "Cinzel",Georgia,serif;white-space:nowrap;color:#e6eef9}
+.ec-price.bad{color:#ff9d8a}
+.ec-btn{min-height:36px;padding:0 12px;border-radius:5px;cursor:pointer;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:#eaf4ff;
+  background:linear-gradient(180deg,rgba(24,40,60,.85),rgba(7,13,22,.92));border:1px solid rgba(255,150,70,.4);touch-action:manipulation}
+.ec-btn:hover:not(:disabled){border-color:#ff9a4d}
+.ec-btn:disabled{opacity:.4;cursor:default}
+.ec-btn.danger{border-color:rgba(255,110,90,.55);color:#ffb3a6}
+.ec-btn.go{border-color:#7dd68a;color:#c9ffd2}
+.ec-note{margin:0;padding:0 14px 10px;font:400 12px/1.45 Georgia,serif;color:#9fc0e0}
+.ec-note.bad{color:#ff9d8a}
+.ec-foot{display:flex;gap:8px;align-items:center;padding:10px 14px 14px;border-top:1px solid rgba(160,200,240,.15)}
+.ec-foot .ec-note{flex:1;padding:0}
+.ec-empty{padding:18px 6px;text-align:center;font:400 12px/1.4 Georgia,serif;color:#7fa6cc}
+.ec-near{position:fixed;left:50%;bottom:calc(max(96px,env(safe-area-inset-bottom)) + 70px);transform:translateX(-50%);z-index:18;display:none;min-height:42px;padding:0 18px;border-radius:21px;cursor:pointer;
+  font:700 12px/1 "Cinzel",Georgia,serif;letter-spacing:.12em;color:#f4e6b8;background:rgba(40,26,12,.88);border:2px solid #c9a45c;box-shadow:0 4px 14px rgba(0,0,0,.6);touch-action:manipulation}
+.ec-near.show{display:block}
+@media (max-width:620px){.ec-wallet{right:12px;top:calc(max(14px,env(safe-area-inset-top)) + 54px);height:30px;padding:0 10px;font-size:12px}.ec-wallet img{width:16px;height:16px}.ec-near{bottom:calc(max(96px,env(safe-area-inset-bottom)) + 150px)}.ec-near kbd{display:none}}
+.ec-near kbd{margin-right:8px;font:inherit;opacity:.7}
+.ec-trade{width:min(720px,100%)}
+.ec-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 8px;overflow:auto}
+@media (max-width:620px){.ec-cols{grid-template-columns:1fr}}
+.ec-col{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:6px;background:rgba(6,12,20,.55);border:1px solid rgba(160,200,240,.18)}
+.ec-col.ok{border-color:#7dd68a;box-shadow:0 0 14px rgba(125,214,138,.25)}
+.ec-col h3{margin:0;font:700 11px/1.2 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#ffb072;display:flex;justify-content:space-between;gap:6px}
+.ec-col h3 em{font-style:normal;color:#7dd68a;letter-spacing:.06em}
+.ec-offer{display:flex;flex-wrap:wrap;gap:5px;min-height:46px;align-content:flex-start}
+.ec-chip{position:relative;width:44px;height:44px;border-radius:5px;background:rgba(6,12,20,.8);border:1px solid rgba(160,200,240,.25);display:grid;place-items:center;padding:0}
+.ec-chip img{width:36px;height:36px;image-rendering:pixelated}
+.ec-chip i{position:absolute;right:2px;bottom:1px;font:700 10px/1 "Cinzel",Georgia,serif;font-style:normal;text-shadow:0 1px 3px #000}
+.ec-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.ec-grid .ec-chip{width:auto;height:auto;aspect-ratio:1;cursor:pointer;color:inherit}
+.ec-grid .ec-chip[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 10px rgba(255,170,80,.4)}
+.ec-coinrow{display:flex;align-items:center;gap:6px;font:700 11px/1 "Cinzel",Georgia,serif}
+.ec-coinrow input{width:92px;min-height:30px;box-sizing:border-box;padding:0 6px;border-radius:5px;border:1px solid rgba(160,200,240,.3);background:rgba(6,12,20,.9);color:#fff;font:700 12px/1 "Cinzel",Georgia,serif}
+.ec-invite{position:fixed;left:50%;bottom:calc(max(96px,env(safe-area-inset-bottom)) + 64px);transform:translateX(-50%);z-index:24;display:none;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;padding:10px 14px;border-radius:8px;max-width:calc(100vw - 24px);
+  font:700 12px/1.3 "Cinzel",Georgia,serif;color:#f4e6b8;background:rgba(20,30,46,.96);border:2px solid #c9a45c;box-shadow:0 6px 20px rgba(0,0,0,.7)}
+.ec-invite.show{display:flex}
+.ec-dlg{width:min(420px,100%);padding:16px;gap:10px}
+.ec-dlg h2{margin:0;font:700 14px/1.2 "Cinzel",Georgia,serif;letter-spacing:.12em;color:#ffb3a6}
+.ec-dlg p{margin:0;font:400 13px/1.45 Georgia,serif;color:#cfe0f3}
+.ec-dlg input{min-height:40px;box-sizing:border-box;padding:0 10px;border-radius:5px;border:1px solid rgba(255,110,90,.55);background:rgba(6,12,20,.9);color:#fff;font:700 14px/1 "Cinzel",Georgia,serif;letter-spacing:.2em;text-transform:uppercase}
+.ec-dlg .ec-row{margin:2px 0}
+.ec-dlg-acts{display:flex;gap:8px;justify-content:flex-end}
+`;
+
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+};
+const num = (n: number) => n.toLocaleString("pt-BR");
+
+function itemImg(id: string, cls = "ec-ic"): HTMLImageElement {
+  const i = el("img", cls);
+  i.src = `/assets/items/item_${id}.png`;
+  i.alt = "";
+  i.draggable = false;
+  i.onerror = () => { i.style.visibility = "hidden"; };
+  return i;
+}
+const coinImg = (kind: "iron" | "obols") => itemImg(kind === "iron" ? COIN_IRON.id : COIN_OBOL.id, "ec-coin");
+
+function price(n: number, bad = false): HTMLElement {
+  const p = el("span", "ec-price" + (bad ? " bad" : ""));
+  p.append(coinImg("iron"), document.createTextNode(num(n)));
+  return p;
+}
+
+/** resumo curto dos atributos de um item */
+function brief(d: ItemDef): string {
+  const o: string[] = [];
+  if (d.dmgPct) o.push(`+${d.dmgPct}% poder`);
+  if (d.hp) o.push(`+${d.hp} vida`);
+  if (d.crit) o.push(`+${d.crit}% crít.`);
+  if (d.dr) o.push(`−${d.dr}% dano`);
+  if (d.cdr) o.push(`−${d.cdr}% recarga`);
+  if (d.mana) o.push(`+${d.mana} rec.`);
+  if (d.regen) o.push(`+${d.regen}/s`);
+  if (d.heal) o.push(`cura ${d.heal}`);
+  return `${RARITY_NAME[d.rarity]} · nv ${d.minLevel}${o.length ? " · " + o.join(" · ") : ""}`;
+}
+
+export function mountEconomy(opts: { send(type: string, payload: unknown): void; getClass(): CharClass; getZone(): number; getLevel(): number; toast(text: string, color?: string): void }): EconomyUi {
+  const style = el("style");
+  style.textContent = CSS;
+  document.head.append(style);
+
+  let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null }, iron: 0, obols: 0 };
+
+  // ---- saldo na HUD
+  const wallet = el("div", "ec-wallet");
+  wallet.setAttribute("aria-label", "Moedas");
+  const wIron = el("span"), wObol = el("span", "o");
+  wIron.title = COIN_IRON.name;
+  wObol.title = COIN_OBOL.name;
+  const wIronN = el("b"), wObolN = el("b");
+  wIron.append(coinImg("iron"), wIronN);
+  wObol.append(coinImg("obols"), wObolN);
+  wallet.append(wIron, wObol);
+  document.body.append(wallet);
+
+  // ---- botão "Falar com ..." (aparece perto de um NPC; serve ao toque e ao teclado)
+  const near = el("button", "ec-near");
+  near.type = "button";
+  document.body.append(near);
+  let nearNpc: NpcDef | null = null;
+  near.onclick = () => { if (nearNpc) openNpc(nearNpc); };
+
+  // ---- janela dos NPCs
+  const back = el("div", "ec-back");
+  const card = el("div", "ec-card");
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  back.append(card);
+  document.body.append(back);
+  let npc: NpcDef | null = null;
+  let tab: "buy" | "sell" = "buy";
+  const picked = new Set<number>(); // ferreira: espaços escolhidos
+  const confirmSell = new Set<number>(); // venda de item raro: pede um segundo clique
+
+  const closeNpc = () => { back.classList.remove("open"); npc = null; picked.clear(); confirmSell.clear(); };
+  function openNpc(n: NpcDef) {
+    if (tradeOpen) return;
+    npc = n; tab = "buy"; picked.clear(); confirmSell.clear();
+    back.classList.add("open");
+    renderNpc();
+  }
+  back.onclick = (e) => { if (e.target === back) closeNpc(); };
+
+  function head(title: string, sub: string, onClose: () => void) {
+    const h = el("div", "ec-head");
+    const t = el("h2", "ec-title", title);
+    t.append(el("small", "", sub));
+    const x = el("button", "ec-x", "×");
+    x.type = "button";
+    x.setAttribute("aria-label", "Fechar");
+    x.onclick = onClose;
+    h.append(t, x);
+    return h;
+  }
+  const balance = () => {
+    const b = el("div", "ec-bal");
+    const a = el("span"); a.append(coinImg("iron"), document.createTextNode(`${num(snap.iron)} ${COIN_IRON.short}`));
+    const c = el("span"); c.style.color = COIN_OBOL.color; c.append(coinImg("obols"), document.createTextNode(`${num(snap.obols)} ${COIN_OBOL.short}`));
+    b.append(a, c);
+    return b;
+  };
+
+  function renderNpc() {
+    if (!npc) return;
+    card.replaceChildren();
+    if (npc.kind === "merchant") renderMerchant(npc); else renderSmith(npc);
+  }
+
+  function renderMerchant(n: NpcDef) {
+    card.append(head(`${n.name} · ${n.title}`, "Compro barato, vendo caro. Nada é de graça no submundo.", closeNpc), balance());
+    const tabs = el("div", "ec-tabs");
+    tabs.setAttribute("role", "tablist");
+    for (const [k, label] of [["buy", "Comprar"], ["sell", "Vender"]] as const) {
+      const b = el("button", "ec-tab", label);
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(tab === k));
+      b.onclick = () => { tab = k; confirmSell.clear(); renderNpc(); };
+      tabs.append(b);
+    }
+    card.append(tabs);
+    const list = el("div", "ec-list");
+    if (tab === "buy") {
+      for (const id of shopStock(opts.getClass())) {
+        const d = ITEMS[id];
+        const p = buyPrice(id);
+        const row = el("div", "ec-row" + (snap.iron < p ? " dis" : ""));
+        const info = el("div", "ec-info");
+        const nm = el("b", "", d.name);
+        nm.style.color = RARITY_COLOR[d.rarity];
+        info.append(nm, el("small", "", d.kind === "potion" ? d.desc : brief(d)));
+        const b = el("button", "ec-btn", "Comprar");
+        b.type = "button";
+        b.disabled = snap.iron < p;
+        b.onclick = () => opts.send(Msg.ShopBuy, { npc: n.id, id, qty: 1 });
+        row.append(itemImg(id), info, price(p, snap.iron < p), b);
+        if (d.kind === "potion") {
+          const b5 = el("button", "ec-btn", "×5");
+          b5.type = "button";
+          b5.disabled = snap.iron < p * 5;
+          b5.onclick = () => opts.send(Msg.ShopBuy, { npc: n.id, id, qty: 5 });
+          row.append(b5);
+        }
+        list.append(row);
+      }
+      card.append(list, el("p", "ec-note", `O comerciante só vende o equipamento da sua classe (${CLASS_DEFS[opts.getClass()].name}) até a raridade ${RARITY_NAME.rare.toLowerCase()}. O resto vem dos chefes e da forja.`));
+    } else {
+      let any = false;
+      snap.inv.forEach((st, i) => {
+        if (!st || !ITEMS[st.id]) return;
+        any = true;
+        const d = ITEMS[st.id];
+        const each = sellPrice(st.id);
+        const row = el("div", "ec-row");
+        const info = el("div", "ec-info");
+        const nm = el("b", "", d.name + (st.qty > 1 ? ` ×${st.qty}` : ""));
+        nm.style.color = RARITY_COLOR[d.rarity];
+        info.append(nm, el("small", "", `Valor médio ${num(itemValue(st.id))} · ${d.kind === "potion" ? d.desc : brief(d)}`));
+        const strong = rarityIndex(d.rarity) >= BREAK_CONFIRM_FROM;
+        const b = el("button", "ec-btn" + (confirmSell.has(i) ? " danger" : ""), confirmSell.has(i) ? "Confirmar?" : "Vender");
+        b.type = "button";
+        b.onclick = () => {
+          if (strong && !confirmSell.has(i)) { confirmSell.add(i); renderNpc(); return; }
+          confirmSell.delete(i);
+          opts.send(Msg.ShopSell, { npc: n.id, slot: i, qty: 1 });
+        };
+        row.append(itemImg(st.id), info, price(each), b);
+        if (st.qty > 1) {
+          const all = el("button", "ec-btn", "Tudo");
+          all.type = "button";
+          all.onclick = () => opts.send(Msg.ShopSell, { npc: n.id, slot: i, qty: st.qty });
+          row.append(all);
+        }
+        list.append(row);
+      });
+      if (!any) list.append(el("div", "ec-empty", "Sua mochila está vazia."));
+      card.append(list, el("p", "ec-note", "Só o que está na mochila se vende (equipado, não). O comerciante paga bem menos que o valor médio."));
+    }
+  }
+
+  function renderSmith(n: NpcDef) {
+    card.append(head(`${n.name} · ${n.title}`, `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`, closeNpc), balance());
+    const cap = zoneRarityCap(opts.getZone());
+    // só equipamentos da mochila; depois da primeira escolha, só os compatíveis
+    const first = [...picked][0];
+    const f = first !== undefined && snap.inv[first] ? ITEMS[snap.inv[first]!.id] : null;
+    const list = el("div", "ec-list");
+    let any = false;
+    snap.inv.forEach((st, i) => {
+      if (!st || !ITEMS[st.id] || ITEMS[st.id].kind === "potion") return;
+      const d = ITEMS[st.id];
+      const ok = !f || (d.kind === f.kind && d.rarity === f.rarity && d.cls === f.cls);
+      any = true;
+      const row = el("button", "ec-row" + (picked.has(i) ? " sel" : "") + (ok ? "" : " dis"));
+      row.type = "button";
+      row.style.cssText = "cursor:pointer;color:inherit;text-align:left;font:inherit";
+      row.disabled = !ok && !picked.has(i);
+      const info = el("div", "ec-info");
+      const nm = el("b", "", d.name);
+      nm.style.color = RARITY_COLOR[d.rarity];
+      info.append(nm, el("small", "", brief(d)));
+      row.append(itemImg(st.id), info);
+      row.onclick = () => { if (picked.has(i)) picked.delete(i); else if (picked.size < MERGE_COUNT) picked.add(i); renderNpc(); };
+      list.append(row);
+    });
+    if (!any) list.append(el("div", "ec-empty", "Você não tem equipamentos na mochila."));
+    card.append(list);
+    const ids = [...picked].map((i) => snap.inv[i]?.id ?? "");
+    const foot = el("div", "ec-foot");
+    const note = el("p", "ec-note");
+    const go = el("button", "ec-btn go", "Fundir");
+    go.type = "button";
+    go.disabled = true;
+    if (picked.size < MERGE_COUNT) note.textContent = `Escolha ${MERGE_COUNT} itens iguais (mesmo tipo, raridade e classe). Teto da forja nesta zona: ${RARITY_NAME[cap]}.`;
+    else {
+      const c = checkMerge(ids, opts.getZone());
+      if (!c.ok) { note.textContent = c.error; note.classList.add("bad"); } else {
+        const need = c.fee;
+        note.textContent = `Resultado: ${RARITY_NAME[c.to]} · chance ${Math.round(c.chance * 100)}% · custo ${num(need)} Tostões. Se falhar, a taxa e 1 dos itens se perdem.`;
+        if (snap.iron < need) { note.classList.add("bad"); note.textContent += " Tostões insuficientes."; } else go.disabled = false;
+      }
+    }
+    go.onclick = () => { opts.send(Msg.SmithMerge, { npc: n.id, slots: [...picked] }); picked.clear(); };
+    foot.append(note, go);
+    card.append(foot);
+  }
+
+  // ---- troca entre jogadores
+  const tback = el("div", "ec-back");
+  const tcard = el("div", "ec-card ec-trade");
+  tcard.setAttribute("role", "dialog");
+  tcard.setAttribute("aria-modal", "true");
+  tback.append(tcard);
+  document.body.append(tback);
+  let tradeOpen = false;
+  let mineSlots = new Map<number, number>(); // espaço -> quantidade oferecida
+  let mineIron = 0, mineObols = 0;
+  let last: TradeEvent | null = null;
+  let sendTimer: ReturnType<typeof setTimeout> | undefined;
+  let readyTimer: ReturnType<typeof setTimeout> | undefined;
+  const pushOffer = () => {
+    clearTimeout(sendTimer);
+    sendTimer = setTimeout(() => opts.send(Msg.TradeOffer, { items: [...mineSlots].map(([slot, qty]) => ({ slot, qty })), iron: mineIron, obols: mineObols }), 150);
+  };
+  const cancelTrade = () => { opts.send(Msg.TradeCancel, {}); closeTradeUi(); };
+  function closeTradeUi() { tradeOpen = false; tback.classList.remove("open"); clearTimeout(sendTimer); clearTimeout(readyTimer); last = null; }
+
+  function chips(side: TradeOfferSide): HTMLElement {
+    const box = el("div", "ec-offer");
+    for (const it of side.items) {
+      const d = ITEMS[it.id];
+      if (!d) continue;
+      const c = el("div", "ec-chip");
+      c.title = `${d.name}${it.qty > 1 ? ` ×${it.qty}` : ""} — ${brief(d)}`;
+      c.style.borderColor = RARITY_COLOR[d.rarity] + "99";
+      c.append(itemImg(it.id, ""));
+      if (it.qty > 1) { const q = el("i", "", String(it.qty)); c.append(q); }
+      box.append(c);
+    }
+    if (side.iron) { const c = el("div", "ec-chip"); c.title = coinName(COIN_IRON.id, side.iron); c.append(itemImg(COIN_IRON.id, ""), el("i", "", num(side.iron))); box.append(c); }
+    if (side.obols) { const c = el("div", "ec-chip"); c.title = coinName(COIN_OBOL.id, side.obols); c.append(itemImg(COIN_OBOL.id, ""), el("i", "", num(side.obols))); box.append(c); }
+    if (!box.childElementCount) box.append(el("div", "ec-empty", "Nada ainda"));
+    return box;
+  }
+
+  function renderTrade(ev: TradeEvent) {
+    last = ev;
+    const mine = ev.mine!, theirs = ev.theirs!;
+    tcard.replaceChildren();
+    tcard.append(head(`Troca com ${ev.with}`, "Os dois lados precisam aceitar. Qualquer mudança na oferta desfaz o aceite.", cancelTrade));
+    const cols = el("div", "ec-cols");
+    // minha oferta: escolho da mochila + moedas
+    const m = el("div", "ec-col" + (mine.ready ? " ok" : ""));
+    const mh = el("h3", "", "Sua oferta");
+    if (mine.ready) mh.append(el("em", "", "aceitou ✓"));
+    m.append(mh);
+    const grid = el("div", "ec-grid");
+    grid.setAttribute("role", "group");
+    grid.setAttribute("aria-label", "Sua mochila: toque para oferecer");
+    snap.inv.forEach((st, i) => {
+      const c = el("button", "ec-chip");
+      c.type = "button";
+      const d = st ? ITEMS[st.id] : null;
+      const on = mineSlots.has(i);
+      c.setAttribute("aria-pressed", String(on));
+      if (d && st) {
+        c.title = `${d.name}${st.qty > 1 ? ` ×${st.qty}` : ""} — ${brief(d)}`;
+        c.style.borderColor = RARITY_COLOR[d.rarity] + "88";
+        c.append(itemImg(st.id, ""));
+        if (st.qty > 1) c.append(el("i", "", String(st.qty)));
+        c.onclick = () => {
+          if (on) mineSlots.delete(i); else if (mineSlots.size < TRADE_MAX_ITEMS) mineSlots.set(i, st.qty);
+          renderTrade(last!);
+          pushOffer();
+        };
+      } else c.disabled = true;
+      grid.append(c);
+    });
+    m.append(grid);
+    for (const [kind, label, get, set] of [["iron", COIN_IRON.short, () => mineIron, (v: number) => { mineIron = v; }], ["obols", COIN_OBOL.short, () => mineObols, (v: number) => { mineObols = v; }]] as const) {
+      const r = el("label", "ec-coinrow");
+      r.append(coinImg(kind));
+      const inp = el("input");
+      inp.type = "number"; inp.min = "0"; inp.max = String(Math.min(MAX_COINS, kind === "iron" ? snap.iron : snap.obols)); inp.step = "1"; inp.value = String(get());
+      inp.setAttribute("aria-label", `${label} a oferecer`);
+      inp.oninput = () => {
+        const v = Math.max(0, Math.min(Math.floor(Number(inp.value) || 0), kind === "iron" ? snap.iron : snap.obols));
+        set(v);
+        pushOffer();
+      };
+      inp.onblur = () => { inp.value = String(get()); };
+      r.append(inp, document.createTextNode(`/ ${num(kind === "iron" ? snap.iron : snap.obols)}`));
+      m.append(r);
+    }
+    const t = el("div", "ec-col" + (theirs.ready ? " ok" : ""));
+    const th = el("h3", "", `Oferta de ${ev.with}`);
+    if (theirs.ready) th.append(el("em", "", "aceitou ✓"));
+    t.append(th, chips(theirs));
+    cols.append(m, t);
+    tcard.append(cols);
+    const foot = el("div", "ec-foot");
+    const note = el("p", "ec-note", mine.ready ? "Você aceitou. Esperando o outro jogador…" : "Confira a oferta do outro jogador antes de aceitar.");
+    const ok = el("button", "ec-btn go", mine.ready ? "Retirar aceite" : "Aceitar");
+    ok.type = "button";
+    const wait = ev.readyIn ?? 0;
+    if (!mine.ready && wait > 0) { // o servidor só aceita depois de um instante; o botão espera junto
+      ok.disabled = true;
+      clearTimeout(readyTimer);
+      readyTimer = setTimeout(() => { if (last === ev) renderTrade(ev); }, wait * 1000 + 50);
+      ev.readyIn = 0;
+    }
+    ok.onclick = () => opts.send(Msg.TradeReady, { ready: !mine.ready });
+    const cancel = el("button", "ec-btn danger", "Cancelar");
+    cancel.type = "button";
+    cancel.onclick = cancelTrade;
+    foot.append(note, ok, cancel);
+    tcard.append(foot);
+  }
+
+  // convite de troca
+  const invite = el("div", "ec-invite");
+  invite.setAttribute("role", "alertdialog");
+  document.body.append(invite);
+  const endTradeInvite = () => invite.classList.remove("show");
+  function showTradeInvite(from: string) {
+    invite.replaceChildren();
+    invite.append(el("span", "", `${from} quer trocar com você`));
+    const a = el("button", "ec-btn go", "Aceitar"); a.type = "button";
+    a.onclick = () => { opts.send(Msg.TradeAccept, {}); endTradeInvite(); };
+    const d = el("button", "ec-btn danger", "Recusar"); d.type = "button";
+    d.onclick = () => { opts.send(Msg.TradeDecline, {}); endTradeInvite(); };
+    invite.append(a, d);
+    invite.classList.add("show");
+  }
+
+  function setTrade(ev: TradeEvent) {
+    if (!ev.open) {
+      const was = tradeOpen;
+      closeTradeUi();
+      if (was && ev.reason) opts.toast(ev.reason, ev.done ? "#9fe0a8" : "#ffb3a6");
+      return;
+    }
+    if (!tradeOpen) { // abriu: fecha o que estiver aberto e zera a minha oferta
+      closeNpc();
+      tradeOpen = true;
+      mineSlots = new Map(); mineIron = 0; mineObols = 0;
+      tback.classList.add("open");
+    }
+    // a oferta do servidor é a verdade (ex.: um pedido recusado): reflete no que está marcado
+    const slotsNow = new Map<number, number>();
+    for (const it of ev.mine!.items) {
+      for (const [s, q] of mineSlots) if (snap.inv[s]?.id === it.id && q === it.qty && !slotsNow.has(s)) { slotsNow.set(s, q); break; }
+    }
+    if (ev.mine!.items.length === slotsNow.size) mineSlots = slotsNow;
+    renderTrade(ev);
+  }
+
+  // ---- confirmação de quebrar (mais forte quanto mais rara)
+  function confirmBreak(slot: number) {
+    const st = snap.inv[slot];
+    const d = st ? ITEMS[st.id] : null;
+    if (!st || !d || d.kind === "potion") return;
+    const ri = rarityIndex(d.rarity);
+    const gain = breakValue(st.id) * st.qty;
+    const b = el("div", "ec-back open");
+    b.style.zIndex = "26";
+    const c = el("div", "ec-card ec-dlg");
+    c.setAttribute("role", "alertdialog");
+    c.setAttribute("aria-modal", "true");
+    c.append(el("h2", "", "Quebrar este item?"));
+    const row = el("div", "ec-row");
+    const info = el("div", "ec-info");
+    const nm = el("b", "", d.name);
+    nm.style.color = RARITY_COLOR[d.rarity];
+    info.append(nm, el("small", "", brief(d)));
+    row.append(itemImg(st.id), info);
+    c.append(row, el("p", "", `Ele será destruído e você recebe ${num(gain)} Tostões de Ferro. Isso não pode ser desfeito.`));
+    const strong = ri >= BREAK_STRONG_FROM;
+    let input: HTMLInputElement | null = null;
+    if (ri >= BREAK_CONFIRM_FROM) {
+      const w = el("p", "ec-note bad", ri >= BREAK_STRONG_FROM ? `Atenção: é um item ${RARITY_NAME[d.rarity].toUpperCase()}. Vale muito mais vendido ou trocado.` : `Este é um item ${RARITY_NAME[d.rarity].toLowerCase()}. Vale mais vendido ao comerciante.`);
+      w.style.padding = "0";
+      c.append(w);
+    }
+    if (strong) {
+      c.append(el("p", "", "Para confirmar, digite QUEBRAR:"));
+      input = el("input");
+      input.type = "text"; input.autocomplete = "off"; input.setAttribute("aria-label", "Digite QUEBRAR para confirmar");
+      c.append(input);
+    }
+    const acts = el("div", "ec-dlg-acts");
+    const no = el("button", "ec-btn", "Cancelar"); no.type = "button";
+    const yes = el("button", "ec-btn danger", "Quebrar"); yes.type = "button";
+    acts.append(no, yes);
+    c.append(acts);
+    b.append(c);
+    document.body.append(b);
+    const close = () => { window.removeEventListener("keydown", onKey, true); clearTimeout(unlock); b.remove(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); close(); } };
+    window.addEventListener("keydown", onKey, true);
+    // proteção contra clique acidental: o botão só habilita depois de um instante (e, para épico ou melhor, de digitar a palavra)
+    const need = ri >= BREAK_CONFIRM_FROM ? 1200 : 300;
+    yes.disabled = true;
+    const typed = () => !input || input.value.trim().toUpperCase() === "QUEBRAR";
+    let waited = false;
+    const refresh = () => { yes.disabled = !(waited && typed()); };
+    const unlock = setTimeout(() => { waited = true; refresh(); }, need);
+    input?.addEventListener("input", refresh);
+    no.onclick = close;
+    b.onclick = (e) => { if (e.target === b) close(); };
+    yes.onclick = () => { if (yes.disabled) return; opts.send(Msg.InvBreak, { slot, confirm: true }); close(); };
+    (input ?? no).focus();
+  }
+
+  // ---- teclado: Esc fecha as janelas (a de troca cancela a troca)
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Escape" && tradeOpen) { e.stopImmediatePropagation(); e.preventDefault(); cancelTrade(); return; }
+    if (e.code === "Escape" && back.classList.contains("open")) { e.stopImmediatePropagation(); e.preventDefault(); closeNpc(); return; }
+    if (isTypingTarget() || e.repeat) return;
+    if (e.code === "KeyG" && nearNpc && !tradeOpen && !document.querySelector(".ec-back.open, .iv-back.open, .gm-back.open")) { e.preventDefault(); openNpc(nearNpc); } // G: falar com o NPC ao lado
+  }, true);
+
+  const paintWallet = () => { wIronN.textContent = num(snap.iron); wObolN.textContent = num(snap.obols); };
+  paintWallet();
+
+  return {
+    setSnapshot(s) {
+      snap = s;
+      paintWallet();
+      for (const i of [...picked]) if (!snap.inv[i]) picked.delete(i);
+      if (npc && back.classList.contains("open")) renderNpc();
+      if (tradeOpen && last) renderTrade(last);
+    },
+    openNpc,
+    closeNpc,
+    isNpcOpen: () => back.classList.contains("open"),
+    setNearNpc(n) {
+      nearNpc = n;
+      near.classList.toggle("show", !!n && !tradeOpen && !back.classList.contains("open"));
+      if (n) { near.replaceChildren(el("kbd", "", "G"), document.createTextNode(`Falar com ${n.name} (${n.title})`)); }
+    },
+    setTrade,
+    showTradeInvite,
+    endTradeInvite,
+    isTrading: () => tradeOpen,
+    confirmBreak,
+  };
+}

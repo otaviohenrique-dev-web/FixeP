@@ -153,9 +153,11 @@ export interface InvStack { id: string; qty: number }
 export interface InventorySnapshot {
   inv: (InvStack | null)[];
   equip: Record<EquipSlot, string | null>;
+  iron: number; // saldo de Tostões de Ferro
+  obols: number; // saldo de Óbolos de Sangue
 }
 export interface LootEvent { id: string; qty: number }
-export interface NoticeEvent { text: string }
+export interface NoticeEvent { text: string; ok?: boolean } // ok: aviso de sucesso (o cliente mostra em verde)
 
 // ------------------------------------------------------------ bônus e kit do equipamento
 export interface GearBonuses { dmgPct: number; hp: number; crit: number; dr: number; cdr: number; mana: number; regen: number; kit: WeaponKit }

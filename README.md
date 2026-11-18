@@ -159,6 +159,27 @@ Os ícones novos ainda não existem (`assets/items/item_<id>.png`); enquanto iss
 
 Tudo é decidido e validado no servidor e salvo no banco. **Ainda não feito**: efeitos visuais finais das armas (as skills são genéricas), ícones dos itens novos e arte própria dos chefes (usam o corpo do monstro maior, em escala e cor diferentes).
 
+## Economia: moedas, comerciante, ferreira, troca e quebrar
+
+Tema Submundo & Morte. Código compartilhado em `packages/shared/src/economy.ts` (preços, NPCs, regras da fusão); regras do servidor em `packages/server/src/game/economy.ts`; interface em `packages/client/src/economy.ts` (janelas) e `npcs.ts` (NPCs no mundo). **O servidor decide tudo**: distância até o NPC, saldo, espaço na mochila, chance da fusão. O cliente só pede.
+
+**Moedas** (ícones em `assets/items/item_coin_*.png`, gerados por `python tools/gen_coin_icons.py`):
+- **Tostões de Ferro** (disco de ferro escuro): todo abate dá uma quantia mínima a quem está por perto (como o XP; `mobIron`: ~2 + 1,5 x nível; chefes `bossIron`). Além disso cai uma **sacola de tostões** no chão, no mesmo sistema de itens (reserva do dono, anel de tempo, expira): ~10% / 12% / 15% dos abates nas zonas 1 / 2 / 3 (`ZONE_COINS`); todo baú de chefe traz uma sacola grande. Pegar a sacola soma ao saldo e não ocupa espaço.
+- **Óbolos de Sangue** (moeda antiga com runa vermelha, a moeda VIP): raríssima. ~0,04% / 0,06% / 0,1% dos abates comuns e 8% / 12% / 18% dos baús de chefe. Ainda sem uso na loja: só se guarda e se troca.
+- O saldo fica em `characters.iron` e `characters.obols` (migração `007_economia.sql`) e é gravado **na mesma transação do inventário**. Aparece na HUD (canto superior direito) e na mochila. Teto de 999.999.999.
+
+**Preço médio** (`itemValue`): base por raridade (12 / 45 / 170 / 650 / 2.800 / 13.000) x tipo (arma 1,4; armadura 1,2; mão secundária e elmo 0,8; botas e capa 0,7) x (1 + 1,5% por nível exigido). Poção = 10. O comerciante **vende a 140%** do preço médio e **compra a 35%**; **quebrar** rende 12%. Nunca dá lucro comprar e revender.
+
+**NPCs** (`ZONE_NPCS`, um **comerciante (Garrick)** e uma **ferreira (Brasa)** em cada zona, perto do ponto de nascimento e longe dos inimigos): com placa de nome. Clique no NPC (longe: o personagem anda até ele e abre ao chegar) ou, ao chegar perto (`NPC_REACH` = 3,5 tiles), o botão "Falar com ..." (tecla **G**). A janela fecha se você se afasta.
+- **Comerciante**: *Comprar* lista poção e o equipamento **da sua classe** até raridade rara (o resto vem de chefes e da forja); *Vender* aceita qualquer item da mochila (equipado, não). Venda de item raro ou melhor pede um segundo clique.
+- **Ferreira (fusão)**: **3 equipamentos do mesmo tipo, raridade e classe** + tostões viram **1 de raridade superior** (da mesma classe e tipo; a família sai entre as dos itens usados). Chance de sucesso por raridade de origem: comum 100%, incomum 85%, raro 65%, épico 45%, lendário 25%. Custo = 30% do valor-base do resultado. **Falhou**: perde a taxa e **1 dos 3 itens** (sorteado); os outros 2 voltam. **Teto da zona**: a forja nunca passa da maior raridade que a zona deixa existir (a da tabela do baú do chefe): zona 1 só até incomum, zona 2 até épico, zona 3 até mítico.
+
+**Soltar e quebrar**: *Soltar* agora põe o item **no chão** (qualquer um pode pegar; quem soltou só o pega sozinho depois de 4 s, mas pode pedir). *Quebrar* destrói o equipamento e rende uma pequena quantia (só equipamento; poção se vende). Confirmação: comum e incomum, diálogo simples; **raro** exige esperar ~1 s e o servidor recusa sem `confirm: true`; **épico em diante** exige também **digitar QUEBRAR**.
+
+**Troca entre jogadores** (selecione o jogador, "Trocar"): convite (20 s), os dois a até 8 tiles na mesma zona. Janela com a oferta de cada lado (até 8 espaços + tostões + óbolos); **qualquer mudança desfaz a confirmação dos dois lados** e o aceite só vale 1,5 s depois da última mudança (anti-golpe do clique rápido). Com os dois confirmados, o servidor confere tudo de novo (o que está em cada espaço, saldos, espaço livre, teto de moedas) e troca **em memória numa operação só** (cópias dos dois inventários, trocadas juntas); depois grava os **dois personagens numa única transação** (ou grava os dois ou nenhum), na fila de salvamento de cada um. Durante a troca a mochila fica travada. Sair, morrer, viajar ou se afastar cancela.
+
+Testes: `npm run test:econ:unit` (sem servidor, 71 verificações: preços, compra, venda, quebrar, fusão, troca atômica, saldo, drops, persistência da troca) e, com o servidor em modo de teste `ECON_TEST=1 LOOT_TEST=1` (kit inicial: 50.000 tostões, 2 óbolos e itens, só fora de produção), `SERVER=http://localhost:2999 npm run test:econ` (42 verificações com dois jogadores).
+
 ## Teste anti-trapaça
 
 Suíte que age como cliente malicioso (token forjado, speed hack, spam de skills, dano injetado,
