@@ -15,6 +15,7 @@
     "test:mana": "node test/mana.mjs",
     "test:chat": "node test/chat.mjs",
     "test:pvp": "node test/pvp.mjs",
+    "test:zones": "node test/zones.mjs",
     "test:inv:unit": "tsx test/inventory.unit.ts"
   },
   "dependencies": {

@@ -9,9 +9,10 @@ const RARITY_WEIGHTS: [Rarity, number][] = [["common", 70], ["uncommon", 25], ["
 export const GEAR_CHANCE = 0.3;
 export const POTION_CHANCE = 0.35;
 
-function pickRarity(rng: () => number): Rarity {
-  let r = rng() * 100;
-  for (const [rar, w] of RARITY_WEIGHTS) if ((r -= w) < 0) return rar;
+function pickRarity(rng: () => number, mult = 1): Rarity {
+  const w = RARITY_WEIGHTS.map(([rar, x]) => [rar, x * (rar === "common" ? 1 : rar === "uncommon" ? mult : mult * mult)] as [Rarity, number]);
+  let r = rng() * w.reduce((a, [, x]) => a + x, 0);
+  for (const [rar, x] of w) if ((r -= x) < 0) return rar;
   return "common";
 }
 
@@ -19,16 +20,17 @@ function pickRarity(rng: () => number): Rarity {
 const TEST_WEAPON: Record<CharClass, string> = { warrior: "espada_enferrujada", archer: "arco_curto", cleric: "cajado_de_galho" };
 
 /** Sorteia o que um esqueleto solta para um jogador. Armas saem só da classe dele; armaduras e poções servem a todos. */
-export function rollLoot(cls: CharClass = "warrior", rng: () => number = Math.random): Drop[] {
+/** `lootMult` (da zona): zonas mais perigosas dão mais itens, raridades melhores e, nas mais fundas, poções em dobro. */
+export function rollLoot(cls: CharClass = "warrior", rng: () => number = Math.random, lootMult = 1): Drop[] {
   if (testMode()) return [{ id: TEST_WEAPON[cls], qty: 1 }, { id: "gibao_surrado", qty: 1 }, { id: "pocao_de_vida", qty: 2 }];
   const out: Drop[] = [];
-  if (rng() < GEAR_CHANCE) {
-    const rar = pickRarity(rng);
+  if (rng() < Math.min(0.9, GEAR_CHANCE * lootMult)) {
+    const rar = pickRarity(rng, lootMult);
     const pool = Object.values(ITEMS).filter(
       (i) => (i.kind === "weapon" || i.kind === "armor") && i.rarity === rar && (!i.cls || i.cls === cls),
     );
     if (pool.length) out.push({ id: pool[Math.floor(rng() * pool.length)].id, qty: 1 });
   }
-  if (rng() < POTION_CHANCE) out.push({ id: "pocao_de_vida", qty: 1 });
+  if (rng() < Math.min(0.9, POTION_CHANCE * lootMult)) out.push({ id: "pocao_de_vida", qty: lootMult >= 2 ? 2 : 1 });
   return out;
 }

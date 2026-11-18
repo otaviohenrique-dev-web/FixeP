@@ -48,6 +48,22 @@ A HUD (`packages/client/src/hud.ts`) tem: retrato, nome, vida (coração) e recu
 (tecla, custo, recarga, escurece sem recurso); e uma linha fina de XP na largura toda com o nível. O visual é original do FrixeP.
 Teste: `SERVER=http://localhost:2999 npm run test:mana -w @frixep/server` (17 verificações).
 
+## Zonas e travessia
+
+Três zonas, cada uma é uma sala própria no servidor (dados em `packages/shared/src/zones.ts`; salas `zone`, `zone2`, `zone3`):
+
+| Zona | Tema | Inimigos (nível) | Recursos |
+|---|---|---|---|
+| 1. Cinzas | ruínas escuras | Esqueletos 1 a 3 | normais |
+| 2. Floresta Gélida | neve e gelo | Lobos Gélidos e Esqueletos 6 a 10 | x1,6 |
+| 3. Catacumbas | pedra roxa | Espectros e Esqueletos 12 a 20 | x2,4 (poções em dobro) |
+
+- **Sem faixa de nível**: qualquer jogador pode ir quando quiser. As zonas mais fundas são muito punitivas, mas soltam mais itens e raridades melhores.
+- **Travessia como no Albion**: basta andar até o anel brilhante do portal (sem apertar nada). O servidor valida a posição, grava a zona do personagem (coluna `characters.zone`, migração `004_zone.sql`) e manda o cliente entrar na sala nova. Quem pede a sala de outra zona é recusado (403).
+- Ao reconectar, o personagem volta para a zona em que estava; ao morrer, renasce no início da mesma zona. Uma sessão por conta vale em todas as zonas.
+- O mapa de cada zona é desenhado por código (cores provisórias por tema); Lobo e Espectro são corpos provisórios até a arte chegar.
+- Teste: `SERVER=http://localhost:2999 npm run test:zones -w @frixep/server` (22 verificações).
+
 ### Chat da zona
 
 Enter abre o campo de texto (e envia), Esc fecha; no celular há um botão de balão no canto. Fechado, as mensagens somem aos poucos.

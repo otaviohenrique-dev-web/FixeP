@@ -1,9 +1,9 @@
 import { Room, Client, ServerError } from "colyseus";
 import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
-  MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, SPAWN, ENEMY_SPAWNS,
+  TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, ZONES, ZONE_IDS, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
-  SKELETON, PLAYER_RADIUS, PVP_CHANNEL_S, CRIT, DAMAGE_VARIANCE, clamp,
+  PLAYER_RADIUS, PVP_CHANNEL_S, CRIT, DAMAGE_VARIANCE, clamp,
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
@@ -15,6 +15,10 @@ import { rollLoot } from "../game/loot.js";
 interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; hit: Set<string> }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
 interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory }
+
+// uma sessão por conta em TODAS as zonas: conta -> (sala, sessão) atual; a chegada de uma travessia guarda de onde veio
+const active = new Map<string, { room: ZoneRoom; sid: string }>();
+const arrivals = new Map<string, number>(); // personagem -> zona de origem da travessia (consumido ao entrar)
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
@@ -44,20 +48,26 @@ export class ZoneRoom extends Room<ZoneState> {
   private t = 0; // relógio da simulação (s)
   private repo!: Repo;
   private saver?: ReturnType<typeof setInterval>;
+  private zone!: ZoneDef;
 
   onCreate(options: { repo: Repo }) {
     this.repo = options.repo;
+    // a zona vem do NOME da sala (definido no servidor), nunca de opções que o cliente mande
+    const zid = ZONE_IDS.find((id) => zoneRoomName(id) === this.roomName) ?? 1;
+    this.zone = ZONES[zid];
     this.setState(new ZoneState());
+    this.state.zoneId = zid;
     // salva o progresso pendente a cada 30 s (além de ao sair e ao subir de nível)
     this.saver = setInterval(() => void this.saveAll(), 30_000);
     this.setPatchRate(1000 / TICK_RATE);
 
-    ENEMY_SPAWNS.forEach((s, i) => {
+    this.zone.enemies.forEach((s, i) => {
       const e = new Enemy();
+      e.kind = s.kind;
       e.x = e.sx = s.x;
       e.y = e.sy = s.y;
       e.level = s.level;
-      e.maxHp = e.hp = enemyHp(s.level);
+      e.maxHp = e.hp = enemyHp(s.level, s.kind);
       this.state.enemies.set(`e${i + 1}`, e);
     });
 
@@ -65,15 +75,25 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.MoveTo, (client, p: MoveToPayload) => {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
-      if (!pl || pl.dead || !Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
-      pl.tx = clamp(p.x, 0, MAP_W - 1);
-      pl.ty = clamp(p.y, 0, MAP_H - 1);
+      if (!pl || pl.dead || pl.traveling || !Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
+      pl.tx = clamp(p.x, 0, this.zone.w - 1);
+      pl.ty = clamp(p.y, 0, this.zone.h - 1);
+    });
+
+    // Travessia: basta pisar no portal (checado a cada tick); este pedido explícito passa pela MESMA validação de distância
+    this.onMessage(Msg.Travel, (client, p: { to?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || pl.dead || pl.traveling || typeof p?.to !== "number") return;
+      const portal = this.zone.portals.find((q) => q.to === p.to);
+      if (!portal || dist(pl.x, pl.y, portal.x, portal.y) > portal.r + 0.5) return this.notify(client.sessionId, "Você está longe demais do portal.");
+      void this.travel(client.sessionId, pl, portal);
     });
 
     this.onMessage(Msg.Act, (client, p: ActPayload) => {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
-      if (!pl || pl.dead) return;
+      if (!pl || pl.dead || pl.traveling) return;
       if (!ACTION_IDS.includes(p?.a) || !Number.isFinite(p?.ax) || !Number.isFinite(p?.ay)) return;
       // a mira é só uma direção: limita a valores sensatos (evita overflow em contas)
       this.doAction(client.sessionId, pl, p.a, clamp(p.ax, -100, 140), clamp(p.ay, -100, 140));
@@ -122,6 +142,29 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(pl, p?.slot)));
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
+  }
+
+  // ------------------------------------------------------------------ travessia entre zonas
+  /** Aprova a travessia: congela o jogador, grava progresso E a nova zona no banco e só então avisa o cliente (que entra na sala nova). */
+  private async travel(id: string, p: Player, portal: PortalDef) {
+    if (p.traveling || !ZONES[portal.to]) return;
+    p.traveling = true;
+    p.tx = p.x;
+    p.ty = p.y;
+    p.invulnUntil = this.t + 30;
+    this.interruptPvp(id, p);
+    try {
+      await this.save(p);
+      await this.repo.setZone(p.charId, portal.to);
+    } catch (e) {
+      console.error("[zona] falha ao gravar a travessia:", (e as Error).message);
+      p.traveling = false; // não atravessa sem gravar: tenta de novo quando pisar no portal outra vez
+      p.invulnUntil = 0;
+      return this.notify(id, "A passagem falhou. Tente de novo.");
+    }
+    arrivals.set(p.charId, this.zone.id);
+    this.clients.getById(id)?.send(Evt.Travel, { zone: portal.to });
+    setTimeout(() => this.clients.getById(id)?.leave(4010), 3000); // se o cliente não sair sozinho, o servidor o solta
   }
 
   // ------------------------------------------------------------------ PvP
@@ -220,7 +263,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private giveLoot(id: string, p: Player) {
     const client = this.clients.getById(id);
     let any = false;
-    for (const d of rollLoot(p.cls as CharClass)) {
+    for (const d of rollLoot(p.cls as CharClass, Math.random, this.zone.lootMult)) {
       const notFit = addItem(p.inv, d.id, d.qty);
       const got = d.qty - notFit;
       if (got > 0) { client?.send(Evt.Loot, { id: d.id, qty: got }); any = true; }
@@ -239,14 +282,26 @@ export class ZoneRoom extends Room<ZoneState> {
     const character = await this.repo.getCharacter(user.id);
     if (!character) throw new ServerError(403, "crie um personagem antes de entrar");
     const inventory = await this.repo.loadInventory(character.id);
-    // uma sessão por conta: derruba a anterior
-    for (const c of this.clients) if (this.userIds.get(c.sessionId) === user.id) c.leave(4001);
+    // o personagem só entra na sala da zona em que está (a zona é gravada pelo servidor): ninguém "teletransporta" pedindo outra sala
+    if ((character.zone ?? 1) !== this.zone.id) throw new ServerError(403, "zona errada");
+    // uma sessão por conta (em qualquer zona): derruba a anterior, exceto quem já está saindo por um portal
+    const old = active.get(user.id);
+    if (old) {
+      const op = old.room.state.players.get(old.sid);
+      if (!op?.traveling) old.room.clients.getById(old.sid)?.leave(4001);
+    }
     return { user, character, inventory };
   }
 
   onJoin(client: Client, _options: unknown, auth: JoinAuth) {
     this.userIds.set(client.sessionId, auth.user.id);
+    active.set(auth.user.id, { room: this, sid: client.sessionId });
     const pl = new Player();
+    const from = arrivals.get(auth.character.id); // chegou por um portal: nasce junto do portal de volta
+    arrivals.delete(auth.character.id);
+    const at = (from !== undefined && this.zone.arrive[from]) || this.zone.spawn;
+    pl.x = pl.tx = at.x;
+    pl.y = pl.ty = at.y;
     pl.name = auth.character.name;
     pl.charId = auth.character.id;
     pl.cls = auth.character.class;
@@ -292,6 +347,8 @@ export class ZoneRoom extends Room<ZoneState> {
   async onLeave(client: Client) {
     this.buckets.delete(client.sessionId);
     this.chatAt.delete(client.sessionId);
+    const uid = this.userIds.get(client.sessionId);
+    if (uid && active.get(uid)?.sid === client.sessionId) active.delete(uid);
     this.userIds.delete(client.sessionId);
     for (const tr of this.traps.filter((x) => x.owner === client.sessionId)) this.removeTrap(tr, "gone"); // armadilhas somem com o dono
     const pl = this.state.players.get(client.sessionId);
@@ -356,7 +413,14 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private tick(dt: number) {
     this.t += dt;
-    this.state.players.forEach((p, id) => { this.updatePlayer(p, dt); this.updatePvp(id, p); });
+    this.state.players.forEach((p, id) => {
+      this.updatePlayer(p, dt);
+      this.updatePvp(id, p);
+      if (!p.dead && !p.traveling) { // pisou num portal: atravessa (sem apertar nada)
+        const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= q.r);
+        if (portal) void this.travel(id, p, portal);
+      }
+    });
     this.updateProjectiles(dt);
     this.updateTraps();
     if (this.pending.length) {
@@ -376,8 +440,8 @@ export class ZoneRoom extends Room<ZoneState> {
         p.hp = p.maxHp;
         p.manaF = p.maxMana;
         p.mana = p.maxMana;
-        p.x = p.tx = SPAWN.x;
-        p.y = p.ty = SPAWN.y;
+        p.x = p.tx = this.zone.spawn.x; // renasce na zona onde caiu
+        p.y = p.ty = this.zone.spawn.y;
         p.invulnUntil = this.t + 2; // um respiro ao renascer (evita ser abatido de novo no ponto de início)
       }
       return;
@@ -392,8 +456,8 @@ export class ZoneRoom extends Room<ZoneState> {
 
     if (p.dashLeft > 0) {
       const step = Math.min(dt, p.dashLeft);
-      p.x = clamp(p.x + p.dashVx * step, 0, MAP_W - 1);
-      p.y = clamp(p.y + p.dashVy * step, 0, MAP_H - 1);
+      p.x = clamp(p.x + p.dashVx * step, 0, this.zone.w - 1);
+      p.y = clamp(p.y + p.dashVy * step, 0, this.zone.h - 1);
       p.dashLeft -= dt;
       if (p.dashLeft <= 0) { p.tx = p.x; p.ty = p.y; }
       return;
@@ -458,21 +522,21 @@ export class ZoneRoom extends Room<ZoneState> {
     // ponto de colocação (armadilha/chuva): onde o jogador mira, limitado ao alcance
     const place = () => {
       const d = Math.min(aimDist < 0.01 ? (def.placeRange ?? 0) * 0.5 : aimDist, def.placeRange ?? 0);
-      return { x: clamp(p.x + dx * d, 0, MAP_W - 1), y: clamp(p.y + dy * d, 0, MAP_H - 1) };
+      return { x: clamp(p.x + dx * d, 0, this.zone.w - 1), y: clamp(p.y + dy * d, 0, this.zone.h - 1) };
     };
 
     switch (def.kind) {
       case "melee":
       case "ring": {
         const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
-        this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + enemyKind(e.kind).radius);
         this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, cx, cy) <= (def.radius ?? 1) + PLAYER_RADIUS);
         break;
       }
       case "dashHit": {
         const ex = p.x + dx * (def.dash ?? 0), ey = p.y + dy * (def.dash ?? 0);
         const sx = p.x, sy = p.y;
-        this.hitEnemies(id, dmg, (e) => distToSegment(e.x, e.y, sx, sy, ex, ey) <= (def.radius ?? 1) + SKELETON.radius);
+        this.hitEnemies(id, dmg, (e) => distToSegment(e.x, e.y, sx, sy, ex, ey) <= (def.radius ?? 1) + enemyKind(e.kind).radius);
         this.hitPlayers(id, dmg, (o) => distToSegment(o.x, o.y, sx, sy, ex, ey) <= (def.radius ?? 1) + PLAYER_RADIUS);
         this.startDash(p, dx, dy, def);
         break;
@@ -519,7 +583,7 @@ export class ZoneRoom extends Room<ZoneState> {
         const delay = def.delayS ?? 0.8;
         this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: delay * 1000, friendly: true });
         this.pending.push({ at: this.t + delay, run: () => {
-          this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, pos.x, pos.y) <= r + SKELETON.radius);
+          this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, pos.x, pos.y) <= r + enemyKind(e.kind).radius);
           this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, pos.x, pos.y) <= r + PLAYER_RADIUS);
         } });
         break;
@@ -579,7 +643,7 @@ export class ZoneRoom extends Room<ZoneState> {
       const cands: [number, string, Enemy | Player][] = [];
       this.state.enemies.forEach((e, eid) => {
         if (e.st === "dead" || pr.hit.has(eid)) return;
-        if (distToSegment(e.x, e.y, pr.x, pr.y, nx, ny) <= pr.radius + SKELETON.radius) cands.push([dist(e.x, e.y, pr.x, pr.y), eid, e]);
+        if (distToSegment(e.x, e.y, pr.x, pr.y, nx, ny) <= pr.radius + enemyKind(e.kind).radius) cands.push([dist(e.x, e.y, pr.x, pr.y), eid, e]);
       });
       this.state.players.forEach((o, oid) => { // jogadores em PvP (as regras de quem pode ser alvo ficam em canPvpHit)
         if (pr.hit.has(oid) || !this.canPvpHit(pr.owner, o, oid)) return;
@@ -596,7 +660,7 @@ export class ZoneRoom extends Room<ZoneState> {
       pr.x = nx;
       pr.y = ny;
       pr.left -= step;
-      if (ended || pr.left <= 0.001 || nx < 0 || ny < 0 || nx > MAP_W - 1 || ny > MAP_H - 1) {
+      if (ended || pr.left <= 0.001 || nx < 0 || ny < 0 || nx > this.zone.w - 1 || ny > this.zone.h - 1) {
         this.projs.splice(i, 1);
         this.broadcast(Evt.ProjEnd, { id: pr.id, x: pr.x, y: pr.y, hit: ended });
       }
@@ -613,11 +677,11 @@ export class ZoneRoom extends Room<ZoneState> {
       if (this.t >= tr.expireAt) { this.removeTrap(tr, "gone"); continue; }
       if (this.t < tr.armAt) continue;
       let trigger = false;
-      this.state.enemies.forEach((e) => { if (e.st !== "dead" && dist(e.x, e.y, tr.x, tr.y) <= tr.r + SKELETON.radius) trigger = true; });
+      this.state.enemies.forEach((e) => { if (e.st !== "dead" && dist(e.x, e.y, tr.x, tr.y) <= tr.r + enemyKind(e.kind).radius) trigger = true; });
       this.state.players.forEach((o, oid) => { if (this.canPvpHit(tr.owner, o, oid) && dist(o.x, o.y, tr.x, tr.y) <= tr.r + PLAYER_RADIUS) trigger = true; });
       if (!trigger) continue;
       this.removeTrap(tr, "boom");
-      this.hitEnemies(tr.owner, tr.dmg, (e) => dist(e.x, e.y, tr.x, tr.y) <= tr.r + SKELETON.radius);
+      this.hitEnemies(tr.owner, tr.dmg, (e) => dist(e.x, e.y, tr.x, tr.y) <= tr.r + enemyKind(e.kind).radius);
       this.hitPlayers(tr.owner, tr.dmg, (o) => dist(o.x, o.y, tr.x, tr.y) <= tr.r + PLAYER_RADIUS);
     }
   }
@@ -633,7 +697,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by });
     if (e.hp > 0) return;
     e.st = "dead";
-    e.respawnAt = this.t + SKELETON.respawnS;
+    e.respawnAt = this.t + enemyKind(e.kind).respawnS;
     e.targetId = "";
     this.broadcast(Evt.Died, { k: "e", id: eid });
     // grupo: todo jogador vivo por perto recebe XP e faz a sua própria rolagem de loot
@@ -658,7 +722,7 @@ export class ZoneRoom extends Room<ZoneState> {
     let best: [string, Player] | null = null;
     let bestD = maxDist;
     this.state.players.forEach((p, id) => {
-      if (p.dead) return;
+      if (p.dead || p.traveling) return;
       const d = dist(e.x, e.y, p.x, p.y);
       if (d < bestD) { bestD = d; best = [id, p]; }
     });
@@ -676,18 +740,19 @@ export class ZoneRoom extends Room<ZoneState> {
       return;
     }
 
+    const K = enemyKind(e.kind);
     // alvo: provocação ativa > quem já está em combate > mais próximo no raio de aggro
     let target: [string, Player] | null = null;
     const taunter = this.t < e.tauntUntil ? this.state.players.get(e.tauntId) : undefined;
-    if (taunter && !taunter.dead) target = [e.tauntId, taunter];
+    if (taunter && !taunter.dead && !taunter.traveling) target = [e.tauntId, taunter];
     else {
       const current = e.targetId ? this.state.players.get(e.targetId) : undefined;
-      if (current && !current.dead && dist(e.x, e.y, current.x, current.y) <= SKELETON.aggro * 1.5) target = [e.targetId, current];
-      else target = this.nearestPlayer(e, SKELETON.aggro);
+      if (current && !current.dead && !current.traveling && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
+      else target = this.nearestPlayer(e, K.aggro);
     }
     e.targetId = target ? target[0] : "";
 
-    const away = dist(e.x, e.y, e.sx, e.sy) > SKELETON.leash;
+    const away = dist(e.x, e.y, e.sx, e.sy) > K.leash;
 
     switch (e.st) {
       case "idle":
@@ -697,23 +762,23 @@ export class ZoneRoom extends Room<ZoneState> {
       case "chase": {
         if (!target || away) {
           // volta para casa e recupera a vida
-          this.moveToward(e, e.sx, e.sy, SKELETON.speed * 1.4, dt);
+          this.moveToward(e, e.sx, e.sy, K.speed * 1.4, dt);
           e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2 * dt);
           if (dist(e.x, e.y, e.sx, e.sy) < 0.2) e.st = "idle";
           break;
         }
         const p = target[1];
         const d = dist(e.x, e.y, p.x, p.y);
-        if (d > SKELETON.engage * 0.85) this.moveToward(e, p.x, p.y, SKELETON.speed, dt);
-        if (d <= SKELETON.engage) {
+        if (d > K.engage * 0.85) this.moveToward(e, p.x, p.y, K.speed, dt);
+        if (d <= K.engage) {
           // telégrafo: a área é travada agora; quem sair dela antes do golpe não leva dano
           const dir = Math.atan2(p.y - e.y, p.x - e.x);
           e.face = dir;
-          e.strikeX = e.x + Math.cos(dir) * SKELETON.strikeOffset;
-          e.strikeY = e.y + Math.sin(dir) * SKELETON.strikeOffset;
-          e.windupEnd = this.t + SKELETON.windupS;
+          e.strikeX = e.x + Math.cos(dir) * K.strikeOffset;
+          e.strikeY = e.y + Math.sin(dir) * K.strikeOffset;
+          e.windupEnd = this.t + K.windupS;
           e.st = "windup";
-          this.broadcast(Evt.Telegraph, { id: _id, x: e.strikeX, y: e.strikeY, r: SKELETON.strikeRadius, ms: SKELETON.windupS * 1000 });
+          this.broadcast(Evt.Telegraph, { id: _id, x: e.strikeX, y: e.strikeY, r: K.strikeRadius, ms: K.windupS * 1000 });
         }
         break;
       }
@@ -722,9 +787,9 @@ export class ZoneRoom extends Room<ZoneState> {
         if (this.t >= e.windupEnd) {
           this.state.players.forEach((p, pid) => {
             if (p.dead || this.t < p.invulnUntil) return; // esquiva (i-frames)
-            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= SKELETON.strikeRadius + PLAYER_RADIUS) this.damagePlayer(pid, p, enemyDmg(e.level));
+            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= K.strikeRadius + PLAYER_RADIUS) this.damagePlayer(pid, p, enemyDmg(e.level, e.kind));
           });
-          e.recoverEnd = this.t + SKELETON.recoverS;
+          e.recoverEnd = this.t + K.recoverS;
           e.st = "recover";
         }
         break;

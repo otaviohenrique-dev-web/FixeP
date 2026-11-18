@@ -8,6 +8,7 @@ import { authRouter } from "./auth.js";
 import { apiRouter } from "./api.js";
 import { openDb } from "./db/index.js";
 import { Repo } from "./db/repo.js";
+import { ZONE_IDS, zoneRoomName } from "@frixep/shared";
 
 const port = Number(process.env.PORT ?? 2567);
 const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
@@ -27,6 +28,6 @@ const httpServer = http.createServer(app);
 const gameServer = new Server({
   transport: new WebSocketTransport({ server: httpServer, maxPayload: 2048 }) /* mensagens legítimas têm poucos bytes */,
 });
-gameServer.define("zone", ZoneRoom, { repo });
+for (const id of ZONE_IDS) gameServer.define(zoneRoomName(id), ZoneRoom, { repo }); // uma sala por zona ("zone", "zone2", "zone3")
 await gameServer.listen(port);
 console.log(`[frixep] servidor em http://localhost:${port} (ws no mesmo porto)`);

@@ -1,4 +1,6 @@
+import { ZONES, type EnemyKind } from "./zones";
 // Simulação em grade ortogonal (servidor). Isométrico é só projeção no cliente.
+// MAP_W/MAP_H/SPAWN são os da zona 1; cada zona tem os seus em ZONES (zones.ts).
 export const MAP_W = 40;
 export const MAP_H = 40;
 export const TICK_RATE = 20; // Hz
@@ -16,6 +18,7 @@ export const Msg = {
   InvSync: "inv_sync", // pede a fotografia do inventário (o cliente pede depois de registrar os receptores)
   Chat: "chat", // { text }: mensagem para toda a zona (o servidor limpa o texto e usa o nome do personagem)
   Pvp: "pvp", // { on: boolean }: pede para entrar (true) ou sair (false) do modo PvP; o servidor canaliza e decide
+  Travel: "travel", // { to }: pede para atravessar o portal da zona `to` (o servidor valida a distância; andar até o portal já basta)
   Ping: "ping", // { t }: o servidor devolve o mesmo t em Evt.Pong (o cliente mede a ida e volta)
 } as const;
 
@@ -30,6 +33,7 @@ export const Evt = {
   Proj: "proj", // projétil criado (o cliente anima o voo)
   ProjEnd: "projend", // projétil terminou (acertou ou acabou o alcance)
   Trap: "trap", // armadilha: colocada, disparou ou sumiu
+  Travel: "travel", // { zone }: travessia aprovada; o cliente sai da sala e entra na da nova zona
   Pong: "pong", // resposta ao ping, só para quem perguntou
   Inv: "inv", // fotografia completa do inventário (só para o dono)
   Loot: "loot", // item recebido
@@ -210,19 +214,26 @@ export const SKELETON = {
   radius: 0.45,
 };
 
-export const ENEMY_SPAWNS: readonly { x: number; y: number; level: number }[] = [
-  // todos a mais de 10 tiles do spawn do jogador (aggro = 7): o jogador nasce em segurança.
-  // Quanto mais longe do início, mais forte (e mais XP): o nível de cada ponto fica aqui.
-  { x: 30, y: 16, level: 1 },
-  { x: 31, y: 24, level: 1 },
-  { x: 26, y: 30, level: 1 },
-  { x: 10, y: 26, level: 2 },
-  { x: 11, y: 12, level: 3 },
-];
+/** Tipos de inimigo: o Esqueleto é a base (SKELETON); os outros são variações (corpos provisórios até a arte chegar). */
+export interface EnemyKindDef {
+  name: string; hpMul: number; dmgMul: number; speed: number; aggro: number; leash: number; engage: number;
+  windupS: number; strikeOffset: number; strikeRadius: number; recoverS: number; respawnS: number; radius: number; color: number;
+}
+const base = { aggro: SKELETON.aggro, leash: SKELETON.leash, engage: SKELETON.engage, windupS: SKELETON.windupS, strikeOffset: SKELETON.strikeOffset,
+  strikeRadius: SKELETON.strikeRadius, recoverS: SKELETON.recoverS, respawnS: SKELETON.respawnS, radius: SKELETON.radius, speed: SKELETON.speed };
+export const ENEMY_KINDS: Record<EnemyKind, EnemyKindDef> = {
+  skeleton: { ...base, name: SKELETON.name, hpMul: 1, dmgMul: 1, color: 0xd8d2c0 },
+  wolf: { ...base, name: "Lobo Gélido", hpMul: 0.8, dmgMul: 0.9, speed: 3.6, aggro: 8, engage: 1.5, windupS: 0.5, strikeOffset: 0.9, strikeRadius: 1.1, recoverS: 0.8, radius: 0.4, color: 0x8fb3d9 },
+  wraith: { ...base, name: "Espectro", hpMul: 1.3, dmgMul: 1.4, speed: 2.0, aggro: 9, leash: 16, engage: 2.2, windupS: 0.9, strikeOffset: 1.4, strikeRadius: 1.6, recoverS: 1.2, radius: 0.5, color: 0x9a7ad0 },
+};
+export const enemyKind = (k: string): EnemyKindDef => ENEMY_KINDS[k as EnemyKind] ?? ENEMY_KINDS.skeleton;
+
+/** Spawns da zona 1 (compatibilidade): os de cada zona ficam em ZONES. */
+export const ENEMY_SPAWNS = ZONES[1].enemies;
 
 /** Vida, dano e XP do inimigo por nível (o nível 1 é o Esqueleto base). */
-export const enemyHp = (level: number) => Math.round(SKELETON.maxHp * (1 + 0.4 * (level - 1)));
-export const enemyDmg = (level: number) => Math.round(SKELETON.dmg * (1 + 0.3 * (level - 1)));
+export const enemyHp = (level: number, kind: string = "skeleton") => Math.round(SKELETON.maxHp * enemyKind(kind).hpMul * (1 + 0.4 * (level - 1)));
+export const enemyDmg = (level: number, kind: string = "skeleton") => Math.round(SKELETON.dmg * enemyKind(kind).dmgMul * (1 + 0.3 * (level - 1)));
 export const enemyXp = (level: number) => Math.round(XP_PER_KILL * Math.pow(1.45, level - 1));
 
 // ------------------------------------------------------------ progressão
@@ -246,6 +257,8 @@ export const dmgMult = (level: number, weaponPct = 0) => (1 + 0.05 * (level - 1)
 export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior", "archer", "cleric"];
 export const NAME_MIN = 3;
 export const NAME_MAX = 16;
-export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number }
+export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number; zone?: number }
+export interface TravelEvent { zone: number }
 
 export * from "./items";
+export * from "./zones";
