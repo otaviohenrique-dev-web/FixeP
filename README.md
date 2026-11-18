@@ -61,7 +61,7 @@ Três zonas, cada uma é uma sala própria no servidor (dados em `packages/share
 - **Sem faixa de nível**: qualquer jogador pode ir quando quiser. As zonas mais fundas são muito punitivas, mas soltam mais itens e raridades melhores.
 - **Travessia como no Albion**: basta andar até o anel brilhante do portal (sem apertar nada). O servidor valida a posição, grava a zona do personagem (coluna `characters.zone`, migração `004_zone.sql`) e manda o cliente entrar na sala nova. Quem pede a sala de outra zona é recusado (403).
 - Ao reconectar, o personagem volta para a zona em que estava; ao morrer, renasce no início da mesma zona. Uma sessão por conta vale em todas as zonas.
-- O mapa de cada zona é desenhado por código (cores provisórias por tema); Lobo e Espectro são corpos provisórios até a arte chegar.
+- O mapa de cada zona é desenhado por código (cores provisórias por tema); o Lobo Gélido tem kit de sprites próprio (`python tools/gen_wolf.py` recria `assets/placeholder/wolf.*`; arte final em `assets/monsters/wolf.*` tem prioridade) e o Espectro é corpo provisório até a arte chegar.
 - Teste: `SERVER=http://localhost:2999 npm run test:zones -w @frixep/server` (22 verificações).
 
 ### Chat da zona
