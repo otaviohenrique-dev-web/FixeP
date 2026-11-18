@@ -111,7 +111,7 @@ check("jogador morto não consegue agir", A.ev.proj.length === projsAntes);
 const hpMax = A.me().maxHp;
 C.act("skill3", 0, 0);
 const revived = await until(() => A.me().dead === false, 3000);
-check("o Clérigo ressuscita o aliado caído", revived);
+check("o Clérigo ressuscita o aliado caído", revived, `mana C ${C.me().mana}, C morto ${C.me().dead}, dist ${dAC().toFixed(1)}, avisos ${JSON.stringify((C.ev.notice || []).slice(-3))}`);
 check("o aliado volta com cerca de 50% da vida", revived && Math.abs(A.me().hp - Math.ceil(hpMax / 2)) <= 3, `hp ${A.me().hp}/${hpMax}`);
 check("o evento de ressurreição chega a todos", C.ev.heal.some((h) => h.revive && h.id === A.id) && A.ev.heal.some((h) => h.revive));
 

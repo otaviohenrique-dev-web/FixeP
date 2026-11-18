@@ -200,20 +200,27 @@ export const SKELETON = {
   radius: 0.45,
 };
 
-export const ENEMY_SPAWNS: readonly { x: number; y: number }[] = [
-  // todos a mais de 10 tiles do spawn do jogador (aggro = 7): o jogador nasce em segurança
-  { x: 30, y: 16 },
-  { x: 31, y: 24 },
-  { x: 26, y: 30 },
-  { x: 10, y: 26 },
-  { x: 11, y: 12 },
+export const ENEMY_SPAWNS: readonly { x: number; y: number; level: number }[] = [
+  // todos a mais de 10 tiles do spawn do jogador (aggro = 7): o jogador nasce em segurança.
+  // Quanto mais longe do início, mais forte (e mais XP): o nível de cada ponto fica aqui.
+  { x: 30, y: 16, level: 1 },
+  { x: 31, y: 24, level: 1 },
+  { x: 26, y: 30, level: 1 },
+  { x: 10, y: 26, level: 2 },
+  { x: 11, y: 12, level: 3 },
 ];
+
+/** Vida, dano e XP do inimigo por nível (o nível 1 é o Esqueleto base). */
+export const enemyHp = (level: number) => Math.round(SKELETON.maxHp * (1 + 0.4 * (level - 1)));
+export const enemyDmg = (level: number) => Math.round(SKELETON.dmg * (1 + 0.3 * (level - 1)));
+export const enemyXp = (level: number) => Math.round(XP_PER_KILL * Math.pow(1.45, level - 1));
 
 // ------------------------------------------------------------ progressão
 export const LEVEL_CAP = 20;
 export const XP_PER_KILL = 20;
 /** XP necessário para sair do nível `level` para o próximo (0 no nível máximo). */
-export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : 40 + 30 * level);
+/** Cresce em ~40% a cada nível (60, 84, 118, 165, 231...). */
+export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : Math.round(60 * Math.pow(1.4, level - 1)));
 /** Vida máxima: base da classe + 10 por nível + bônus de armadura. */
 export const maxHpFor = (cls: CharClass, level: number, armorHp = 0) => CLASS_DEFS[cls].maxHp + 10 * (level - 1) + armorHp;
 /** Máximo do recurso (Fúria/Foco/Mana): base da classe + bônus por nível. */

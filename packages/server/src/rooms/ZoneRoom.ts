@@ -4,7 +4,7 @@ import {
   MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, SPAWN, ENEMY_SPAWNS,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
-  LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
+  LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, ZoneState } from "./entities.js";
@@ -56,6 +56,8 @@ export class ZoneRoom extends Room<ZoneState> {
       const e = new Enemy();
       e.x = e.sx = s.x;
       e.y = e.sy = s.y;
+      e.level = s.level;
+      e.maxHp = e.hp = enemyHp(s.level);
       this.state.enemies.set(`e${i + 1}`, e);
     });
 
@@ -566,7 +568,7 @@ export class ZoneRoom extends Room<ZoneState> {
     // grupo: todo jogador vivo por perto recebe XP e faz a sua própria rolagem de loot
     this.state.players.forEach((pl, pid) => {
       if (pl.dead || dist(pl.x, pl.y, e.x, e.y) > SHARE_RADIUS) return;
-      this.addXp(pid, pl, XP_PER_KILL);
+      this.addXp(pid, pl, enemyXp(e.level));
       this.giveLoot(pid, pl);
     });
   }
@@ -647,7 +649,7 @@ export class ZoneRoom extends Room<ZoneState> {
         if (this.t >= e.windupEnd) {
           this.state.players.forEach((p, pid) => {
             if (p.dead || this.t < p.invulnUntil) return; // esquiva (i-frames)
-            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= SKELETON.strikeRadius + PLAYER_RADIUS) this.damagePlayer(pid, p, SKELETON.dmg);
+            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= SKELETON.strikeRadius + PLAYER_RADIUS) this.damagePlayer(pid, p, enemyDmg(e.level));
           });
           e.recoverEnd = this.t + SKELETON.recoverS;
           e.st = "recover";

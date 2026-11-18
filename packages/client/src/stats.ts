@@ -1,3 +1,4 @@
+import { isTypingTarget } from "./keys";
 /**
  * Painel de desenvolvimento no canto superior direito: FPS e ping.
  * - FPS: contado aqui mesmo (quadros que o navegador realmente desenhou por segundo).
@@ -73,7 +74,7 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
   send();
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.code !== "F3" || e.repeat) return;
+    if (e.code !== "F3" || e.repeat || isTypingTarget()) return;
     e.preventDefault();
     on = !on;
     try { localStorage.setItem(KEY, on ? "on" : "off"); } catch { /* ignore */ }

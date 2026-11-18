@@ -1,3 +1,4 @@
+import { isTypingTarget } from "./keys";
 /** Menu simples dentro do jogo: continuar ou desconectar (volta para a tela de login). */
 
 export interface GameMenuOptions {
@@ -92,6 +93,6 @@ export function mountGameMenu(opts: GameMenuOptions) {
     await opts.onLogout();
   };
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") (isOpen() ? close : open)();
+    if (e.key === "Escape" && !isTypingTarget()) (isOpen() ? close : open)();
   });
 }
