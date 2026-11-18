@@ -3,7 +3,7 @@ import { CLASS_DEFS, type ActionId, type CharClass, type ResourceDef } from "@fr
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
  *  - canto superior esquerdo: retrato, nome, barra de vida (coração) e barra do recurso da classe (Fúria, Foco ou Mana);
- *  - embaixo ao centro: barra de 5 habilidades com recarga, tecla, custo e aviso de recurso insuficiente;
+ *  - embaixo ao centro: barra de habilidades (Q W E, ultimate R, esquiva e ataque) com recarga, tecla, custo e aviso de recurso insuficiente;
  *  - linha fina de experiência na largura toda, no pé da tela, com o nível discreto.
  */
 
@@ -12,6 +12,8 @@ export interface HudOptions {
   name?: string;
   /** chamado quando o jogador aciona uma ação e ela não está em recarga local */
   onAction(a: ActionId): void;
+  /** botão de poção (no celular, onde não há tecla) */
+  onPotion?(): void;
 }
 export interface Hud {
   trigger(a: ActionId): void;
@@ -22,6 +24,8 @@ export interface Hud {
   setPortrait(source: CanvasImageSource | null, crop?: { x: number; y: number; w: number; h: number }): void;
   setDead(secondsLeft: number | null): void;
   setBuff(on: boolean, label?: string): void;
+  /** liga o layout de toque: botões no canto direito, ao alcance do polegar */
+  setTouch(on: boolean): void;
 }
 
 const ICON: Record<string, string> = {
@@ -73,9 +77,12 @@ const CSS = `
 .hd-sn{font:700 8px/1.15 "Cinzel",Georgia,serif;letter-spacing:.05em;text-transform:uppercase;text-align:center;text-shadow:0 1px 3px #000;padding:0 3px;pointer-events:none}
 .hd-key{position:absolute;top:2px;left:3px;min-width:12px;height:12px;display:grid;place-items:center;padding:0 2px;border-radius:4px;background:rgba(0,0,0,.65);font:700 8px/1 "Cinzel",Georgia,serif;color:#ffd9a0;pointer-events:none}
 .hd-cost{position:absolute;right:3px;bottom:2px;font:700 9px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 3px #000,0 0 3px #000;pointer-events:none}
-.hd-cd{position:absolute;left:0;right:0;bottom:0;height:0;background:rgba(0,0,0,.7);pointer-events:none}
-.hd-cdn{position:absolute;inset:0;display:none;place-items:center;font:700 16px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 4px #000;pointer-events:none}
-.hd-btn.cool .hd-cdn{display:grid}
+.hd-cd{position:absolute;left:0;right:0;bottom:0;height:0;background:rgba(0,0,0,.78);pointer-events:none}
+.hd-cdn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:none;z-index:2;font:900 22px/1 "Cinzel",Georgia,serif;color:#fff;letter-spacing:0;white-space:nowrap;
+  text-shadow:0 0 3px #000,0 0 3px #000,0 2px 6px #000;pointer-events:none}
+.hd-btn.cool .hd-sn,.hd-btn.cool .hd-cost{opacity:.2}
+.hd.touch .hd-btn:not(.big) .hd-cdn{font-size:19px}
+.hd-btn.cool .hd-cdn{display:block}
 .hd-btn.low{filter:saturate(.35) brightness(.7)}
 .hd-btn.low .hd-cost{color:#ff7b6b!important}
 .hd-btn.ready-pulse{animation:hd-pulse .45s ease-out}
@@ -90,6 +97,21 @@ const CSS = `
 .hd-dead.on{display:flex}
 .hd-dead h2{margin:0;font-size:clamp(28px,7vw,54px);font-weight:900;letter-spacing:.2em;text-indent:.2em;color:#ff6a5a;text-shadow:0 0 28px rgba(255,60,30,.6)}
 .hd-dead p{margin:0;font-size:14px;letter-spacing:.3em;text-transform:uppercase;color:#cfdcec}
+/* ---------- layout de toque: botões em arco no canto direito (polegar), a esquerda fica livre para o joystick ---------- */
+.hd-pot{display:none}
+.hd.touch .hd-pot{display:grid}
+.hd.touch .hd-bar{left:auto;right:max(10px,env(safe-area-inset-right));bottom:calc(max(10px,env(safe-area-inset-bottom)) + 14px);transform:none;display:block;width:224px;height:232px;padding:0;background:none;border:0;box-shadow:none}
+.hd.touch .hd-btn{position:absolute;width:54px;height:54px;border-radius:50%}
+.hd.touch .hd-btn.big{width:80px;height:80px;right:0;bottom:0}
+.hd.touch .hd-a-skill1{right:109px;bottom:13px}
+.hd.touch .hd-a-skill2{right:81px;bottom:81px}
+.hd.touch .hd-a-skill3{right:13px;bottom:109px}
+.hd.touch .hd-a-ultimate{right:67px;bottom:149px;width:60px;height:60px}
+.hd.touch .hd-a-dodge{right:144px;bottom:68px;width:48px;height:48px}
+.hd.touch .hd-pot{right:8px;bottom:170px;width:40px;height:40px}
+.hd.touch .hd-key{display:none}
+.hd.touch .hd-cost{left:0;right:0;bottom:5px;text-align:center}
+.hd-btn.ult{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.35),0 0 10px rgba(255,190,90,.25)}
 @media (max-width:820px){
   .hd-bar{gap:6px;padding:5px}.hd-btn{width:48px;height:48px}.hd-btn.big{width:56px;height:56px}.hd-sn{font-size:7px}
   .hd-portrait{width:56px;height:56px}.hd-track{height:16px}
@@ -150,13 +172,13 @@ export function mountHud(opts: HudOptions): Hud {
   let curRes = Infinity;
 
   // ordem visual: esquiva, skills, ataque (maior) à direita
-  const order: ActionId[] = ["dodge", "skill1", "skill2", "skill3", "attack"];
+  const order: ActionId[] = ["dodge", "skill1", "skill2", "skill3", "ultimate", "attack"];
   for (const a of order) {
     const def = defs[a];
     const cost = def.cost ?? 0;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "hd-btn" + (a === "attack" ? " big" : "");
+    b.className = `hd-btn hd-a-${a}` + (a === "attack" ? " big" : "") + (a === "ultimate" ? " ult" : "");
     b.setAttribute("aria-label", `${def.name} (${def.key})${cost ? `, custa ${cost} de ${res.name}` : ""}`);
     b.innerHTML = `<span class="hd-key">${def.key}</span><span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
     // pointerdown: resposta imediata no toque, sem esperar o "click"
@@ -166,6 +188,16 @@ export function mountHud(opts: HudOptions): Hud {
     });
     bar.append(b);
     els.set(a, { btn: b, cd: b.querySelector(".hd-cd")!, n: b.querySelector(".hd-cdn")! });
+  }
+
+  if (opts.onPotion) {
+    const pb = document.createElement("button");
+    pb.type = "button";
+    pb.className = "hd-btn hd-pot";
+    pb.setAttribute("aria-label", "Beber poção (F)");
+    pb.innerHTML = `<span class="hd-key">F</span><span class="hd-sn">Poção</span>`;
+    pb.addEventListener("pointerdown", (e) => { e.preventDefault(); opts.onPotion!(); });
+    bar.append(pb);
   }
 
   function trigger(a: ActionId) {
@@ -232,6 +264,9 @@ export function mountHud(opts: HudOptions): Hud {
     setDead(secondsLeft) {
       dead.classList.toggle("on", secondsLeft !== null);
       if (secondsLeft !== null) deadSub.textContent = `Renascendo em ${Math.max(0, Math.ceil(secondsLeft))}`;
+    },
+    setTouch(on) {
+      root.classList.toggle("touch", on);
     },
     setBuff(on, label = "Grito ativo") {
       if (on) buff.textContent = label;
