@@ -15,6 +15,7 @@ export const Msg = {
   InvDrop: "inv_drop", // { slot }
   InvSync: "inv_sync", // pede a fotografia do inventário (o cliente pede depois de registrar os receptores)
   Chat: "chat", // { text }: mensagem para toda a zona (o servidor limpa o texto e usa o nome do personagem)
+  Pvp: "pvp", // { on: boolean }: pede para entrar (true) ou sair (false) do modo PvP; o servidor canaliza e decide
   Ping: "ping", // { t }: o servidor devolve o mesmo t em Evt.Pong (o cliente mede a ida e volta)
 } as const;
 
@@ -34,7 +35,14 @@ export const Evt = {
   Loot: "loot", // item recebido
   Notice: "notice", // aviso de texto para o dono
   Chat: "chat", // { id, name, text }: mensagem de chat de um jogador, para toda a zona
+  Pvp: "pvp", // { s: "start" | "cancel" | "stop" | "on" | "off" }: andamento do modo PvP, só para o dono
 } as const;
+
+/** PvP: canalização (entrar ou sair) em segundos; qualquer dano recebido a cancela. */
+export const PVP_CHANNEL_S = 5;
+/** Estado da canalização sincronizado no jogador: 0 nenhuma, 1 entrando, 2 saindo. */
+export type PvpChannel = 0 | 1 | 2;
+export interface PvpEvent { s: "start" | "cancel" | "stop" | "on" | "off" }
 
 /** Limites do chat (valem no servidor; o cliente só os repete para avisar cedo). */
 export const CHAT_MAX_LEN = 200;

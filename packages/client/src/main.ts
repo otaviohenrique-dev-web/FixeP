@@ -4,7 +4,7 @@ import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, enemyXp, ITEMS, RARITY_COLOR,
   type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type InventorySnapshot, type ChatEvent, type LootEvent, type NoticeEvent,
+  type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -44,6 +44,7 @@ const animFor = (a: ActionId): ActionAnim => (a === "attack" ? "attack" : a === 
 class WorldScene extends Phaser.Scene {
   private room!: Room;
   private hud!: Hud;
+  private pvpTag = new Map<string, string>(); // última marca de PvP aplicada ao nome de cada jogador
   private inv!: InventoryUi;
   private sprites = new Map<string, ActorView>();
   private atlases = new Map<string, ActorAtlas>();
@@ -130,7 +131,7 @@ class WorldScene extends Phaser.Scene {
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
 
     // HUD, menu e entrada
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion() });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }) });
     this.joy = mountJoystick();
     this.applyTouch();
     this.paintPortrait();
@@ -175,6 +176,16 @@ class WorldScene extends Phaser.Scene {
       if (!d) return;
       this.inv.toast(`+ ${d.name}${m.qty > 1 ? ` x${m.qty}` : ""}`, RARITY_COLOR[d.rarity]);
       sfx.pickup();
+    });
+    this.room.onMessage(Evt.Pvp, (m: PvpEvent) => {
+      const say: Record<string, [string, string]> = {
+        cancel: ["Canalização interrompida", "#ffb3a6"], stop: ["Canalização cancelada", "#e6eef9"],
+        on: ["Modo PvP ativado", "#ffb3a6"], off: ["Você saiu do modo PvP", "#9fe0a8"],
+      };
+      const t = say[m.s];
+      if (!t) return;
+      if (m.s === "cancel") this.hud.alert(t[0]);
+      else this.inv.toast(t[0], t[1]);
     });
     this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), "#ffb3a6"));
     this.room.send(Msg.InvSync, {});
@@ -611,6 +622,13 @@ class WorldScene extends Phaser.Scene {
       if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, 18); // Brasa ativa
     };
 
+    st.players.forEach((p: any, id: string) => { // nome vermelho com espadas = em PvP; "..." enquanto canaliza a entrada
+      const tag = p.pvp ? "pvp" : p.pvpChan === 1 ? "chan" : "";
+      if (this.pvpTag.get(id) !== tag) {
+        this.pvpTag.set(id, tag);
+        this.labels.get(`p:${id}`)?.setText(tag === "pvp" ? `⚔ ${p.name}` : tag === "chan" ? `${p.name} …` : p.name).setColor(tag === "pvp" ? "#ff6a5a" : "#ccc");
+      }
+    });
     st.players.forEach((p: any, id: string) => place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember }));
     st.enemies.forEach((e: any, id: string) => {
       const key = `e:${id}`;
@@ -622,6 +640,7 @@ class WorldScene extends Phaser.Scene {
 
     const me = this.me();
     if (me) {
+      this.hud.setPvp(!!me.pvp, Number(me.pvpChan) || 0);
       this.hud.setHp(me.hp, me.maxHp);
       this.hud.setMana(me.mana, me.maxMana);
       this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Grito ativo" : "Brasa ativa");
