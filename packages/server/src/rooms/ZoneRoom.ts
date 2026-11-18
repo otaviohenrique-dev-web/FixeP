@@ -6,16 +6,20 @@ import {
   PLAYER_RADIUS, PVP_CHANNEL_S, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
+  COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
+  TRADE_INVITE_S, TRADE_RANGE, TRADE_READY_DELAY_S, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, sortInventory, type Inventory } from "../game/inventory.js";
-import { rollMobLoot, rollChestLoot, type Drop } from "../game/loot.js";
+import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
+import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
 
 interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string> }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
+interface Trade { a: string; b: string; offer: Record<string, TradeOffer>; ready: Record<string, boolean>; changedAt: number }
 interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory }
 
 // uma sessão por conta em TODAS as zonas: conta -> (sala, sessão) atual; a chegada de uma travessia guarda de onde veio
@@ -126,7 +130,33 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!this.canPickup(client.sessionId, pl, g)) return this.notify(client.sessionId, `Reservado para outro jogador (${Math.ceil(g.unlockAt - this.t)}s).`);
       this.tryPickup(client.sessionId, pl, p.id, g);
     });
-    this.onMessage(Msg.InvDrop, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => dropSlot(pl.inv, p?.slot)));
+    this.onMessage(Msg.InvDrop, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.dropToGround(client.sessionId, pl, p?.slot)));
+    this.onMessage(Msg.InvBreak, (client, p: { slot?: unknown; confirm?: unknown }) => this.econOp(client, null, null, (pl) => {
+      const r = breakSlot(pl.inv, p?.slot, p?.confirm);
+      return r.ok ? { ok: true, msg: `${r.name} desmanchado: +${r.gain} Tostões.` } : r;
+    }));
+    // comerciante e ferreira: o servidor confere a distância até o NPC, o saldo e o espaço; o cliente só pede
+    this.onMessage(Msg.ShopBuy, (client, p: { npc?: unknown; id?: unknown; qty?: unknown }) => this.econOp(client, p?.npc, "merchant", (pl) => {
+      const r = buyItem(pl.inv, pl.cls as CharClass, p?.id, p?.qty);
+      return r.ok ? { ok: true, msg: `Comprou ${ITEMS[p.id as string].name}${(p.qty as number) > 1 ? ` x${p.qty}` : ""} por ${r.cost} Tostões.` } : r;
+    }));
+    this.onMessage(Msg.ShopSell, (client, p: { npc?: unknown; slot?: unknown; qty?: unknown }) => this.econOp(client, p?.npc, "merchant", (pl) => {
+      const r = sellSlot(pl.inv, p?.slot, p?.qty);
+      return r.ok ? { ok: true, msg: `Vendeu ${r.name} por ${r.gain} Tostões.` } : r;
+    }));
+    this.onMessage(Msg.SmithMerge, (client, p: { npc?: unknown; slots?: unknown }) => this.econOp(client, p?.npc, "smith", (pl) => {
+      const r = mergeItems(pl.inv, p?.slots, this.zone.id);
+      if (!r.ok) return r;
+      if (r.success) { client.send(Evt.Loot, { id: r.id, qty: 1 }); return { ok: true, msg: `A fusão deu certo: ${ITEMS[r.id].name}! (−${r.fee} Tostões)` }; }
+      return { ok: true, msg: `A fusão falhou (${Math.round(r.chance * 100)}% de chance): ${ITEMS[r.lost!].name} se perdeu. (−${r.fee} Tostões)` };
+    }));
+    // troca entre jogadores (janela com confirmação dos dois lados)
+    this.onMessage(Msg.TradeInvite, (client, p: { name?: unknown }) => this.tradeInvite(client, p?.name));
+    this.onMessage(Msg.TradeAccept, (client) => this.tradeAccept(client));
+    this.onMessage(Msg.TradeDecline, (client) => this.tradeDecline(client));
+    this.onMessage(Msg.TradeOffer, (client, p: unknown) => this.tradeOffer(client, p));
+    this.onMessage(Msg.TradeReady, (client, p: { ready?: unknown }) => this.tradeReady(client, p?.ready === true));
+    this.onMessage(Msg.TradeCancel, (client) => { const tr = this.trades.get(client.sessionId); if (tr && this.allow(client)) this.closeTrade(tr, "Troca cancelada."); });
     // ping: devolve o mesmo carimbo de tempo para o cliente medir a ida e volta. Só ecoa números (nada é interpretado).
     this.onMessage(Msg.Ping, (client, p: { t?: unknown }) => {
       if (!this.allow(client)) return;
@@ -303,10 +333,179 @@ export class ZoneRoom extends Room<ZoneState> {
     p.mana = Math.floor(p.manaF);
   }
 
+  private notifyOk(id: string, text: string) {
+    this.clients.getById(id)?.send(Evt.Notice, { text, ok: true });
+  }
+
+  /** NPC da zona (comerciante/ferreira) ao alcance do jogador, ou null. A distância é do SERVIDOR: o cliente não escolhe onde está. */
+  private npcNear(p: Player, id: unknown, kind: NpcKind) {
+    const n = typeof id === "string" ? zoneNpcs(this.zone.id).find((q) => q.id === id && q.kind === kind) : undefined;
+    return n && dist(p.x, p.y, n.x, n.y) <= NPC_REACH ? n : null;
+  }
+
+  /** Operação de economia: valida taxa, vida, viagem, troca em andamento e (se houver NPC) a distância; depois grava e devolve a fotografia. */
+  private econOp(client: Client, npcId: unknown, kind: NpcKind | null, op: (p: Player) => { ok: true; msg: string } | { ok: false; error: string }) {
+    if (!this.allow(client)) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || p.traveling) return;
+    if (p.trading) return this.notify(client.sessionId, "Termine ou cancele a troca primeiro.");
+    if (kind && !this.npcNear(p, npcId, kind)) return this.notify(client.sessionId, "Chegue mais perto do NPC.");
+    const r = op(p);
+    if (!r.ok) return this.notify(client.sessionId, r.error);
+    p.invDirty = true;
+    this.refreshStats(p);
+    this.sendInv(client.sessionId, p);
+    this.notifyOk(client.sessionId, r.msg);
+  }
+
+  /** Solta o item do espaço no chão, à frente do jogador: qualquer um pode pegar; quem soltou só o pega sozinho de novo depois de alguns segundos. */
+  private dropToGround(sid: string, p: Player, slot: unknown): { ok: true } | { ok: false; error: string } {
+    if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
+    const st = p.inv.slots[slot];
+    if (!st) return { ok: false, error: "Espaço vazio." };
+    if (this.t < p.dropAt + 0.3) return { ok: false, error: "Calma! Solte um item por vez." };
+    const item = { id: st.id, qty: st.qty };
+    dropSlot(p.inv, slot);
+    p.dropAt = this.t;
+    const x = clamp(p.x + Math.cos(p.face) * 1.3, 0, this.zone.w - 1), y = clamp(p.y + Math.sin(p.face) * 1.3, 0, this.zone.h - 1);
+    for (const g of this.spawnGround([item], x, y, "", 0)) { g.noAutoSid = sid; g.noAutoUntil = this.t + 4; }
+    return { ok: true };
+  }
+
+  // ------------------------------------------------------------------ troca entre jogadores
+  private trades = new Map<string, Trade>(); // sessão -> troca (as duas pontas apontam para a mesma)
+  private tradeInvites = new Map<string, { from: string; until: number }>(); // sessão convidada -> convite pendente
+
+  private side(tr: Trade, id: string): TradeOfferSide {
+    const o = tr.offer[id] ?? emptyOffer();
+    return { items: o.items.map((i) => ({ id: i.id, qty: i.qty })), iron: o.iron, obols: o.obols, ready: !!tr.ready[id] };
+  }
+
+  private sendTrade(tr: Trade) {
+    for (const [me, other] of [[tr.a, tr.b], [tr.b, tr.a]] as const) {
+      const ev: TradeEvent = { open: true, with: this.state.players.get(other)?.name ?? "", mine: this.side(tr, me), theirs: this.side(tr, other), readyIn: Math.max(0, Math.ceil((tr.changedAt + TRADE_READY_DELAY_S - this.t) * 10) / 10) };
+      this.clients.getById(me)?.send(Evt.Trade, ev);
+    }
+  }
+
+  private closeTrade(tr: Trade, reason: string, done = false) {
+    for (const id of [tr.a, tr.b]) {
+      this.trades.delete(id);
+      const p = this.state.players.get(id);
+      if (p) p.trading = false;
+      this.clients.getById(id)?.send(Evt.Trade, { open: false, reason, done } satisfies TradeEvent);
+    }
+  }
+
+  private tradeBusy(id: string) { return this.trades.has(id) || this.tradeInvites.has(id); }
+
+  private tradeInvite(client: Client, rawName: unknown) {
+    if (!this.allow(client)) return;
+    const me = this.state.players.get(client.sessionId);
+    if (!me || me.dead || me.traveling || typeof rawName !== "string") return;
+    if (this.trades.has(client.sessionId)) return this.notify(client.sessionId, "Você já está numa troca.");
+    const want = rawName.normalize("NFC").trim().toLowerCase();
+    let tid = "", target: Player | undefined;
+    this.state.players.forEach((o, oid) => { if (o.name.toLowerCase() === want) { tid = oid; target = o; } });
+    if (!target || tid === client.sessionId) return this.notify(client.sessionId, "Jogador não encontrado nesta zona.");
+    if (target.dead || target.traveling || this.tradeBusy(tid)) return this.notify(client.sessionId, `${target.name} está ocupado.`);
+    if (dist(me.x, me.y, target.x, target.y) > TRADE_RANGE) return this.notify(client.sessionId, "Chegue mais perto para trocar.");
+    this.tradeInvites.set(tid, { from: client.sessionId, until: this.t + TRADE_INVITE_S });
+    this.clients.getById(tid)?.send(Evt.TradeInvite, { from: me.name });
+    this.notifyOk(client.sessionId, `Convite de troca enviado a ${target.name}.`);
+  }
+
+  private tradeAccept(client: Client) {
+    if (!this.allow(client)) return;
+    const inv = this.tradeInvites.get(client.sessionId);
+    if (!inv) return;
+    this.tradeInvites.delete(client.sessionId);
+    client.send(Evt.TradeInviteEnd, {});
+    const a = this.state.players.get(inv.from), b = this.state.players.get(client.sessionId);
+    if (!a || !b || a.dead || b.dead || a.traveling || b.traveling || this.trades.has(inv.from) || this.trades.has(client.sessionId)) return this.notify(client.sessionId, "A troca não está mais disponível.");
+    if (dist(a.x, a.y, b.x, b.y) > TRADE_RANGE) return this.notify(client.sessionId, "Longe demais para trocar.");
+    const tr: Trade = { a: inv.from, b: client.sessionId, offer: { [inv.from]: emptyOffer(), [client.sessionId]: emptyOffer() }, ready: {}, changedAt: this.t };
+    this.trades.set(tr.a, tr);
+    this.trades.set(tr.b, tr);
+    a.trading = b.trading = true;
+    this.sendTrade(tr);
+  }
+
+  private tradeDecline(client: Client) {
+    if (!this.allow(client)) return;
+    const inv = this.tradeInvites.get(client.sessionId);
+    if (!inv) return;
+    this.tradeInvites.delete(client.sessionId);
+    client.send(Evt.TradeInviteEnd, {});
+    this.notify(inv.from, `${this.state.players.get(client.sessionId)?.name ?? "O jogador"} recusou a troca.`);
+  }
+
+  private tradeOffer(client: Client, raw: unknown) {
+    if (!this.allow(client)) return;
+    const tr = this.trades.get(client.sessionId), p = this.state.players.get(client.sessionId);
+    if (!tr || !p) return;
+    const r = parseOffer(p.inv, raw);
+    if (!r.ok) return this.notify(client.sessionId, r.error);
+    tr.offer[client.sessionId] = r.offer;
+    tr.ready = {}; // qualquer mudança desfaz as confirmações dos DOIS lados
+    tr.changedAt = this.t;
+    this.sendTrade(tr);
+  }
+
+  private tradeReady(client: Client, ready: boolean) {
+    if (!this.allow(client)) return;
+    const tr = this.trades.get(client.sessionId);
+    if (!tr) return;
+    if (ready && this.t < tr.changedAt + TRADE_READY_DELAY_S) return this.notify(client.sessionId, "A oferta acabou de mudar. Confira antes de aceitar.");
+    if (ready) tr.ready[client.sessionId] = true; else delete tr.ready[client.sessionId];
+    if (!(tr.ready[tr.a] && tr.ready[tr.b])) return this.sendTrade(tr);
+    this.executeTradeNow(tr);
+  }
+
+  /** Os dois confirmaram: confere tudo de novo, troca em memória (atômico) e grava os DOIS personagens na mesma transação. */
+  private executeTradeNow(tr: Trade) {
+    const a = this.state.players.get(tr.a), b = this.state.players.get(tr.b);
+    if (!a || !b || a.dead || b.dead || a.traveling || b.traveling) return this.closeTrade(tr, "A troca foi cancelada.");
+    if (dist(a.x, a.y, b.x, b.y) > TRADE_RANGE + 2) return this.closeTrade(tr, "Vocês se afastaram demais.");
+    const r = executeTrade(a.inv, tr.offer[tr.a], b.inv, tr.offer[tr.b]);
+    if (!r.ok) {
+      tr.ready = {};
+      for (const id of [tr.a, tr.b]) this.notify(id, r.error);
+      return this.sendTrade(tr);
+    }
+    // grava: a fotografia dos dois é tirada AGORA; a gravação espera as filas de salvamento de cada um e vai numa transação só
+    const ra = this.repo.inventoryRows(a.inv), rb = this.repo.inventoryRows(b.inv);
+    a.invDirty = b.invDirty = false;
+    const pr = Promise.all([a.saveChain, b.saveChain]).then(() => this.repo.saveInventoryPair([a.charId, ra], [b.charId, rb]))
+      .catch((e) => { a.invDirty = b.invDirty = true; console.error("[db] falha ao gravar a troca:", (e as Error).message); });
+    a.saveChain = b.saveChain = pr;
+    this.refreshStats(a);
+    this.refreshStats(b);
+    this.sendInv(tr.a, a);
+    this.sendInv(tr.b, b);
+    const gave = (o: TradeOffer) => [...o.items.map((i) => `${ITEMS[i.id].name}${i.qty > 1 ? ` x${i.qty}` : ""}`), describeCoins(o.iron, o.obols)].filter(Boolean).join(", ") || "nada";
+    this.notifyOk(tr.a, `Troca feita! Recebeu: ${gave(tr.offer[tr.b])}.`);
+    this.notifyOk(tr.b, `Troca feita! Recebeu: ${gave(tr.offer[tr.a])}.`);
+    this.closeTrade(tr, "Troca concluída.", true);
+  }
+
+  /** a cada tick: expira convites e cancela trocas de quem se afastou, morreu ou viajou */
+  private updateTrades() {
+    for (const [id, inv] of this.tradeInvites) {
+      if (this.t >= inv.until || !this.state.players.has(inv.from)) { this.tradeInvites.delete(id); this.clients.getById(id)?.send(Evt.TradeInviteEnd, {}); }
+    }
+    for (const tr of new Set(this.trades.values())) {
+      const a = this.state.players.get(tr.a), b = this.state.players.get(tr.b);
+      if (!a || !b || a.dead || b.dead || a.traveling || b.traveling) this.closeTrade(tr, "A troca foi cancelada.");
+      else if (dist(a.x, a.y, b.x, b.y) > TRADE_RANGE + 2) this.closeTrade(tr, "Vocês se afastaram demais.");
+    }
+  }
+
   private invOp(client: Client, op: (p: Player) => { ok: true } | { ok: false; error: string }) {
     if (!this.allow(client)) return;
     const p = this.state.players.get(client.sessionId);
     if (!p || p.dead) return;
+    if (p.trading) return this.notify(client.sessionId, "Termine ou cancele a troca primeiro.");
     const r = op(p);
     if (!r.ok) return this.notify(client.sessionId, r.error);
     p.invDirty = true;
@@ -333,8 +532,9 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   /** Coloca os itens no chão em volta de (x, y), reservados a `owner` (e ao grupo dele) por `lockS`. O mais antigo sai se passar do limite. */
-  private spawnGround(drops: Drop[], x: number, y: number, owner: string, lockS: number) {
+  private spawnGround(drops: Drop[], x: number, y: number, owner: string, lockS: number): GroundItem[] {
     const party = this.state.players.get(owner)?.party ?? "";
+    const made: GroundItem[] = [];
     drops.forEach((d, i) => {
       const g = new GroundItem();
       const ang = (i / Math.max(1, drops.length)) * Math.PI * 2 + Math.random() * 0.6, rad = drops.length > 1 ? 1.2 + Math.random() * 0.4 : 0; // afastados o bastante para os nomes não se sobrepor
@@ -344,15 +544,27 @@ export class ZoneRoom extends Room<ZoneState> {
       g.owner = owner; g.party = party; g.lockS = lockS;
       g.unlockAt = this.t + lockS; g.expireAt = this.t + lockS + GROUND_TTL_S;
       this.state.items.set(`g${++this.seq}`, g);
+      made.push(g);
     });
     while (this.state.items.size > GROUND_MAX) { // passou do limite: sai o mais antigo (menor tempo para expirar)
       let oldest: string | null = null, at = Infinity;
       this.state.items.forEach((g, gid) => { if (g.expireAt < at) { at = g.expireAt; oldest = gid; } });
       if (oldest) this.state.items.delete(oldest); else break;
     }
+    return made;
   }
 
   private tryPickup(id: string, p: Player, gid: string, g: GroundItem, quiet = false) {
+    if (isCoinItem(g.itemId)) { // moeda no chão: vai direto para o saldo (não ocupa espaço na mochila)
+      const kind = g.itemId === COIN_OBOL.id ? "obols" : "iron";
+      const add = addCoins(p.inv, kind, g.qty);
+      if (add <= 0) { if (!quiet || this.t >= p.fullNoticeAt) { this.notify(id, "Saldo de moedas cheio."); p.fullNoticeAt = this.t + 4; } return; }
+      this.clients.getById(id)?.send(Evt.Coins, { iron: kind === "iron" ? add : 0, obols: kind === "obols" ? add : 0, x: g.x, y: g.y });
+      p.invDirty = true;
+      this.sendInv(id, p);
+      if (add < g.qty) g.qty -= add; else this.state.items.delete(gid);
+      return;
+    }
     const left = addItem(p.inv, g.itemId, g.qty);
     const got = g.qty - left;
     if (got <= 0) {
@@ -373,6 +585,7 @@ export class ZoneRoom extends Room<ZoneState> {
       if (this.t >= g.expireAt) { gone.push(gid); return; }
       this.state.players.forEach((p, pid) => {
         if (p.dead || p.traveling || !this.state.items.has(gid) || dist(p.x, p.y, g.x, g.y) > PICKUP_AUTO || !this.canPickup(pid, p, g)) return;
+        if (g.noAutoSid === pid && this.t < g.noAutoUntil) return; // acabou de soltar: não pega de volta sozinho
         this.tryPickup(pid, p, gid, g, true);
       });
     });
@@ -421,6 +634,13 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.level = auth.character.level;
     pl.xp = auth.character.xp;
     pl.inv = auth.inventory;
+    if (econTest() && !auth.inventory.slots.some(Boolean) && auth.inventory.iron === 0) { // só nos testes (ECON_TEST=1): kit inicial para exercitar loja, fusão e troca sem jogar horas
+      const i = auth.inventory;
+      i.iron = 50000; i.obols = 2;
+      for (const k of ["espada_1m_common", "arco_curto_common", "cetro_common", "varinha_common", "warrior_armor_common", "warrior_armor_common", "warrior_armor_common", "warrior_armor_rare", "warrior_helmet_epic"]) addItem(i, k, 1);
+      addItem(i, "pocao_de_vida", 5);
+      pl.invDirty = true;
+    }
     if (auth.inventory.migrated) { pl.invDirty = true; auth.inventory.migrated = false; } // itens antigos traduzidos: grava no próximo salvamento
     this.refreshStats(pl, true);
     this.state.players.set(client.sessionId, pl);
@@ -461,6 +681,9 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   async onLeave(client: Client) {
+    const tr = this.trades.get(client.sessionId);
+    if (tr) this.closeTrade(tr, "O outro jogador saiu.");
+    this.tradeInvites.delete(client.sessionId);
     this.buckets.delete(client.sessionId);
     this.chatAt.delete(client.sessionId);
     const uid = this.userIds.get(client.sessionId);
@@ -541,6 +764,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.updateProjectiles(dt);
     this.updateTraps();
     this.updateGround();
+    this.updateTrades();
     if (this.pending.length) {
       const due = this.pending.filter((x) => this.t >= x.at);
       if (due.length) {
@@ -860,11 +1084,13 @@ export class ZoneRoom extends Room<ZoneState> {
       const gain = Math.round(enemyXp(e.level) * (K.boss?.xpMul ?? 1) * partyXpMult(mates));
       this.addXp(pid, pl, gain);
       this.clients.getById(pid)?.send(Evt.Xp, { amount: gain, x: e.x, y: e.y });
+      const iron = addCoins(pl.inv, "iron", K.boss ? bossIron(e.level) : mobIron(e.level)); // tostões garantidos a todos por perto (como o XP)
+      if (iron > 0) { pl.invDirty = true; this.sendInv(pid, pl); this.clients.getById(pid)?.send(Evt.Coins, { iron, obols: 0, x: e.x, y: e.y }); }
     }
     if (K.boss) return this.openBossChest(e, K.name, by);
     // os itens caem no chão: quem abateu (e o grupo) tem a reserva; depois qualquer um pega
     const killer = this.state.players.get(by);
-    if (killer) this.spawnGround(rollMobLoot(this.zone, Math.random, killer.cls as CharClass), e.x, e.y, by, this.lockSeconds(LOOT_LOCK_S));
+    if (killer) this.spawnGround(rollMobLoot(this.zone, Math.random, killer.cls as CharClass, e.level), e.x, e.y, by, this.lockSeconds(LOOT_LOCK_S));
     e.contrib.clear();
   }
 
@@ -878,7 +1104,7 @@ export class ZoneRoom extends Room<ZoneState> {
       const pl = this.state.players.get(pid);
       if (!pl || pl.dead || dist(pl.x, pl.y, e.x, e.y) > SHARE_RADIUS * 2) continue;
       const drops = rollChestLoot(this.zone, Math.random, pl.cls as CharClass);
-      for (const d of drops) if (rarityIndex(ITEMS[d.id].rarity) > rarityIndex(best)) best = ITEMS[d.id].rarity;
+      for (const d of drops) if (ITEMS[d.id] && rarityIndex(ITEMS[d.id].rarity) > rarityIndex(best)) best = ITEMS[d.id].rarity;
       this.spawnGround(drops, e.x, e.y, pid, this.lockSeconds(CHEST_LOCK_S));
     }
     this.broadcast(Evt.Chest, { x: e.x, y: e.y, rarity: best, boss: name });

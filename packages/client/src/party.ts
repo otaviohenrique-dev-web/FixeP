@@ -389,7 +389,7 @@ export function mountParty(opts: PartyOptions): PartyUi {
       const s = state();
       const soon = "Em breve";
       menu.append(
-        item("Ver Perfil", null, soon), item("Pedido de amizade", null, soon), item("Sussurrar", null, soon), item("Trocar", null, soon), item("Bloquear", null, soon),
+        item("Ver Perfil", null, soon), item("Pedido de amizade", null, soon), item("Sussurrar", null, soon), item("Trocar", send("trade_invite")), item("Bloquear", null, soon),
       );
       const canInvite = (!s.inParty || s.leader) && s.size < PARTY_MAX && !t.inParty;
       const inviteWhy = t.inParty ? "Já está em um grupo" : s.inParty && !s.leader ? "Só o líder convida" : s.size >= PARTY_MAX ? "Seu grupo está cheio" : undefined;

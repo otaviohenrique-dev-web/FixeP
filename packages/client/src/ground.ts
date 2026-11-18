@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, type Rarity } from "@frixep/shared";
+import { ITEMS, RARITY_COLOR, RARITY_HEX, COIN_OBOL, isCoinItem, coinName, rarityIndex, type Rarity } from "@frixep/shared";
 
 /**
  * Itens no chão: visíveis a todos na cor da raridade (brilho, coluna de luz de rara para cima).
@@ -12,6 +12,16 @@ interface View { d: GroundData; at: number; sy: number; sx: number; parts: Phase
 
 const BEAM_H = [0, 0, 46, 96, 140, 170];
 
+/** Aparência no chão: item comum de equipamento, ou moeda (Tostões: sacola cinza sem coluna; Óbolo: brilho vermelho de lendário). */
+function look(d: GroundData): { name: string; rarity: Rarity; hex: number; color: string; coin: boolean } | null {
+  if (isCoinItem(d.itemId)) {
+    const obol = d.itemId === COIN_OBOL.id;
+    return { name: coinName(d.itemId, d.qty), rarity: obol ? "legendary" : "common", hex: obol ? 0xff3b30 : 0xa8aeb9, color: obol ? "#ff6a5a" : "#cfd4dc", coin: true };
+  }
+  const def = ITEMS[d.itemId];
+  return def ? { name: def.name + (d.qty > 1 ? ` x${d.qty}` : ""), rarity: def.rarity, hex: RARITY_HEX[def.rarity], color: RARITY_COLOR[def.rarity], coin: false } : null;
+}
+
 export class GroundLayer {
   private views = new Map<string, View>();
   private ringG: Phaser.GameObjects.Graphics;
@@ -21,10 +31,10 @@ export class GroundLayer {
   }
 
   add(id: string, d: GroundData) {
-    const def = ITEMS[d.itemId];
+    const def = look(d);
     if (!def || this.views.has(id)) return;
     const { sx, sy } = this.toScreen(d.x, d.y);
-    const t = rarityIndex(def.rarity), hex = RARITY_HEX[def.rarity];
+    const t = rarityIndex(def.rarity), hex = def.hex;
     const parts: Phaser.GameObjects.GameObject[] = [];
     const glow = this.scene.add.ellipse(sx, sy, 34 + t * 6, 16 + t * 3, hex, 0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(0.65);
     this.scene.tweens.add({ targets: glow, alpha: { from: 0.2, to: t >= 5 ? 0.85 : 0.55 }, scale: t >= 5 ? { from: 0.9, to: 1.4 } : { from: 0.95, to: 1.1 }, duration: t >= 5 ? 520 : 900, yoyo: true, repeat: -1 });
@@ -35,10 +45,12 @@ export class GroundLayer {
       this.scene.tweens.add({ targets: beam, alpha: { from: 0.12, to: t >= 4 ? 0.45 : 0.3 }, duration: t >= 4 ? 300 : 700, yoyo: true, repeat: -1 });
       parts.push(beam);
     }
-    const gem = this.scene.add.rectangle(sx, sy - 8, 10, 10, hex).setStrokeStyle(2, 0xffffff, 0.85).setRotation(Math.PI / 4).setDepth(sy + 2);
+    const gem: Phaser.GameObjects.Shape = def.coin
+      ? this.scene.add.ellipse(sx, sy - 8, 13, 13, hex).setStrokeStyle(2, 0x2b2f38, 1).setDepth(sy + 2) // moeda: disco com borda escura
+      : this.scene.add.rectangle(sx, sy - 8, 10, 10, hex).setStrokeStyle(2, 0xffffff, 0.85).setRotation(Math.PI / 4).setDepth(sy + 2);
     this.scene.tweens.add({ targets: gem, y: sy - 13, duration: 700 + Math.random() * 200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     parts.push(gem);
-    const name = this.scene.add.text(sx, sy - 26, def.name + (d.qty > 1 ? ` x${d.qty}` : ""), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "11px", color: RARITY_COLOR[def.rarity], stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1).setDepth(1e5 + 3);
+    const name = this.scene.add.text(sx, sy - 26, def.name, { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "11px", color: def.color, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1).setDepth(1e5 + 3);
     const timer = this.scene.add.text(sx, sy + 12, "", { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "10px", color: "#ffffff", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 0).setDepth(1e5 + 3);
     parts.push(name, timer);
     this.views.set(id, { d, at: this.scene.time.now, sx, sy, parts, name, timer, gem, rar: def.rarity, secs: -1 });

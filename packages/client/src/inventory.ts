@@ -1,6 +1,6 @@
 import { isTypingTarget } from "./keys";
 import {
-  ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
+  ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
 } from "@frixep/shared";
 
@@ -31,6 +31,9 @@ const CSS = `
 .iv-left{display:flex;flex-direction:column;gap:6px}
 .iv-eq{display:grid;grid-template-columns:1fr;gap:5px}
 .iv-stats{white-space:pre-line}
+.iv-wallet{display:flex;gap:14px;align-items:center;margin:0 0 8px;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9}
+.iv-wallet span{display:flex;align-items:center;gap:5px}
+.iv-wallet img{width:20px;height:20px;image-rendering:pixelated}
 .iv-sort{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#8fb0cf;background:transparent;border:1px solid rgba(160,200,240,.18);display:grid;place-items:center;margin-right:8px;opacity:.75}
 .iv-sort:hover,.iv-sort:focus-visible{opacity:1;color:#fff;border-color:#ff9a4d;outline:none}
 .iv-sort svg{width:16px;height:16px}
@@ -104,7 +107,7 @@ function statLines(d: ItemDef): string[] {
   return o;
 }
 
-export function mountInventory(opts: { send(type: string, payload: unknown): void; getLevel(): number; getClass(): CharClass }): InventoryUi {
+export function mountInventory(opts: { send(type: string, payload: unknown): void; getLevel(): number; getClass(): CharClass; onBreak?(slot: number): void }): InventoryUi {
   const style = document.createElement("style");
   style.textContent = CSS;
   document.head.append(style);
@@ -122,7 +125,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       <div class="iv-head"><h2 class="iv-title">Mochila</h2><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
       <div class="iv-body">
         <div class="iv-left"><div class="iv-eq"></div><p class="iv-stats"></p></div>
-        <div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
+        <div><div class="iv-wallet" aria-label="Moedas"></div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
       </div>
     </div>`;
   const toasts = document.createElement("div");
@@ -134,8 +137,9 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const statsEl = back.querySelector<HTMLElement>(".iv-stats")!;
   const gridEl = back.querySelector<HTMLElement>(".iv-grid")!;
   const detEl = back.querySelector<HTMLElement>(".iv-det")!;
+  const walletEl = back.querySelector<HTMLElement>(".iv-wallet")!;
 
-  let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null } };
+  let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null }, iron: 0, obols: 0 };
   let sel: { kind: "slot"; i: number } | { kind: "equip"; s: EquipSlot } | null = null;
   let confirmDrop = false;
 
@@ -144,7 +148,22 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const close = () => { back.classList.remove("open"); btn.focus(); };
   const toggle = () => (isOpen() ? close() : open());
 
+  function renderWallet() {
+    walletEl.replaceChildren();
+    for (const [c, n, color] of [[COIN_IRON, snap.iron, "#e6eef9"], [COIN_OBOL, snap.obols, COIN_OBOL.color]] as const) {
+      const s = document.createElement("span");
+      s.style.color = color;
+      s.title = c.name;
+      const im = document.createElement("img");
+      im.src = `/assets/items/item_${c.id}.png`;
+      im.alt = "";
+      s.append(im, document.createTextNode(`${n.toLocaleString("pt-BR")} ${c.short}`));
+      walletEl.append(s);
+    }
+  }
+
   function render() {
+    renderWallet();
     // equipamento
     eqEl.innerHTML = "";
     for (const s of EQUIP_SLOTS) {
@@ -246,7 +265,8 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       const i = sel.i;
       if (def.kind === "potion") mk("Usar", false, () => opts.send(Msg.InvUse, { slot: i }));
       else mk("Equipar", false, () => { opts.send(Msg.InvEquip, { slot: i }); });
-      mk(confirmDrop ? "Confirmar?" : "Descartar", true, () => {
+      if (def.kind !== "potion" && opts.onBreak) mk(`Quebrar (+${breakValue(def.id) * snap.inv[i]!.qty})`, true, () => opts.onBreak!(i)); // abre o diálogo de confirmação
+      mk(confirmDrop ? "Confirmar?" : "Soltar", true, () => {
         if (!confirmDrop) { confirmDrop = true; renderDetail(); return; }
         confirmDrop = false;
         sel = null;

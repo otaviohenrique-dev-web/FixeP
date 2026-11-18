@@ -19,7 +19,9 @@
     "test:party": "node test/party.mjs",
     "test:mago": "node test/mago.mjs",
     "test:loot": "node test/loot.mjs",
-    "test:inv:unit": "tsx test/inventory.unit.ts"
+    "test:inv:unit": "tsx test/inventory.unit.ts",
+    "test:econ:unit": "tsx test/economy.unit.ts",
+    "test:econ": "node test/economy.mjs"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.0",

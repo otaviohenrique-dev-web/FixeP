@@ -1,4 +1,4 @@
-import { ITEMS, RARITIES, GEAR_CLASSES, type CharClass, type Rarity, type ZoneDef, type ItemKind } from "@frixep/shared";
+import { ITEMS, RARITIES, GEAR_CLASSES, COIN_IRON, COIN_OBOL, coinZone, mobIron, bossIron, type CharClass, type Rarity, type ZoneDef, type ItemKind } from "@frixep/shared";
 
 export interface Drop { id: string; qty: number }
 export type Rng = () => number;
@@ -32,10 +32,20 @@ export function pickGear(rarity: Rarity, rng: Rng): string {
   return pool[Math.floor(rng() * pool.length)].id;
 }
 
-/** O que um inimigo comum solta (chance de equipamento e de poção baixas; a raridade respeita o teto da zona). `cls` só vale no modo de teste. */
-export function rollMobLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharClass = "warrior"): Drop[] {
-  if (testMode()) return [{ id: TEST_WEAPON[cls], qty: 1 }, { id: `${cls}_armor_common`, qty: 1 }, { id: "pocao_de_vida", qty: 2 }];
+/** Modo de teste da economia (ECON_TEST=1, só fora de produção): todo abate solta também uma sacola de tostões e um Óbolo. */
+export const econTest = () => process.env.ECON_TEST === "1" && process.env.NODE_ENV !== "production";
+
+/** O que um inimigo comum solta (chance de equipamento, poção e moedas baixas; a raridade respeita o teto da zona). `cls` só vale no modo de teste. */
+export function rollMobLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharClass = "warrior", level = 1): Drop[] {
+  if (testMode()) {
+    const t: Drop[] = [{ id: TEST_WEAPON[cls], qty: 1 }, { id: `${cls}_armor_common`, qty: 1 }, { id: "pocao_de_vida", qty: 2 }];
+    if (econTest()) t.push({ id: COIN_IRON.id, qty: 25 }, { id: COIN_OBOL.id, qty: 1 });
+    return t;
+  }
   const out: Drop[] = [];
+  const c = coinZone(zone.id);
+  if (rng() < c.bag) out.push({ id: COIN_IRON.id, qty: Math.max(1, Math.round(mobIron(level, rng) * (4 + rng() * 4))) }); // sacola de tostões
+  if (rng() < c.obol) out.push({ id: COIN_OBOL.id, qty: 1 }); // Óbolo de Sangue: raríssimo
   if (rng() < zone.drops.gear) out.push({ id: pickGear(pickRarity(zone.drops.weights, rng), rng), qty: 1 });
   if (rng() < zone.drops.potion) out.push({ id: "pocao_de_vida", qty: 1 });
   return out;
@@ -44,8 +54,9 @@ export function rollMobLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharClas
 /** Baú do chefe: `count` equipamentos; o primeiro é no mínimo da raridade `min`. Só aqui saem as raridades mais altas da zona. */
 export function rollChestLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharClass = "warrior"): Drop[] {
   const c = zone.boss.chest;
-  if (testMode()) return [{ id: `${cls}_helmet_${c.min}`, qty: 1 }, { id: "pocao_de_vida", qty: 2 }];
-  const out: Drop[] = [];
+  if (testMode()) return [{ id: `${cls}_helmet_${c.min}`, qty: 1 }, { id: "pocao_de_vida", qty: 2 }, ...(econTest() ? [{ id: COIN_OBOL.id, qty: 1 }] : [])];
+  const out: Drop[] = [{ id: COIN_IRON.id, qty: Math.round(bossIron(zone.boss.level, rng) * (1.5 + rng())) }]; // sacola grande do chefe
+  if (rng() < coinZone(zone.id).bossObol) out.push({ id: COIN_OBOL.id, qty: 1 });
   for (let i = 0; i < c.count; i++) {
     let rar = pickRarity(c.weights, rng);
     if (i === 0 && RARITIES.indexOf(rar) < RARITIES.indexOf(c.min)) rar = c.min;

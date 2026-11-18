@@ -4,6 +4,8 @@ import { ITEMS, INV_SLOTS, EQUIP_SLOTS, CLASS_DEFS, rarityIndex, migrateItemId, 
 export interface Inventory {
   slots: (InvStack | null)[];
   equip: Record<EquipSlot, string | null>;
+  iron: number; // Tostões de Ferro (gravados junto com o inventário, na mesma transação)
+  obols: number; // Óbolos de Sangue
   migrated?: boolean; // itens antigos foram traduzidos ao carregar (o servidor grava de novo)
 }
 export type Result = { ok: true } | { ok: false; error: string };
@@ -12,11 +14,15 @@ export const emptyEquip = (): Record<EquipSlot, string | null> => ({ weapon: nul
 export const emptyInventory = (): Inventory => ({
   slots: Array.from({ length: INV_SLOTS }, () => null),
   equip: emptyEquip(),
+  iron: 0,
+  obols: 0,
 });
 
 export const snapshot = (inv: Inventory): InventorySnapshot => ({
   inv: inv.slots.map((s) => (s ? { id: s.id, qty: s.qty } : null)),
   equip: { ...inv.equip },
+  iron: inv.iron,
+  obols: inv.obols,
 });
 
 export const validSlot = (i: unknown): i is number => Number.isInteger(i) && (i as number) >= 0 && (i as number) < INV_SLOTS;
@@ -42,6 +48,12 @@ export function addItem(inv: Inventory, id: string, qty: number): number {
     }
   }
   return left;
+}
+
+/** Cabe `qty` do item? (testa numa cópia; não altera o inventário) */
+export function canFit(inv: Inventory, id: string, qty: number): boolean {
+  const c: Inventory = { ...inv, slots: inv.slots.map((s) => (s ? { ...s } : null)) };
+  return addItem(c, id, qty) === 0;
 }
 
 export function equipFromSlot(inv: Inventory, idx: unknown, level: number, cls: CharClass): Result {

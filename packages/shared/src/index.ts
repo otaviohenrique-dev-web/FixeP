@@ -15,7 +15,8 @@ export const Msg = {
   InvEquip: "inv_equip", // { slot }
   InvUnequip: "inv_unequip", // { slot: "weapon" | "armor" }
   InvUse: "inv_use", // { slot }
-  InvDrop: "inv_drop", // { slot }
+  InvDrop: "inv_drop", // { slot }: solta o item no chão (qualquer um pode pegar; quem soltou não o pega sozinho por alguns segundos)
+  InvBreak: "inv_break", // { slot, confirm: true }: quebra (desmancha) um equipamento por tostões; de raro para cima o servidor exige confirm
   InvSort: "inv_sort", // {}: organiza a mochila (junta pilhas e ordena por tipo e raridade)
   Pickup: "pickup", // { id }: pega um item do chão (o servidor valida distância, dono e tempo de reserva; andar até o item também pega)
   InvSync: "inv_sync", // pede a fotografia do inventário (o cliente pede depois de registrar os receptores)
@@ -32,6 +33,15 @@ export const Msg = {
   PartyLead: "party_lead", // { name }: o líder passa a liderança
   PartyChat: "party_chat", // { text }: mensagem só para o grupo (comando /g)
   PartySync: "party_sync", // {}: pede o estado do grupo e o convite pendente (o cliente pede depois de registrar os receptores)
+  ShopBuy: "shop_buy", // { npc, id, qty }: compra do comerciante (valida distância, estoque, saldo e espaço)
+  ShopSell: "shop_sell", // { npc, slot, qty }: vende ao comerciante
+  SmithMerge: "smith_merge", // { npc, slots: [a, b, c] }: funde 3 equipamentos iguais num de raridade superior (custa tostões; pode falhar)
+  TradeInvite: "trade_invite", // { name }: convida um jogador da zona, por perto, para uma troca
+  TradeAccept: "trade_accept", // {}: aceita o convite de troca
+  TradeDecline: "trade_decline", // {}: recusa o convite
+  TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols }: define a minha oferta (reinicia as confirmações dos dois lados)
+  TradeReady: "trade_ready", // { ready: boolean }: confirma (ou retira a confirmação); com os dois confirmados o servidor executa
+  TradeCancel: "trade_cancel", // {}: cancela a troca
 } as const;
 
 /** Eventos enviados pelo servidor. */
@@ -58,7 +68,21 @@ export const Evt = {
   PartyInvite: "party_invite", // PartyInviteEvent: convite ou pedido recebido (expira em PARTY_INVITE_S)
   PartyInviteEnd: "party_invite_end", // {}: o convite pendente acabou (aceito, recusado ou expirado)
   PartyChat: "party_chat", // { name, text }: mensagem do chat de grupo
+  Coins: "coins", // CoinsEvent: tostões/óbolos ganhos num abate (só para quem recebeu)
+  Trade: "trade", // TradeEvent: estado da janela de troca (aberta, ofertas, confirmações) ou fechamento
+  TradeInvite: "trade_invite", // { from }: convite de troca recebido (expira em TRADE_INVITE_S)
+  TradeInviteEnd: "trade_invite_end", // {}: o convite acabou
 } as const;
+
+// ------------------------------------------------------------ troca entre jogadores
+export const TRADE_INVITE_S = 20; // validade do convite
+export const TRADE_RANGE = 8; // distância máxima (tiles) entre os dois, no convite e na execução
+export const TRADE_MAX_ITEMS = 8; // espaços de item por oferta
+export const TRADE_READY_DELAY_S = 1.5; // depois de qualquer mudança na oferta, só se confirma passado este tempo (anti-golpe do clique rápido)
+export interface TradeOfferSide { items: { id: string; qty: number }[]; iron: number; obols: number; ready: boolean }
+/** Estado da janela de troca. `open: false` = fechou (reason explica). */
+export interface TradeEvent { open: boolean; with?: string; mine?: TradeOfferSide; theirs?: TradeOfferSide; reason?: string; done?: boolean; readyIn?: number }
+export interface CoinsEvent { iron: number; obols: number; x: number; y: number }
 
 // ------------------------------------------------------------ grupo (party)
 export const PARTY_MAX = 4; // membros por grupo
@@ -335,4 +359,5 @@ export interface CharacterInfo { name: string; class: CharClass; level: number; 
 export interface TravelEvent { zone: number }
 
 export * from "./items";
+export * from "./economy";
 export * from "./zones";
