@@ -20,6 +20,15 @@ export const Msg = {
   Pvp: "pvp", // { on: boolean }: pede para entrar (true) ou sair (false) do modo PvP; o servidor canaliza e decide
   Travel: "travel", // { to }: pede para atravessar o portal da zona `to` (o servidor valida a distância; andar até o portal já basta)
   Ping: "ping", // { t }: o servidor devolve o mesmo t em Evt.Pong (o cliente mede a ida e volta)
+  PartyInvite: "party_invite", // { name }: convida o jogador (pelo nome do personagem) para o seu grupo; quem convida sem grupo vira líder
+  PartyJoin: "party_join", // { name }: pede para entrar no grupo desse jogador; se ele não tem grupo, quem aceitar vira líder
+  PartyAccept: "party_accept", // {}: aceita o convite/pedido pendente
+  PartyDecline: "party_decline", // {}: recusa o convite/pedido pendente
+  PartyLeave: "party_leave", // {}: sai do grupo
+  PartyKick: "party_kick", // { name }: o líder expulsa um membro
+  PartyLead: "party_lead", // { name }: o líder passa a liderança
+  PartyChat: "party_chat", // { text }: mensagem só para o grupo (comando /g)
+  PartySync: "party_sync", // {}: pede o estado do grupo e o convite pendente (o cliente pede depois de registrar os receptores)
 } as const;
 
 /** Eventos enviados pelo servidor. */
@@ -41,7 +50,27 @@ export const Evt = {
   Notice: "notice", // aviso de texto para o dono
   Chat: "chat", // { id, name, text }: mensagem de chat de um jogador, para toda a zona
   Pvp: "pvp", // { s: "start" | "cancel" | "stop" | "on" | "off" }: andamento do modo PvP, só para o dono
+  Party: "party", // PartyEvent: estado do grupo (lista vazia = sem grupo); enviado só aos membros, de qualquer zona
+  PartyInvite: "party_invite", // PartyInviteEvent: convite ou pedido recebido (expira em PARTY_INVITE_S)
+  PartyInviteEnd: "party_invite_end", // {}: o convite pendente acabou (aceito, recusado ou expirado)
+  PartyChat: "party_chat", // { name, text }: mensagem do chat de grupo
 } as const;
+
+// ------------------------------------------------------------ grupo (party)
+export const PARTY_MAX = 4; // membros por grupo
+export const PARTY_INVITE_S = 30; // validade do convite
+export const PARTY_XP_BONUS = 0.1; // +10% de XP por membro do grupo (vivo e por perto) além de você, no abate
+/** Multiplicador de XP para quem abate com `near` membros do mesmo grupo por perto (contando a si mesmo). */
+export const partyXpMult = (near: number) => 1 + PARTY_XP_BONUS * Math.max(0, Math.min(PARTY_MAX, near) - 1);
+export interface PartyMemberInfo {
+  name: string; cls: string; level: number;
+  hp: number; maxHp: number; mana: number; maxMana: number;
+  zone: number; // 0 = fora do jogo no momento (offline ou viajando entre zonas)
+  dead: boolean; leader: boolean;
+}
+export interface PartyEvent { members: PartyMemberInfo[] }
+export interface PartyInviteEvent { kind: "invite" | "join"; from: string; ms: number } // invite: "X convida você"; join: "X pede para entrar no seu grupo"
+export interface PartyChatEvent { name: string; text: string }
 
 /** PvP: canalização (entrar ou sair) em segundos; qualquer dano recebido a cancela. */
 export const PVP_CHANNEL_S = 5;

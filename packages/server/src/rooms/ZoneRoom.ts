@@ -3,7 +3,7 @@ import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
   TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, ZONES, ZONE_IDS, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
-  PLAYER_RADIUS, PVP_CHANNEL_S, CRIT, DAMAGE_VARIANCE, clamp,
+  PLAYER_RADIUS, PVP_CHANNEL_S, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
@@ -11,6 +11,7 @@ import { Player, Enemy, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, type Inventory } from "../game/inventory.js";
 import { rollLoot } from "../game/loot.js";
+import { parties, type Result } from "../game/party.js";
 
 interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; hit: Set<string> }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
@@ -112,20 +113,37 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.Chat, (client, p: { text?: unknown }) => {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
-      if (!pl || typeof p?.text !== "string") return;
-      if (p.text.length > CHAT_MAX_LEN) return this.notify(client.sessionId, `Mensagem longa demais (máx. ${CHAT_MAX_LEN} caracteres).`);
-      const text = cleanChat(p.text);
-      if (!text) return;
-      const now = Date.now();
-      const last = this.chatAt.get(client.sessionId) ?? [];
-      const recent = last.filter((t) => now - t < ZoneRoom.CHAT_WINDOW_MS);
-      if (recent.length >= ZoneRoom.CHAT_MAX_IN_WINDOW) {
-        this.chatAt.set(client.sessionId, recent);
-        return this.notify(client.sessionId, "Calma! Você está falando rápido demais.");
-      }
-      recent.push(now);
-      this.chatAt.set(client.sessionId, recent);
-      this.broadcast(Evt.Chat, { id: client.sessionId, name: pl.name, text });
+      const text = pl && this.chatText(client, p?.text);
+      if (pl && text) this.broadcast(Evt.Chat, { id: client.sessionId, name: pl.name, text });
+    });
+    // chat do grupo (/g): mesmas regras de limite, taxa e sanitização; vai só aos membros, em qualquer zona
+    this.onMessage(Msg.PartyChat, (client, p: { text?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || !pl.party) return this.notify(client.sessionId, "Você não está em um grupo.");
+      const text = this.chatText(client, p?.text);
+      if (text) parties.sendToParty(pl.charId, Evt.PartyChat, { name: pl.name, text });
+    });
+    // grupo: o cliente só PEDE (por nome de personagem); o servidor valida tudo em game/party.ts
+    const partyOp = (type: string, op: (charId: string, name: unknown) => Result) =>
+      this.onMessage(type, (client, p: { name?: unknown }) => {
+        if (!this.allow(client)) return;
+        const pl = this.state.players.get(client.sessionId);
+        if (!pl || pl.traveling) return;
+        const r = op(pl.charId, p?.name);
+        if (!r.ok) this.notify(client.sessionId, r.error);
+      });
+    partyOp(Msg.PartyInvite, (id, name) => parties.invite(id, name));
+    partyOp(Msg.PartyJoin, (id, name) => parties.requestJoin(id, name));
+    partyOp(Msg.PartyKick, (id, name) => parties.kick(id, name));
+    partyOp(Msg.PartyLead, (id, name) => parties.lead(id, name));
+    partyOp(Msg.PartyAccept, (id) => parties.accept(id));
+    partyOp(Msg.PartyDecline, (id) => parties.decline(id));
+    partyOp(Msg.PartyLeave, (id) => parties.leave(id));
+    this.onMessage(Msg.PartySync, (client) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) parties.resync(pl.charId);
     });
     // PvP: { on: boolean }. Entrar/sair exige canalizar PVP_CHANNEL_S sem receber dano (o servidor conta e cancela)
     this.onMessage(Msg.Pvp, (client, p: { on?: unknown }) => {
@@ -202,7 +220,8 @@ export class ZoneRoom extends Room<ZoneState> {
   private canPvpHit(by: string, o: Player, oid: string): boolean {
     if (oid === by || o.dead || !o.pvp || this.t < o.invulnUntil) return false;
     const a = this.state.players.get(by);
-    return !!a && !a.dead && a.pvp;
+    if (!a || a.dead || !a.pvp) return false;
+    return !(a.party && a.party === o.party); // membros do mesmo grupo nunca se ferem
   }
 
   private hitPlayers(by: string, baseDmg: number, inArea: (o: Player) => boolean) {
@@ -216,6 +235,24 @@ export class ZoneRoom extends Room<ZoneState> {
     const crit = Math.random() < CRIT.chance;
     const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
     this.damagePlayer(oid, o, Math.max(1, baseDmg * variance * (crit ? CRIT.mult : 1)), by, crit);
+  }
+
+  /** valida, limpa e aplica a taxa do chat (zona e grupo dividem o mesmo limite); "" = descartar */
+  private chatText(client: Client, raw: unknown): string {
+    if (typeof raw !== "string") return "";
+    if (raw.length > CHAT_MAX_LEN) { this.notify(client.sessionId, `Mensagem longa demais (máx. ${CHAT_MAX_LEN} caracteres).`); return ""; }
+    const text = cleanChat(raw);
+    if (!text) return "";
+    const now = Date.now();
+    const recent = (this.chatAt.get(client.sessionId) ?? []).filter((t) => now - t < ZoneRoom.CHAT_WINDOW_MS);
+    if (recent.length >= ZoneRoom.CHAT_MAX_IN_WINDOW) {
+      this.chatAt.set(client.sessionId, recent);
+      this.notify(client.sessionId, "Calma! Você está falando rápido demais.");
+      return "";
+    }
+    recent.push(now);
+    this.chatAt.set(client.sessionId, recent);
+    return text;
   }
 
   // ------------------------------------------------------------------ inventário
@@ -311,6 +348,8 @@ export class ZoneRoom extends Room<ZoneState> {
     this.refreshStats(pl, true);
     this.state.players.set(client.sessionId, pl);
     this.sendInv(client.sessionId, pl);
+    // grupo: registra a presença (o grupo atravessa as zonas: a identidade é o personagem)
+    parties.attach({ charId: pl.charId, name: pl.name, sid: client.sessionId, zone: this.zone.id, player: pl, send: (t, m) => this.clients.getById(client.sessionId)?.send(t, m) });
   }
 
   // ------------------------------------------------------------------ limite de taxa
@@ -352,6 +391,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.userIds.delete(client.sessionId);
     for (const tr of this.traps.filter((x) => x.owner === client.sessionId)) this.removeTrap(tr, "gone"); // armadilhas somem com o dono
     const pl = this.state.players.get(client.sessionId);
+    if (pl) parties.detach(pl.charId, client.sessionId); // continua no grupo (ausente) por um tempo: recarregar ou atravessar não o desfaz
     this.state.players.delete(client.sessionId);
     if (pl) await this.save(pl);
   }
@@ -700,14 +740,17 @@ export class ZoneRoom extends Room<ZoneState> {
     e.respawnAt = this.t + enemyKind(e.kind).respawnS;
     e.targetId = "";
     this.broadcast(Evt.Died, { k: "e", id: eid });
-    // grupo: todo jogador vivo por perto recebe XP e faz a sua própria rolagem de loot
-    this.state.players.forEach((pl, pid) => {
-      if (pl.dead || dist(pl.x, pl.y, e.x, e.y) > SHARE_RADIUS) return;
-      const gain = enemyXp(e.level);
+    // todo jogador vivo por perto recebe XP e faz a sua própria rolagem de loot;
+    // quem tem colegas de grupo por perto ganha um bônus de XP (o loot continua individual)
+    const near: [string, Player][] = [];
+    this.state.players.forEach((pl, pid) => { if (!pl.dead && dist(pl.x, pl.y, e.x, e.y) <= SHARE_RADIUS) near.push([pid, pl]); });
+    for (const [pid, pl] of near) {
+      const mates = pl.party ? near.filter(([, o]) => o.party === pl.party).length : 1;
+      const gain = Math.round(enemyXp(e.level) * partyXpMult(mates));
       this.addXp(pid, pl, gain);
       this.clients.getById(pid)?.send(Evt.Xp, { amount: gain, x: e.x, y: e.y });
       this.giveLoot(pid, pl);
-    });
+    }
   }
 
   private hitEnemies(by: string, baseDmg: number, inArea: (e: Enemy) => boolean) {

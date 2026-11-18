@@ -7,9 +7,9 @@ import { LEVEL_TIER_COLORS, levelTier } from "@frixep/shared";
  * Só desenha (o texto do nome e o número ficam em objetos de texto posicionados com o retorno).
  */
 
-export type PlateKind = "me" | "ally" | "enemy" | "pvp";
+export type PlateKind = "me" | "ally" | "enemy" | "pvp" | "party";
 
-const FILL: Record<PlateKind, number> = { me: 0x35d6a0, ally: 0x4cc26a, enemy: 0xd0402e, pvp: 0xff5a4a };
+const FILL: Record<PlateKind, number> = { me: 0x35d6a0, ally: 0x4cc26a, enemy: 0xd0402e, pvp: 0xff5a4a, party: 0x4aa8ff }; // party = colega de grupo (azul)
 
 export interface PlateGeom {
   /** centro do número do nível */
@@ -81,6 +81,10 @@ export function drawPlate(
     g.fillStyle(0x03050a, 1).fillTriangle(cx - 8, gy + 1, cx + 8, gy + 1, cx, gy - 11);
     g.fillStyle(col, 1).fillTriangle(cx - 6, gy, cx + 6, gy, cx, gy - 9);
     g.fillStyle(0xffffff, 0.85).fillTriangle(cx - 1.5, gy - 1, cx + 1.5, gy - 1, cx, gy - 6);
+  }
+
+  if (o.kind === "party") { // colega de grupo: filete azul-claro em volta da barra, para se reconhecer de longe
+    g.lineStyle(2, 0x9fd8ff, 0.95).strokeRoundedRect(barLeft - 2, cy - H / 2 - 2, W + 4, H + 4, 4);
   }
 
   return { numX: cx, numY: cy + 0.5, nameX: barLeft + W / 2, nameY: cy - H / 2 - (tier >= 4 ? 10 : 5) };

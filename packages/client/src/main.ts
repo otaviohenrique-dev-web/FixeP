@@ -4,7 +4,7 @@ import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR,
   type CharClass, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
+  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -17,6 +17,7 @@ import { mountStats } from "./stats";
 import { mountJoystick } from "./touch";
 import { drawPlate, type PlateKind } from "./plate";
 import { mountChat } from "./chat";
+import { mountParty, type PartyUi } from "./party";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
 
@@ -54,6 +55,7 @@ class WorldScene extends Phaser.Scene {
   private hud!: Hud;
   private pvpTag = new Map<string, string>(); // última marca de PvP aplicada ao nome de cada jogador
   private inv!: InventoryUi;
+  private party!: PartyUi;
   private sprites = new Map<string, ActorView>();
   private atlases = new Map<string, ActorAtlas>();
   private prevSt = new Map<string, string>();
@@ -204,17 +206,44 @@ class WorldScene extends Phaser.Scene {
     this.room.send(Msg.InvSync, {});
 
     // chat da zona (Enter abre/envia, Esc fecha; o servidor decide nome e texto)
-    const chat = mountChat({ send: (text) => this.room.send(Msg.Chat, { text }) });
+    // comandos: /pt nome (convida para o grupo) e /g texto (chat do grupo); o resto vai à zona
+    const chat = mountChat({
+      send: (text) => {
+        const cmd = /^\/(pt|g)(?:\s+([\s\S]*))?$/i.exec(text);
+        if (!cmd) return this.room.send(Msg.Chat, { text });
+        const arg = (cmd[2] ?? "").trim();
+        if (cmd[1].toLowerCase() === "pt") {
+          if (arg) this.room.send(Msg.PartyInvite, { name: arg });
+          else chat.system("Use /pt nome_do_jogador para convidar para o grupo.");
+        } else if (arg) this.room.send(Msg.PartyChat, { text: arg });
+        else chat.system("Use /g mensagem para falar só com o grupo.");
+      },
+    });
     this.room.onMessage(Evt.Chat, (m: ChatEvent) => {
       chat.add(String(m.name), String(m.text), m.id === this.room.sessionId);
       this.say(String(m.id), String(m.text)); // balão sobre a cabeça de quem falou
     });
+
+    // grupo: painel, convite e chat de grupo (os receptores ficam prontos ANTES de pedir o estado)
+    this.party = mountParty({ send: (t, p) => this.room.send(t, p), zoneId: this.zoneId, myName: String(this.me()?.name ?? "") });
+    this.party.setTouch(this.touchMode);
+    this.room.onMessage(Evt.Party, (m: PartyEvent) => this.party.setParty(m));
+    this.room.onMessage(Evt.PartyInvite, (m: PartyInviteEvent) => this.party.showInvite(m));
+    this.room.onMessage(Evt.PartyInviteEnd, () => this.party.endInvite());
+    this.room.onMessage(Evt.PartyChat, (m: PartyChatEvent) => chat.addGroup(String(m.name), String(m.text), String(m.name) === String(this.me()?.name)));
+    this.room.send(Msg.PartySync, {});
 
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
     const stats = mountStats({ sendPing: (t) => this.room.send(Msg.Ping, { t }) });
     this.room.onMessage(Evt.Pong, (m: { t: number }) => stats.onPong(m.t));
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
+      const other = this.playerAt(ptr.worldX, ptr.worldY); // clicar/tocar em outro jogador abre o menu dele em vez de andar
+      if (other) {
+        const r = this.game.canvas.getBoundingClientRect();
+        this.party.openPlayerMenu({ name: String(other.name), level: Number(other.level) || 1, cls: String(other.cls), inParty: !!other.party }, r.left + ptr.x + 14, r.top + ptr.y - 10);
+        return;
+      }
       if (ptr.wasTouch || this.touchMode) return; // no celular quem anda é o joystick (tocar no campo de visão não move)
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
       this.room.send(Msg.MoveTo, { x, y });
@@ -332,6 +361,22 @@ class WorldScene extends Phaser.Scene {
   private applyTouch() {
     this.hud?.setTouch(this.touchMode);
     this.joy?.setEnabled(this.touchMode);
+    this.party?.setTouch(this.touchMode);
+  }
+
+  /** outro jogador sob o ponto (em pixels do mundo): o corpo e a placa de nome/vida acima da cabeça */
+  private playerAt(wx: number, wy: number): any | null {
+    let best: any = null, bd = Infinity;
+    this.state?.players?.forEach((p: any, id: string) => {
+      if (id === this.room.sessionId) return;
+      const v = this.sprites.get(`p:${id}`);
+      if (!v || !v.obj.visible) return;
+      const s = v.obj;
+      if (Math.abs(wx - s.x) > 28 || wy < s.y - v.headY - 36 || wy > s.y + 12) return;
+      const d = Math.hypot(wx - s.x, wy - (s.y - v.headY / 2));
+      if (d < bd) { bd = d; best = p; }
+    });
+    return best;
   }
 
   /** joystick: manda um destino 4 tiles à frente na direção do polegar (10 vezes por segundo) e para ao soltar */
@@ -698,15 +743,19 @@ class WorldScene extends Phaser.Scene {
       if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, 18); // Brasa ativa
     };
 
-    st.players.forEach((p: any, id: string) => { // nome vermelho com espadas = em PvP; "..." enquanto canaliza a entrada
-      const tag = p.pvp ? "pvp" : p.pvpChan === 1 ? "chan" : "";
+    const myParty = String(this.me()?.party ?? "");
+    const mateOf = (p: any, id: string) => !!myParty && id !== this.room.sessionId && p.party === myParty; // colega de grupo
+    st.players.forEach((p: any, id: string) => { // nome vermelho com espadas = em PvP; azul = colega de grupo; "..." enquanto canaliza a entrada
+      const mate = mateOf(p, id);
+      const tag = (p.pvp ? "pvp" : p.pvpChan === 1 ? "chan" : "") + (mate ? "|mate" : "");
       if (this.pvpTag.get(id) !== tag) {
         this.pvpTag.set(id, tag);
-        this.labels.get(`p:${id}`)?.setText(tag === "pvp" ? `⚔ ${p.name}` : tag === "chan" ? `${p.name} …` : p.name).setColor(tag === "pvp" ? "#ff6a5a" : "#ccc");
+        const base = p.pvp ? `⚔ ${p.name}` : p.pvpChan === 1 ? `${p.name} …` : p.name;
+        this.labels.get(`p:${id}`)?.setText(base).setColor(mate ? "#8fd0ff" : p.pvp ? "#ff6a5a" : "#ccc");
       }
     });
     st.players.forEach((p: any, id: string) => {
-      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember, level: Number(p.level) || 1, kind: p.pvp ? "pvp" : id === this.room.sessionId ? "me" : "ally" });
+      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember, level: Number(p.level) || 1, kind: id === this.room.sessionId ? (p.pvp ? "pvp" : "me") : mateOf(p, id) ? "party" : p.pvp ? "pvp" : "ally" });
     });
     st.enemies.forEach((e: any, id: string) => {
       const key = `e:${id}`;
