@@ -67,6 +67,13 @@ automaticamente. Esses PNGs ficam **fora do Git LFS** de propósito (`.gitattrib
 O kit atual dos 13 itens é original do projeto e vem de `python tools/gen_item_icons.py` (Pillow; apaga e recria `assets/items/item_<id>.png`, 48x48).
 Para trocar por arte desenhada à mão basta substituir os PNGs com os mesmos nomes (e não rodar o gerador depois). Atenção: `tools/build_kits.py items` também escreve nessa pasta.
 
+### Nível, XP e inimigos
+
+- O XP para subir cresce ~40% por nível (`xpToNext`: 60, 84, 118, 165, 231...). A linha fina de XP no pé da tela mostra `NV 4 · 1253 / 2000`.
+- Cada inimigo mostra `Nv N Nome` e `+XP` acima da barra de vida (a cor do texto indica se é fácil, igual ou perigoso para o seu nível).
+  Vida, dano e XP crescem com o nível do inimigo (`enemyHp`, `enemyDmg`, `enemyXp`); o nível de cada ponto de nascimento fica em `ENEMY_SPAWNS`.
+- Quem fala no chat da zona também vê o balão de fala sobre a cabeça do personagem por 6 s.
+
 ## Mochila e equipamento
 
 | Ação | Tecla |

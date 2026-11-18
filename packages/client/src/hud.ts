@@ -65,8 +65,7 @@ const CSS = `
 .hd-buff{margin-top:2px;font:700 9px/1 "Cinzel",Georgia,serif;letter-spacing:.25em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 10px rgba(255,120,40,.6);opacity:0;transition:opacity .2s}
 .hd-buff.on{opacity:1}
 /* ---------- barra de habilidades ---------- */
-.hd-bar{position:absolute;left:50%;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 14px);transform:translateX(-50%);display:flex;gap:8px;align-items:flex-end;pointer-events:auto;padding:7px;border-radius:14px;
-  background:rgba(8,12,20,.7);border:2px solid var(--gold-d);box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,225,160,.18),0 8px 20px rgba(0,0,0,.6)}
+.hd-bar{position:absolute;left:50%;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 14px);transform:translateX(-50%);display:flex;gap:20px;align-items:flex-end;pointer-events:auto;padding:0;background:none;border:0;box-shadow:none}
 .hd-btn{position:relative;width:56px;height:56px;border-radius:10px;cursor:pointer;color:#eaf4ff;overflow:hidden;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;padding:0;
   background:linear-gradient(180deg,#22304a,#0d1522);border:2px solid var(--gold-d);box-shadow:inset 0 0 0 1px rgba(255,225,160,.2),0 2px 6px rgba(0,0,0,.6);
   display:grid;place-items:center;transition:transform .1s,border-color .15s,box-shadow .15s,filter .15s}
@@ -113,7 +112,7 @@ const CSS = `
 .hd.touch .hd-cost{left:0;right:0;bottom:5px;text-align:center}
 .hd-btn.ult{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.35),0 0 10px rgba(255,190,90,.25)}
 @media (max-width:820px){
-  .hd-bar{gap:6px;padding:5px}.hd-btn{width:48px;height:48px}.hd-btn.big{width:56px;height:56px}.hd-sn{font-size:7px}
+  .hd-bar{gap:10px}.hd-btn{width:48px;height:48px}.hd-btn.big{width:56px;height:56px}.hd-sn{font-size:7px}
   .hd-portrait{width:56px;height:56px}.hd-track{height:16px}
 }
 `;
@@ -249,7 +248,7 @@ export function mountHud(opts: HudOptions): Hud {
     },
     setProgress(level, xp, need) {
       const r = need > 0 ? Math.min(1, xp / need) : 1;
-      lvTxt.textContent = `NV ${level}  ·  ${Math.floor(r * 100)}%`;
+      lvTxt.textContent = need > 0 ? `NV ${level}  ·  ${Math.floor(xp)} / ${need}` : `NV ${level}  ·  MÁX`;
       xpFill.style.transform = `scaleX(${r})`;
     },
     setPortrait(source, crop) {

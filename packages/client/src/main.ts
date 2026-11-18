@@ -1,7 +1,8 @@
+import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
+  Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, enemyXp, ITEMS, RARITY_COLOR,
   type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type InventorySnapshot, type ChatEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent,
@@ -49,6 +50,7 @@ class WorldScene extends Phaser.Scene {
   private prevSt = new Map<string, string>();
   private shadows!: Phaser.GameObjects.Graphics;
   private labels = new Map<string, Phaser.GameObjects.Text>();
+  private bubbles = new Map<string, { t: Phaser.GameObjects.Text; until: number }>();
   private bars!: Phaser.GameObjects.Graphics;
   private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter; green: Phaser.GameObjects.Particles.ParticleEmitter };
   private hitstopUntil = 0;
@@ -118,7 +120,12 @@ class WorldScene extends Phaser.Scene {
       const at = toScreen(e.x, e.y);
       view.obj.setPosition(at.sx, at.sy);
       this.sprites.set(`e:${id}`, view);
-      this.labels.set(`e:${id}`, this.add.text(0, 0, SKELETON.name, { fontSize: "10px", color: "#e8e2d0" }).setOrigin(0.5, 3.1));
+      const lv = Number(e.level) || 1;
+      const mine = Number(this.me()?.level) || 1;
+      // cor pela diferença para o seu nível: cinza = fácil, branco = igual, laranja = difícil, vermelho = perigoso
+      const col = lv >= mine + 3 ? "#ff6a5a" : lv > mine ? "#ffb072" : lv < mine - 2 ? "#9aa3ad" : "#e8e2d0";
+      this.labels.set(`e:${id}`, this.add.text(0, 0, `Nv ${lv} ${SKELETON.name}
++${enemyXp(lv)} XP`, { fontSize: "10px", color: col, align: "center", lineSpacing: 1 }).setOrigin(0.5, 1));
     });
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
 
@@ -174,7 +181,10 @@ class WorldScene extends Phaser.Scene {
 
     // chat da zona (Enter abre/envia, Esc fecha; o servidor decide nome e texto)
     const chat = mountChat({ send: (text) => this.room.send(Msg.Chat, { text }) });
-    this.room.onMessage(Evt.Chat, (m: ChatEvent) => chat.add(String(m.name), String(m.text), m.id === this.room.sessionId));
+    this.room.onMessage(Evt.Chat, (m: ChatEvent) => {
+      chat.add(String(m.name), String(m.text), m.id === this.room.sessionId);
+      this.say(String(m.id), String(m.text)); // balão sobre a cabeça de quem falou
+    });
 
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
     const stats = mountStats({ sendPing: (t) => this.room.send(Msg.Ping, { t }) });
@@ -199,6 +209,7 @@ class WorldScene extends Phaser.Scene {
       ShiftLeft: "dodge", ShiftRight: "dodge",
     };
     window.addEventListener("keydown", (e) => {
+      if (isTypingTarget()) return; // digitando no chat
       if (e.code === "KeyF" && !e.repeat && !menuOpen()) { // F: bebe a primeira poção
         this.drinkPotion();
         return;
@@ -209,6 +220,25 @@ class WorldScene extends Phaser.Scene {
       (document.activeElement as HTMLElement | null)?.blur?.(); // ESPAÇO não deve "clicar" no botão focado
       this.hud.trigger(a);
     });
+  }
+
+  /** balão de fala sobre a cabeça (some em 6 s; uma fala nova troca a anterior) */
+  private say(id: string, text: string) {
+    this.bubbles.get(id)?.t.destroy();
+    const short = text.length > 90 ? text.slice(0, 89) + "…" : text;
+    const t = this.add
+      .text(0, 0, short, { fontSize: "11px", color: "#f4f1e6", align: "center", backgroundColor: "rgba(10,16,26,0.82)", padding: { x: 6, y: 3 }, wordWrap: { width: 150 } })
+      .setOrigin(0.5, 1)
+      .setDepth(1e5 + 5);
+    this.bubbles.set(id, { t, until: this.game.loop.time + 6000 }); // mesmo relógio do update(time)
+  }
+
+  private updateBubbles(time: number) {
+    for (const [id, b] of this.bubbles) {
+      const v = this.sprites.get(`p:${id}`);
+      if (!v || time > b.until) { b.t.destroy(); this.bubbles.delete(id); continue; }
+      b.t.setPosition(v.obj.x, v.obj.y - v.headY - 16).setVisible(v.obj.visible).setAlpha(Math.min(1, (b.until - time) / 600));
+    }
   }
 
   private drinkPotion() {
@@ -566,7 +596,8 @@ class WorldScene extends Phaser.Scene {
         s.y += (sy - s.y) * 0.35;
       }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      this.labels.get(key)?.setPosition(s.x, s.y - (v.headY - 27)).setDepth(s.y + 1);
+      if (key.startsWith("e:")) this.labels.get(key)?.setPosition(s.x, s.y - v.headY - 2).setDepth(s.y + 1); // 2 linhas: nível+nome e XP, logo acima da barra
+      else this.labels.get(key)?.setPosition(s.x, s.y - (v.headY - 27)).setDepth(s.y + 1);
       if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28, 12);
       // barra de vida (+ marca de direção só nos círculos, que não têm rosto)
       const w = 30;
@@ -595,6 +626,7 @@ class WorldScene extends Phaser.Scene {
       this.hud.setMana(me.mana, me.maxMana);
       this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Grito ativo" : "Brasa ativa");
       this.hud.setProgress(me.level, me.xp, xpToNext(me.level));
+      this.updateBubbles(time);
       if (me.dead) {
         if (!this.deadUntil) this.deadUntil = time + RESPAWN_S * 1000;
         this.hud.setDead((this.deadUntil - time) / 1000);

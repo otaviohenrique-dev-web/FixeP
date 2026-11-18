@@ -1,3 +1,4 @@
+import { isTypingTarget } from "./keys";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
@@ -229,7 +230,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   back.onclick = (e) => { if (e.target === back) close(); };
   // captura: com a mochila aberta, ESC fecha só a mochila (e não abre o menu)
   window.addEventListener("keydown", (e) => {
-    if (e.repeat) return;
+    if (e.repeat || isTypingTarget()) return; // digitando no chat: "i" é só uma letra
     if (isOpen() && e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); close(); return; }
     if ((e.code === "KeyI" || e.code === "KeyB") && !document.querySelector(".gm-back.open")) { e.preventDefault(); toggle(); }
   }, true);

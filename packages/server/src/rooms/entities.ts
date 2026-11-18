@@ -49,6 +49,7 @@ export class Enemy extends Schema {
   @type("number") hp = SKELETON.maxHp;
   @type("number") maxHp = SKELETON.maxHp;
   @type("string") st: EnemyState = "idle";
+  @type("number") level = 1;
 
   // --- só no servidor ---
   sx = 0; // ponto de origem (spawn)
