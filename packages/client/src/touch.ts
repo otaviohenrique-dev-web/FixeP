@@ -13,11 +13,11 @@ export interface Joystick {
 const CSS = `
 .js-zone{position:fixed;left:0;bottom:0;width:52vw;height:62vh;z-index:14;touch-action:none;-webkit-tap-highlight-color:transparent;display:none}
 .js-zone.on{display:block}
-.js-base{position:fixed;z-index:14;width:112px;height:112px;margin:-56px 0 0 -56px;border-radius:50%;pointer-events:none;display:none;
-  background:radial-gradient(circle,rgba(12,18,28,.35),rgba(12,18,28,.55));border:2px solid rgba(201,164,92,.55);box-shadow:0 0 0 1px #000,inset 0 0 14px rgba(0,0,0,.6)}
-.js-knob{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:50%;background:linear-gradient(180deg,#3a4d6e,#172235);border:2px solid #c9a45c;box-shadow:0 3px 8px rgba(0,0,0,.6)}
-.js-rest{position:fixed;z-index:13;left:max(34px,env(safe-area-inset-left));bottom:calc(max(10px,env(safe-area-inset-bottom)) + 42px);width:96px;height:96px;border-radius:50%;pointer-events:none;display:none;
-  border:2px dashed rgba(201,164,92,.28)}
+.js-base{position:fixed;z-index:14;width:96px;height:96px;margin:-48px 0 0 -48px;border-radius:50%;pointer-events:none;display:none;
+  background:radial-gradient(circle,rgba(12,18,28,.22),rgba(12,18,28,.42));border:2px solid rgba(201,164,92,.55);box-shadow:0 0 0 1px #000,inset 0 0 14px rgba(0,0,0,.6)}
+.js-knob{position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;opacity:.9;border-radius:50%;background:linear-gradient(180deg,#3a4d6e,#172235);border:2px solid #c9a45c;box-shadow:0 3px 8px rgba(0,0,0,.6)}
+.js-rest{position:fixed;z-index:13;left:max(34px,env(safe-area-inset-left));bottom:calc(max(10px,env(safe-area-inset-bottom)) + 42px);width:84px;height:84px;border-radius:50%;pointer-events:none;display:none;
+  border:2px dashed rgba(201,164,92,.22)}
 .js-rest.on{display:block}
 `;
 
@@ -37,7 +37,7 @@ export function mountJoystick(): Joystick & { setEnabled(on: boolean): void } {
   base.append(knob);
   document.body.append(zone, rest, base);
 
-  const R = 48; // raio útil em px
+  const R = 42; // raio útil em px
   let id = -1;
   let ox = 0;
   let oy = 0;
