@@ -20,7 +20,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 1.aseprite",
@@ -42,7 +42,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 2.aseprite",
@@ -64,7 +64,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 3.aseprite",
@@ -86,7 +86,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 4.aseprite",
@@ -108,7 +108,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 5.aseprite",
@@ -130,7 +130,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 6.aseprite",
@@ -152,7 +152,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 7.aseprite",
@@ -174,7 +174,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 8.aseprite",
@@ -196,7 +196,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 9.aseprite",
@@ -218,7 +218,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 10.aseprite",
@@ -240,7 +240,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 11.aseprite",
@@ -262,7 +262,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 12.aseprite",
@@ -284,7 +284,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 13.aseprite",
@@ -306,7 +306,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 14.aseprite",
@@ -328,7 +328,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 167
+   "duration": 130
   },
   {
    "filename": "warrior 15.aseprite",
@@ -350,7 +350,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 16.aseprite",
@@ -372,7 +372,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 220
   },
   {
    "filename": "warrior 17.aseprite",
@@ -394,7 +394,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 220
   },
   {
    "filename": "warrior 18.aseprite",
@@ -416,7 +416,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 220
   },
   {
    "filename": "warrior 19.aseprite",
@@ -438,7 +438,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 220
   },
   {
    "filename": "warrior 20.aseprite",
@@ -460,7 +460,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 21.aseprite",
@@ -482,7 +482,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 22.aseprite",
@@ -504,7 +504,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 23.aseprite",
@@ -526,7 +526,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 130
   },
   {
    "filename": "warrior 24.aseprite",
@@ -548,12 +548,78 @@
     "w": 64,
     "h": 64
    },
-   "duration": 120
+   "duration": 220
+  },
+  {
+   "filename": "warrior 25.aseprite",
+   "frame": {
+    "x": 64,
+    "y": 192,
+    "w": 64,
+    "h": 64
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 64
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 64
+   },
+   "duration": 220
+  },
+  {
+   "filename": "warrior 26.aseprite",
+   "frame": {
+    "x": 128,
+    "y": 192,
+    "w": 64,
+    "h": 64
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 64
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 64
+   },
+   "duration": 220
+  },
+  {
+   "filename": "warrior 27.aseprite",
+   "frame": {
+    "x": 192,
+    "y": 192,
+    "w": 64,
+    "h": 64
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 64
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 64
+   },
+   "duration": 220
   }
  ],
  "meta": {
   "app": "frixep-kit",
-  "version": "1.0",
+  "version": "2.0",
   "image": "warrior.png",
   "format": "RGBA8888",
   "size": {
@@ -563,13 +629,13 @@
   "scale": "1",
   "frameTags": [
    {
-    "name": "idle_se",
+    "name": "attack_e",
     "from": 0,
     "to": 0,
     "direction": "forward"
    },
    {
-    "name": "walk_se",
+    "name": "attack_ne",
     "from": 1,
     "to": 1,
     "direction": "forward"
@@ -581,135 +647,153 @@
     "direction": "forward"
    },
    {
-    "name": "dodge_se",
+    "name": "attack_w",
     "from": 3,
     "to": 3,
     "direction": "forward"
    },
    {
-    "name": "hit_se",
+    "name": "death_e",
     "from": 4,
     "to": 4,
     "direction": "forward"
    },
    {
-    "name": "idle_w",
+    "name": "death_ne",
     "from": 5,
     "to": 5,
     "direction": "forward"
    },
    {
-    "name": "walk_w",
+    "name": "death_se",
     "from": 6,
     "to": 6,
     "direction": "forward"
    },
    {
-    "name": "attack_w",
+    "name": "death_w",
     "from": 7,
     "to": 7,
     "direction": "forward"
    },
    {
-    "name": "dodge_w",
+    "name": "dodge_e",
     "from": 8,
     "to": 8,
     "direction": "forward"
    },
    {
-    "name": "idle_e",
+    "name": "dodge_ne",
     "from": 9,
     "to": 9,
     "direction": "forward"
    },
    {
-    "name": "walk_e",
+    "name": "dodge_se",
     "from": 10,
     "to": 10,
     "direction": "forward"
    },
    {
-    "name": "attack_e",
+    "name": "dodge_w",
     "from": 11,
     "to": 11,
     "direction": "forward"
    },
    {
-    "name": "dodge_e",
+    "name": "hit_e",
     "from": 12,
     "to": 12,
     "direction": "forward"
    },
    {
-    "name": "idle_ne",
+    "name": "hit_ne",
     "from": 13,
     "to": 13,
     "direction": "forward"
    },
    {
-    "name": "walk_ne",
+    "name": "hit_se",
     "from": 14,
     "to": 14,
     "direction": "forward"
    },
    {
-    "name": "attack_ne",
+    "name": "hit_w",
     "from": 15,
     "to": 15,
     "direction": "forward"
    },
    {
-    "name": "dodge_ne",
+    "name": "idle_e",
     "from": 16,
     "to": 16,
     "direction": "forward"
    },
    {
-    "name": "death_se",
+    "name": "idle_ne",
     "from": 17,
     "to": 17,
     "direction": "forward"
    },
    {
-    "name": "death_w",
+    "name": "idle_se",
     "from": 18,
     "to": 18,
     "direction": "forward"
    },
    {
-    "name": "death_e",
+    "name": "idle_w",
     "from": 19,
     "to": 19,
     "direction": "forward"
    },
    {
-    "name": "death_ne",
+    "name": "skill_e",
     "from": 20,
     "to": 20,
     "direction": "forward"
    },
    {
-    "name": "skill_se",
+    "name": "skill_ne",
     "from": 21,
     "to": 21,
     "direction": "forward"
    },
    {
-    "name": "skill_w",
+    "name": "skill_se",
     "from": 22,
     "to": 22,
     "direction": "forward"
    },
    {
-    "name": "skill_e",
+    "name": "skill_w",
     "from": 23,
     "to": 23,
     "direction": "forward"
    },
    {
-    "name": "skill_ne",
+    "name": "walk_e",
     "from": 24,
     "to": 24,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_ne",
+    "from": 25,
+    "to": 25,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_se",
+    "from": 26,
+    "to": 26,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_w",
+    "from": 27,
+    "to": 27,
     "direction": "forward"
    }
   ]

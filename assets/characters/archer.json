@@ -20,7 +20,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 220
+   "duration": 130
   },
   {
    "filename": "archer 1.aseprite",
@@ -42,7 +42,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 220
+   "duration": 130
   },
   {
    "filename": "archer 2.aseprite",
@@ -64,7 +64,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 220
+   "duration": 130
   },
   {
    "filename": "archer 3.aseprite",
@@ -86,7 +86,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 220
+   "duration": 130
   },
   {
    "filename": "archer 4.aseprite",
@@ -108,7 +108,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 110
+   "duration": 130
   },
   {
    "filename": "archer 5.aseprite",
@@ -130,7 +130,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 110
+   "duration": 130
   },
   {
    "filename": "archer 6.aseprite",
@@ -152,7 +152,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 110
+   "duration": 130
   },
   {
    "filename": "archer 7.aseprite",
@@ -174,7 +174,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 110
+   "duration": 130
   },
   {
    "filename": "archer 8.aseprite",
@@ -196,7 +196,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 110
+   "duration": 130
   },
   {
    "filename": "archer 9.aseprite",
@@ -218,7 +218,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 110
+   "duration": 130
   },
   {
    "filename": "archer 10.aseprite",
@@ -240,7 +240,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 11.aseprite",
@@ -262,7 +262,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 12.aseprite",
@@ -284,7 +284,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 13.aseprite",
@@ -306,7 +306,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 14.aseprite",
@@ -328,7 +328,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 15.aseprite",
@@ -350,7 +350,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 16.aseprite",
@@ -372,7 +372,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 17.aseprite",
@@ -394,7 +394,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 18.aseprite",
@@ -416,7 +416,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 19.aseprite",
@@ -438,7 +438,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 130
   },
   {
    "filename": "archer 20.aseprite",
@@ -460,7 +460,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 220
   },
   {
    "filename": "archer 21.aseprite",
@@ -482,7 +482,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 220
   },
   {
    "filename": "archer 22.aseprite",
@@ -504,7 +504,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 220
   },
   {
    "filename": "archer 23.aseprite",
@@ -526,7 +526,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 220
   },
   {
    "filename": "archer 24.aseprite",
@@ -548,7 +548,7 @@
     "w": 64,
     "h": 64
    },
-   "duration": 90
+   "duration": 220
   },
   {
    "filename": "archer 25.aseprite",
@@ -768,652 +768,228 @@
     "w": 64,
     "h": 64
    },
-   "duration": 110
-  },
-  {
-   "filename": "archer 35.aseprite",
-   "frame": {
-    "x": 192,
-    "y": 256,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 110
-  },
-  {
-   "filename": "archer 36.aseprite",
-   "frame": {
-    "x": 256,
-    "y": 256,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 110
-  },
-  {
-   "filename": "archer 37.aseprite",
-   "frame": {
-    "x": 320,
-    "y": 256,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 110
-  },
-  {
-   "filename": "archer 38.aseprite",
-   "frame": {
-    "x": 384,
-    "y": 256,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 110
-  },
-  {
-   "filename": "archer 39.aseprite",
-   "frame": {
-    "x": 448,
-    "y": 256,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 110
-  },
-  {
-   "filename": "archer 40.aseprite",
-   "frame": {
-    "x": 0,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 41.aseprite",
-   "frame": {
-    "x": 64,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 42.aseprite",
-   "frame": {
-    "x": 128,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 43.aseprite",
-   "frame": {
-    "x": 192,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 44.aseprite",
-   "frame": {
-    "x": 256,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 45.aseprite",
-   "frame": {
-    "x": 320,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 46.aseprite",
-   "frame": {
-    "x": 384,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 47.aseprite",
-   "frame": {
-    "x": 448,
-    "y": 320,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 48.aseprite",
-   "frame": {
-    "x": 0,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 49.aseprite",
-   "frame": {
-    "x": 64,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 50.aseprite",
-   "frame": {
-    "x": 128,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 51.aseprite",
-   "frame": {
-    "x": 192,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 52.aseprite",
-   "frame": {
-    "x": 256,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 53.aseprite",
-   "frame": {
-    "x": 320,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 54.aseprite",
-   "frame": {
-    "x": 384,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 90
-  },
-  {
-   "filename": "archer 55.aseprite",
-   "frame": {
-    "x": 448,
-    "y": 384,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 130
-  },
-  {
-   "filename": "archer 56.aseprite",
-   "frame": {
-    "x": 0,
-    "y": 448,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 130
-  },
-  {
-   "filename": "archer 57.aseprite",
-   "frame": {
-    "x": 64,
-    "y": 448,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 130
-  },
-  {
-   "filename": "archer 58.aseprite",
-   "frame": {
-    "x": 128,
-    "y": 448,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 130
-  },
-  {
-   "filename": "archer 59.aseprite",
-   "frame": {
-    "x": 192,
-    "y": 448,
-    "w": 64,
-    "h": 64
-   },
-   "rotated": false,
-   "trimmed": false,
-   "spriteSourceSize": {
-    "x": 0,
-    "y": 0,
-    "w": 64,
-    "h": 64
-   },
-   "sourceSize": {
-    "w": 64,
-    "h": 64
-   },
-   "duration": 130
+   "duration": 220
   }
  ],
  "meta": {
   "app": "frixep-kit",
-  "version": "1.0",
+  "version": "2.0",
   "image": "archer.png",
   "format": "RGBA8888",
   "size": {
    "w": 512,
-   "h": 512
+   "h": 320
   },
   "scale": "1",
   "frameTags": [
    {
-    "name": "idle_se",
+    "name": "attack_e",
     "from": 0,
-    "to": 3,
+    "to": 0,
     "direction": "forward"
    },
    {
-    "name": "walk_se",
-    "from": 4,
-    "to": 9,
-    "direction": "forward"
-   },
-   {
-    "name": "attack_se",
-    "from": 10,
-    "to": 14,
-    "direction": "forward"
-   },
-   {
-    "name": "skill_se",
-    "from": 15,
-    "to": 19,
-    "direction": "forward"
-   },
-   {
-    "name": "dodge_se",
-    "from": 20,
-    "to": 22,
-    "direction": "forward"
-   },
-   {
-    "name": "hit_se",
-    "from": 23,
-    "to": 24,
-    "direction": "forward"
-   },
-   {
-    "name": "death_se",
-    "from": 25,
-    "to": 29,
-    "direction": "forward"
-   },
-   {
-    "name": "idle_ne",
-    "from": 30,
-    "to": 33,
-    "direction": "forward"
-   },
-   {
-    "name": "walk_ne",
-    "from": 34,
-    "to": 39,
+    "name": "attack_n",
+    "from": 1,
+    "to": 1,
     "direction": "forward"
    },
    {
     "name": "attack_ne",
-    "from": 40,
-    "to": 44,
+    "from": 2,
+    "to": 2,
     "direction": "forward"
    },
    {
-    "name": "skill_ne",
-    "from": 45,
-    "to": 49,
+    "name": "attack_s",
+    "from": 3,
+    "to": 3,
     "direction": "forward"
    },
    {
-    "name": "dodge_ne",
-    "from": 50,
-    "to": 52,
+    "name": "attack_se",
+    "from": 4,
+    "to": 4,
     "direction": "forward"
    },
    {
-    "name": "hit_ne",
-    "from": 53,
-    "to": 54,
+    "name": "death_e",
+    "from": 5,
+    "to": 5,
+    "direction": "forward"
+   },
+   {
+    "name": "death_n",
+    "from": 6,
+    "to": 6,
     "direction": "forward"
    },
    {
     "name": "death_ne",
-    "from": 55,
-    "to": 59,
+    "from": 7,
+    "to": 7,
+    "direction": "forward"
+   },
+   {
+    "name": "death_s",
+    "from": 8,
+    "to": 8,
+    "direction": "forward"
+   },
+   {
+    "name": "death_se",
+    "from": 9,
+    "to": 9,
+    "direction": "forward"
+   },
+   {
+    "name": "dodge_e",
+    "from": 10,
+    "to": 10,
+    "direction": "forward"
+   },
+   {
+    "name": "dodge_n",
+    "from": 11,
+    "to": 11,
+    "direction": "forward"
+   },
+   {
+    "name": "dodge_ne",
+    "from": 12,
+    "to": 12,
+    "direction": "forward"
+   },
+   {
+    "name": "dodge_s",
+    "from": 13,
+    "to": 13,
+    "direction": "forward"
+   },
+   {
+    "name": "dodge_se",
+    "from": 14,
+    "to": 14,
+    "direction": "forward"
+   },
+   {
+    "name": "hit_e",
+    "from": 15,
+    "to": 15,
+    "direction": "forward"
+   },
+   {
+    "name": "hit_n",
+    "from": 16,
+    "to": 16,
+    "direction": "forward"
+   },
+   {
+    "name": "hit_ne",
+    "from": 17,
+    "to": 17,
+    "direction": "forward"
+   },
+   {
+    "name": "hit_s",
+    "from": 18,
+    "to": 18,
+    "direction": "forward"
+   },
+   {
+    "name": "hit_se",
+    "from": 19,
+    "to": 19,
+    "direction": "forward"
+   },
+   {
+    "name": "idle_e",
+    "from": 20,
+    "to": 20,
+    "direction": "forward"
+   },
+   {
+    "name": "idle_n",
+    "from": 21,
+    "to": 21,
+    "direction": "forward"
+   },
+   {
+    "name": "idle_ne",
+    "from": 22,
+    "to": 22,
+    "direction": "forward"
+   },
+   {
+    "name": "idle_s",
+    "from": 23,
+    "to": 23,
+    "direction": "forward"
+   },
+   {
+    "name": "idle_se",
+    "from": 24,
+    "to": 24,
+    "direction": "forward"
+   },
+   {
+    "name": "skill_e",
+    "from": 25,
+    "to": 25,
+    "direction": "forward"
+   },
+   {
+    "name": "skill_n",
+    "from": 26,
+    "to": 26,
+    "direction": "forward"
+   },
+   {
+    "name": "skill_ne",
+    "from": 27,
+    "to": 27,
+    "direction": "forward"
+   },
+   {
+    "name": "skill_s",
+    "from": 28,
+    "to": 28,
+    "direction": "forward"
+   },
+   {
+    "name": "skill_se",
+    "from": 29,
+    "to": 29,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_e",
+    "from": 30,
+    "to": 30,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_n",
+    "from": 31,
+    "to": 31,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_ne",
+    "from": 32,
+    "to": 32,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_s",
+    "from": 33,
+    "to": 33,
+    "direction": "forward"
+   },
+   {
+    "name": "walk_se",
+    "from": 34,
+    "to": 34,
     "direction": "forward"
    }
   ]
