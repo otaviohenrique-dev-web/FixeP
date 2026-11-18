@@ -93,6 +93,24 @@ console.log("\n== Arqueiro e Clérigo: recursos próprios ==");
   C.room.leave();
 }
 
+console.log("\n== Ultimate (tecla R): custo alto, recarga longa ==");
+{
+  const W = await spawn("warrior");
+  W.act("ultimate"); await sleep(150);
+  check("Terremoto (ultimate do Guerreiro) acontece e gasta 80 de Fúria", W.mine("ultimate") === 1 && W.me().mana >= 18 && W.me().mana <= 24, `mana ${W.me().mana}`);
+  W.act("ultimate"); await sleep(150);
+  check("a recarga longa (40 s) impede repetir", W.mine("ultimate") === 1);
+  W.room.leave();
+  const C = await spawn("cleric");
+  C.act("ultimate"); await sleep(150);
+  check("Luz Divina (Clérigo) custa 90 de Mana", C.mine("ultimate") === 1 && C.me().mana >= 28 && C.me().mana <= 34, `mana ${C.me().mana}`);
+  C.room.leave();
+  const A = await spawn("archer");
+  A.act("ultimate", 30, 20); await sleep(150);
+  check("Salva Final (Arqueiro) custa 80 de Foco", A.mine("ultimate") === 1 && A.me().mana >= 18 && A.me().mana <= 24, `mana ${A.me().mana}`);
+  A.room.leave();
+}
+
 const failed = results.filter((r) => !r).length;
 console.log(`\n${results.length - failed}/${results.length} verificações passaram`);
 process.exit(failed ? 1 : 0);

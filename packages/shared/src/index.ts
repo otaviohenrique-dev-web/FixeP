@@ -45,8 +45,8 @@ export interface MoveToPayload {
   y: number;
 }
 
-export type ActionId = "attack" | "skill1" | "skill2" | "skill3" | "dodge";
-export const ACTION_IDS: readonly ActionId[] = ["attack", "skill1", "skill2", "skill3", "dodge"];
+export type ActionId = "attack" | "skill1" | "skill2" | "skill3" | "ultimate" | "dodge";
+export const ACTION_IDS: readonly ActionId[] = ["attack", "skill1", "skill2", "skill3", "ultimate", "dodge"];
 
 /** O cliente manda INTENÇÃO: qual ação e para onde mira (ponto em tiles). */
 export interface ActPayload {
@@ -151,9 +151,10 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     resource: { name: "Fúria", icon: "flame", color: 0xe0742a, max: 100, regen: 5, perLevel: 3 },
     actions: {
       attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, dmg: 12, offset: 1.0, radius: 1.25 },
-      skill1: { kind: "ring", name: "Giro", key: "1", cd: 4, cost: 25, dmg: 20, offset: 0, radius: 2.3 },
-      skill2: { kind: "dashHit", name: "Carga", key: "2", cd: 6, cost: 30, dmg: 16, dash: 4.5, dashTime: 0.25, radius: 1.1 },
-      skill3: { kind: "tauntBuff", name: "Grito", key: "3", cd: 12, cost: 35, buffS: 4, reduction: 0.5, tauntRadius: 6, tauntS: 3 },
+      skill1: { kind: "ring", name: "Giro", key: "Q", cd: 4, cost: 25, dmg: 20, offset: 0, radius: 2.3 },
+      skill2: { kind: "dashHit", name: "Carga", key: "W", cd: 6, cost: 30, dmg: 16, dash: 4.5, dashTime: 0.25, radius: 1.1 },
+      skill3: { kind: "tauntBuff", name: "Grito", key: "E", cd: 12, cost: 35, buffS: 4, reduction: 0.5, tauntRadius: 6, tauntS: 3 },
+      ultimate: { kind: "ring", name: "Terremoto", key: "R", cd: 40, cost: 80, dmg: 60, offset: 0, radius: 3.8 },
       dodge: dodge(3, 1.4),
     },
   },
@@ -162,9 +163,10 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     resource: { name: "Foco", icon: "eye", color: 0x6fcf6f, max: 100, regen: 6, perLevel: 3 },
     actions: {
       attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 10, speed: 15, range: 9, radius: 0.35 },
-      skill1: { kind: "projectile", name: "Perfurar", key: "1", cd: 4, cost: 20, dmg: 18, speed: 20, range: 12, radius: 0.5, pierce: true },
-      skill2: { kind: "trap", name: "Cilada", key: "2", cd: 8, cost: 25, dmg: 28, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
-      skill3: { kind: "rain", name: "Chuva", key: "3", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8 },
+      skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 18, speed: 20, range: 12, radius: 0.5, pierce: true },
+      skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 28, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
+      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8 },
+      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 40, radius: 3.6, placeRange: 9, delayS: 1.0 },
       dodge: dodge(5, 1.6), // rolamento longo
     },
   },
@@ -173,9 +175,10 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     resource: { name: "Mana", icon: "drop", color: 0x4aa8ff, max: 120, regen: 6, perLevel: 4 },
     actions: {
       attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, dmg: 8, speed: 12, range: 8, radius: 0.4 },
-      skill1: { kind: "healAoe", name: "Cura", key: "1", cd: 5, cost: 30, heal: 30, radius: 4 },
-      skill2: { kind: "emberBuff", name: "Brasa", key: "2", cd: 12, cost: 25, buffS: 6, dmgPct: 25, radius: 5 },
-      skill3: { kind: "revive", name: "Reviver", key: "3", cd: 20, cost: 50, radius: 8, hpPct: 50 },
+      skill1: { kind: "healAoe", name: "Cura", key: "Q", cd: 5, cost: 30, heal: 30, radius: 4 },
+      skill2: { kind: "emberBuff", name: "Brasa", key: "W", cd: 12, cost: 25, buffS: 6, dmgPct: 25, radius: 5 },
+      skill3: { kind: "revive", name: "Reviver", key: "E", cd: 20, cost: 50, radius: 8, hpPct: 50 },
+      ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, heal: 80, radius: 6 },
       dodge: dodge(3, 1.4),
     },
   },

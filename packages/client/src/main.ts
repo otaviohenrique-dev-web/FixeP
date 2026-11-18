@@ -13,6 +13,7 @@ import { mountHud, type Hud } from "./hud";
 import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
 import { mountStats } from "./stats";
+import { mountJoystick } from "./touch";
 import { mountChat } from "./chat";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
@@ -51,7 +52,10 @@ class WorldScene extends Phaser.Scene {
   private bars!: Phaser.GameObjects.Graphics;
   private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter; green: Phaser.GameObjects.Particles.ParticleEmitter };
   private hitstopUntil = 0;
-  private touchMode = false;
+  private touchMode = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  private joy!: ReturnType<typeof mountJoystick>;
+  private joyAt = 0;
+  private joyMoving = false;
   private deadUntil = 0;
   private cls: CharClass = "warrior";
   private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; obj: Phaser.GameObjects.Shape }>();
@@ -119,7 +123,9 @@ class WorldScene extends Phaser.Scene {
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
 
     // HUD, menu e entrada
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a) });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion() });
+    this.joy = mountJoystick();
+    this.applyTouch();
     this.paintPortrait();
     mountGameMenu({
       playerName: this.me()?.name ?? "Portador",
@@ -175,24 +181,26 @@ class WorldScene extends Phaser.Scene {
     this.room.onMessage(Evt.Pong, (m: { t: number }) => stats.onPong(m.t));
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
+      if (ptr.wasTouch || this.touchMode) return; // no celular quem anda é o joystick (tocar no campo de visão não move)
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
       this.room.send(Msg.MoveTo, { x, y });
     });
     // distingue toque de mouse (define como a mira é escolhida)
-    const kind = (e: PointerEvent) => { this.touchMode = e.pointerType === "touch"; };
+    const kind = (e: PointerEvent) => {
+      const t = e.pointerType === "touch";
+      if (t !== this.touchMode) { this.touchMode = t; this.applyTouch(); }
+    };
     window.addEventListener("pointerdown", kind, true);
     window.addEventListener("pointermove", kind, true);
 
-    // teclado: ESPAÇO ataque | 1 2 3 skills | SHIFT esquiva
+    // teclado: ESPAÇO ataque | Q W E skills | R ultimate | SHIFT esquiva | F poção
     const keys: Record<string, ActionId> = {
-      Space: "attack", Digit1: "skill1", Digit2: "skill2", Digit3: "skill3", Numpad1: "skill1", Numpad2: "skill2", Numpad3: "skill3",
+      Space: "attack", KeyQ: "skill1", KeyW: "skill2", KeyE: "skill3", KeyR: "ultimate",
       ShiftLeft: "dodge", ShiftRight: "dodge",
     };
     window.addEventListener("keydown", (e) => {
-      if (e.code === "KeyQ" && !e.repeat && !menuOpen()) { // Q: bebe a primeira poção
-        const slot = this.inv.firstPotionSlot();
-        if (slot >= 0) this.room.send(Msg.InvUse, { slot });
-        else this.inv.toast("Você não tem poções.", "#ffb3a6");
+      if (e.code === "KeyF" && !e.repeat && !menuOpen()) { // F: bebe a primeira poção
+        this.drinkPotion();
         return;
       }
       const a = keys[e.code];
@@ -201,6 +209,35 @@ class WorldScene extends Phaser.Scene {
       (document.activeElement as HTMLElement | null)?.blur?.(); // ESPAÇO não deve "clicar" no botão focado
       this.hud.trigger(a);
     });
+  }
+
+  private drinkPotion() {
+    const slot = this.inv.firstPotionSlot();
+    if (slot >= 0) this.room.send(Msg.InvUse, { slot });
+    else this.inv.toast("Você não tem poções.", "#ffb3a6");
+  }
+
+  /** liga ou desliga o layout de toque (joystick à esquerda, botões em arco à direita) */
+  private applyTouch() {
+    this.hud?.setTouch(this.touchMode);
+    this.joy?.setEnabled(this.touchMode);
+  }
+
+  /** joystick: manda um destino 4 tiles à frente na direção do polegar (10 vezes por segundo) e para ao soltar */
+  private driveJoystick(time: number) {
+    const me = this.me();
+    if (!me || !this.room) return;
+    const v = this.joy?.vector();
+    if (!v || me.dead) {
+      if (this.joyMoving) { this.joyMoving = false; this.room.send(Msg.MoveTo, { x: me.x, y: me.y }); }
+      return;
+    }
+    if (time - this.joyAt < 100) return;
+    this.joyAt = time;
+    this.joyMoving = true;
+    const g = toGrid(v.x, v.y);
+    const n = Math.hypot(g.x, g.y) || 1;
+    this.room.send(Msg.MoveTo, { x: me.x + (g.x / n) * 4, y: me.y + (g.y / n) * 4 });
   }
 
   // ---------------------------------------------------------------- arte
@@ -495,6 +532,7 @@ class WorldScene extends Phaser.Scene {
   update(time: number, delta: number) {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
+    this.driveJoystick(time);
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes
     this.bars.clear();
 

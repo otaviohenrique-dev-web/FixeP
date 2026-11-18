@@ -20,12 +20,16 @@ ficam em `packages/shared/src/index.ts` (`CLASS_DEFS`) e o servidor decide todos
 | Tecla | Guerreiro (120 vida, tanque) | Arqueiro (90 vida, dano à distância) | Clérigo (100 vida, suporte) |
 |---|---|---|---|
 | ESPAÇO | Golpe corpo a corpo | Flecha | Raio sagrado |
-| 1 | Giro (área ao redor) | Perfurar (flecha que atravessa) | Cura (aliados num raio de 4) |
-| 2 | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Brasa (aliados +25% de poder por 6 s) |
-| 3 | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Reviver (levanta um aliado caído a até 8 tiles) |
+| Q | Giro (área ao redor) | Perfurar (flecha que atravessa) | Cura (aliados num raio de 4) |
+| W | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Brasa (aliados +25% de poder por 6 s) |
+| E | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Reviver (levanta um aliado caído a até 8 tiles) |
+| R (ultimate) | Terremoto (área grande, 80 de Fúria, recarga 40 s) | Salva Final (chuva enorme, 80 de Foco, 40 s) | Luz Divina (cura forte num raio de 6, 90 de Mana, 45 s) |
 | SHIFT | Esquiva (3 tiles) | Rolamento longo (5 tiles) | Esquiva (3 tiles) |
 
-Mouse: a mira segue o ponteiro. Toque: a mira vai para o inimigo mais próximo.
+**F** bebe uma poção. Mouse: clique no chão para andar e a mira segue o ponteiro.
+
+**Celular:** joystick flutuante com o polegar esquerdo (toque em qualquer ponto da metade de baixo à esquerda e arraste; tocar no campo de visão não anda mais);
+botões em arco no canto direito (ataque grande, Q, W, E, R, esquiva e poção). A mira vai para o inimigo mais próximo.
 Quem cai fica 8 s no chão antes de renascer no ponto inicial, o tempo que o Clérigo tem para reviver.
 XP e loot são divididos entre todos os jogadores vivos a até 14 tiles de um abate, e cada um faz a sua rolagem.
 
@@ -57,6 +61,11 @@ Painel em `packages/client/src/chat.ts`. Teste: `SERVER=http://localhost:2999 np
 Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/` (gerados por
 `python tools/gen_placeholder_bodies.py`, precisa de Pillow). Quando o dev de arte entregar um atlas, ele passa na frente
 automaticamente. Esses PNGs ficam **fora do Git LFS** de propósito (`.gitattributes`).
+
+## Ícones dos itens
+
+O kit atual dos 13 itens é original do projeto e vem de `python tools/gen_item_icons.py` (Pillow; apaga e recria `assets/items/item_<id>.png`, 48x48).
+Para trocar por arte desenhada à mão basta substituir os PNGs com os mesmos nomes (e não rodar o gerador depois). Atenção: `tools/build_kits.py items` também escreve nessa pasta.
 
 ## Mochila e equipamento
 
