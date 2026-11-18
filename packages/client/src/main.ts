@@ -3,7 +3,7 @@ import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   Msg, Evt, MAP_W, MAP_H, CLASS_DEFS, RESPAWN_S, SKELETON, xpToNext, ITEMS, RARITY_COLOR,
   type CharClass, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type InventorySnapshot, type LootEvent, type NoticeEvent,
+  type InventorySnapshot, type ChatEvent, type LootEvent, type NoticeEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -13,6 +13,7 @@ import { mountHud, type Hud } from "./hud";
 import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
 import { mountStats } from "./stats";
+import { mountChat } from "./chat";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
 
@@ -164,6 +165,10 @@ class WorldScene extends Phaser.Scene {
     });
     this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), "#ffb3a6"));
     this.room.send(Msg.InvSync, {});
+
+    // chat da zona (Enter abre/envia, Esc fecha; o servidor decide nome e texto)
+    const chat = mountChat({ send: (text) => this.room.send(Msg.Chat, { text }) });
+    this.room.onMessage(Evt.Chat, (m: ChatEvent) => chat.add(String(m.name), String(m.text), m.id === this.room.sessionId));
 
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
     const stats = mountStats({ sendPing: (t) => this.room.send(Msg.Ping, { t }) });

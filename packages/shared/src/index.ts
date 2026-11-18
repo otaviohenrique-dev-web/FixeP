@@ -14,6 +14,7 @@ export const Msg = {
   InvUse: "inv_use", // { slot }
   InvDrop: "inv_drop", // { slot }
   InvSync: "inv_sync", // pede a fotografia do inventário (o cliente pede depois de registrar os receptores)
+  Chat: "chat", // { text }: mensagem para toda a zona (o servidor limpa o texto e usa o nome do personagem)
   Ping: "ping", // { t }: o servidor devolve o mesmo t em Evt.Pong (o cliente mede a ida e volta)
 } as const;
 
@@ -32,7 +33,12 @@ export const Evt = {
   Inv: "inv", // fotografia completa do inventário (só para o dono)
   Loot: "loot", // item recebido
   Notice: "notice", // aviso de texto para o dono
+  Chat: "chat", // { id, name, text }: mensagem de chat de um jogador, para toda a zona
 } as const;
+
+/** Limites do chat (valem no servidor; o cliente só os repete para avisar cedo). */
+export const CHAT_MAX_LEN = 200;
+export interface ChatEvent { id: string; name: string; text: string }
 
 export interface MoveToPayload {
   x: number; // tile

@@ -1,7 +1,7 @@
 import { Room, Client, ServerError } from "colyseus";
 import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
-  MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, SPAWN, ENEMY_SPAWNS,
+  MAP_W, MAP_H, TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, SPAWN, ENEMY_SPAWNS,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   SKELETON, PLAYER_RADIUS, CRIT, DAMAGE_VARIANCE, clamp,
   LEVEL_CAP, XP_PER_KILL, xpToNext, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S,
@@ -24,6 +24,18 @@ function distToSegment(px: number, py: number, x1: number, y1: number, x2: numbe
   const l2 = dx * dx + dy * dy;
   const t = l2 === 0 ? 0 : clamp(((px - x1) * dx + (py - y1) * dy) / l2, 0, 1);
   return dist(px, py, x1 + t * dx, y1 + t * dy);
+}
+
+/** Texto de chat seguro: sem caracteres de controle, sem tags HTML, espaços normalizados, no máximo CHAT_MAX_LEN. "" = descartar. */
+export function cleanChat(raw: string): string {
+  return raw
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, " ") // controle, invisíveis e inversão de texto
+    .replace(/<[^>]*>?/g, "") // tags HTML (inclusive incompletas)
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, CHAT_MAX_LEN)
+    .trim();
 }
 
 export class ZoneRoom extends Room<ZoneState> {
@@ -73,6 +85,25 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.Ping, (client, p: { t?: unknown }) => {
       if (!this.allow(client)) return;
       if (typeof p?.t === "number" && Number.isFinite(p.t)) client.send(Evt.Pong, { t: p.t });
+    });
+    // chat da zona: o servidor limpa o texto, limita a taxa e usa o NOME DO PERSONAGEM (o cliente não manda nome)
+    this.onMessage(Msg.Chat, (client, p: { text?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || typeof p?.text !== "string") return;
+      if (p.text.length > CHAT_MAX_LEN) return this.notify(client.sessionId, `Mensagem longa demais (máx. ${CHAT_MAX_LEN} caracteres).`);
+      const text = cleanChat(p.text);
+      if (!text) return;
+      const now = Date.now();
+      const last = this.chatAt.get(client.sessionId) ?? [];
+      const recent = last.filter((t) => now - t < ZoneRoom.CHAT_WINDOW_MS);
+      if (recent.length >= ZoneRoom.CHAT_MAX_IN_WINDOW) {
+        this.chatAt.set(client.sessionId, recent);
+        return this.notify(client.sessionId, "Calma! Você está falando rápido demais.");
+      }
+      recent.push(now);
+      this.chatAt.set(client.sessionId, recent);
+      this.broadcast(Evt.Chat, { id: client.sessionId, name: pl.name, text });
     });
     this.onMessage(Msg.InvSync, (client) => {
       if (!this.allow(client)) return;
@@ -171,6 +202,9 @@ export class ZoneRoom extends Room<ZoneState> {
   // balde de fichas por cliente: rajada de 40, reposição de 30 mensagens/s. Jogo legítimo
   // fica bem abaixo disso (cliques e teclas); excesso é descartado e a insistência derruba a conexão.
   private buckets = new Map<string, { tokens: number; last: number; strikes: number }>();
+  private static readonly CHAT_WINDOW_MS = 8000; // no máximo 5 mensagens de chat a cada 8 s por jogador
+  private static readonly CHAT_MAX_IN_WINDOW = 5;
+  private chatAt = new Map<string, number[]>();
   private static readonly BURST = 40;
   private static readonly REFILL = 30;
   private static readonly MAX_STRIKES = 100;
@@ -197,6 +231,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   async onLeave(client: Client) {
     this.buckets.delete(client.sessionId);
+    this.chatAt.delete(client.sessionId);
     this.userIds.delete(client.sessionId);
     for (const tr of this.traps.filter((x) => x.owner === client.sessionId)) this.removeTrap(tr, "gone"); // armadilhas somem com o dono
     const pl = this.state.players.get(client.sessionId);
