@@ -73,19 +73,24 @@ check("o Arqueiro derruba o esqueleto só com ataques à distância", e1.st === 
 await sleep(500);
 check("o Arqueiro recebe XP e loot da classe (arco)", A.me().xp >= 20 && A.ev.loot.some((l) => l.id === "arco_curto"), `xp ${A.me().xp}, loot ${A.ev.loot.map((l) => l.id)}`);
 
-console.log("\n== 3. Clérigo: avisos, Brasa e ataque ==");
-C.act("skill3", 0, 0); // ninguém caído ainda
-await sleep(400);
-check("Ressurgir sem ninguém caído avisa e não gasta a recarga", C.ev.notice.some((t) => String(t.text).includes("caído")));
+console.log("\n== 3. Clérigo: Compressor de Ar, Julgamento e ataque ==");
 // ambos vão para perto do esqueleto e2 (31,24): A fica no alcance de aggro, C um pouco atrás (dentro do raio de cura 4)
 A.room.send("move_to", { x: 28.2, y: 24 });
 C.room.send("move_to", { x: 24.8, y: 23.5 });
 await sleep(4500);
 const dAC = () => Math.hypot(A.me().x - C.me().x, A.me().y - C.me().y);
-check("o Clérigo ficou perto o bastante do aliado (cura 4 / ressurreição 8)", dAC() <= 4.2, `distância ${dAC().toFixed(1)}`);
-C.act("skill2", 0, 0);
-check("a Brasa marca o aliado (ember sincronizado)", await until(() => A.me().ember === true && C.me().ember === true, 2000), `A=${A.me().ember} C=${C.me().ember}`);
+check("o Clérigo ficou perto o bastante do aliado (cura 4)", dAC() <= 4.2, `distância ${dAC().toFixed(1)}`);
 const e2 = C.room.state.enemies.get("e2");
+{
+  const hitsAntes = C.ev.hit.filter((h) => h.k === "e" && h.by === C.id).length;
+  C.act("skill2", e2.x, e2.y);
+  check("o Compressor de Ar é telegrafado como área amiga", await until(() => C.ev.tele.some((t) => t.friendly), 2000));
+  await sleep(700);
+  check("o inimigo puxado fica atordoado (não ataca)", e2.st === "recover" || e2.st === "dead", `st=${e2.st}`);
+  C.act("skill3", e2.x, e2.y);
+  await sleep(1200);
+  check("Julgamento (dano em área) machuca o inimigo depois do atraso", C.ev.hit.filter((h) => h.k === "e" && h.by === C.id).length > hitsAntes || e2.st === "dead");
+}
 C.act("attack", e2.x, e2.y);
 check("o ataque do Clérigo é um raio (bolt)", await until(() => C.ev.proj.some((p) => p.look === "bolt"), 3000));
 
@@ -99,8 +104,7 @@ const heal = C.ev.heal.slice(healsAntes).find((h) => h.id === A.id && !h.revive)
 check("a Cura chega ao aliado (evento heal)", !!heal && heal.amount > 0, `+${heal?.amount}`);
 check("a vida do aliado sobe de verdade no servidor", A.me().hp > hpAntes || A.me().hp === A.me().maxHp, `${hpAntes} → ${A.me().hp}`);
 
-console.log("\n== 5. Ressurreição ==");
-// o Arqueiro fica parado apanhando até cair
+console.log("\n== 5. Queda e renascimento ==");
 const tm = Date.now();
 while (!A.me().dead && Date.now() - tm < 60000) await sleep(200);
 check("o Arqueiro cai (morto)", A.me().dead === true);
@@ -108,12 +112,7 @@ A.act("attack", e2.x, e2.y);
 const projsAntes = A.ev.proj.length;
 await sleep(500);
 check("jogador morto não consegue agir", A.ev.proj.length === projsAntes);
-const hpMax = A.me().maxHp;
-C.act("skill3", 0, 0);
-const revived = await until(() => A.me().dead === false, 3000);
-check("o Clérigo ressuscita o aliado caído", revived, `mana C ${C.me().mana}, C morto ${C.me().dead}, dist ${dAC().toFixed(1)}, avisos ${JSON.stringify((C.ev.notice || []).slice(-3))}`);
-check("o aliado volta com cerca de 50% da vida", revived && Math.abs(A.me().hp - Math.ceil(hpMax / 2)) <= 3, `hp ${A.me().hp}/${hpMax}`);
-check("o evento de ressurreição chega a todos", C.ev.heal.some((h) => h.revive && h.id === A.id) && A.ev.heal.some((h) => h.revive));
+check("depois de alguns segundos ele renasce com a vida cheia", await until(() => A.me().dead === false, 20000, 200) && A.me().hp === A.me().maxHp, `hp ${A.me().hp}/${A.me().maxHp}`);
 
 console.log("\n== 5b. Chuva de flechas (esqueleto vivo) ==");
 {

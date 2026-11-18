@@ -515,6 +515,11 @@ class WorldScene extends Phaser.Scene {
       case "rain":
         if (mine) sfx.shoot();
         break;
+      case "pull": { // o servidor manda a área (Evt.Telegraph); aqui só o som e o brilho no conjurador
+        this.ring(gx, gy, 1.2, 0xbfe4ff, 300, 0.4);
+        if (mine) sfx.whirl();
+        break;
+      }
       case "healAoe":
         this.ring(gx, gy, def.radius ?? 4, 0x7dff9a, 500, 0.2, false);
         this.ring(gx, gy, 1.4, 0xc8ffd4, 380, 0.4);

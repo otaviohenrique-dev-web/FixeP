@@ -628,6 +628,21 @@ export class ZoneRoom extends Room<ZoneState> {
         } });
         break;
       }
+      case "pull": {
+        const pos = place();
+        const r = def.radius ?? 4;
+        const until = this.t + (def.pullS ?? 0.4);
+        this.state.enemies.forEach((e) => {
+          if (e.st === "dead" || dist(e.x, e.y, pos.x, pos.y) > r + enemyKind(e.kind).radius) return;
+          e.pullUntil = until;
+          e.pullX = pos.x;
+          e.pullY = pos.y;
+          e.st = "recover"; // cancela o golpe que ele preparava e o deixa atordoado depois da puxada
+          e.recoverEnd = until + (def.stunS ?? 1);
+        });
+        this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: (def.pullS ?? 0.4) * 1000, friendly: true });
+        break;
+      }
       case "healAoe": {
         const amount = Math.round((def.heal ?? 0) * power);
         this.state.players.forEach((o, oid) => {
@@ -780,6 +795,12 @@ export class ZoneRoom extends Room<ZoneState> {
         e.y = e.sy;
         e.st = "idle";
       }
+      return;
+    }
+
+    if (this.t < e.pullUntil) { // puxado para o centro: não age até terminar (depois fica atordoado em "recover")
+      const d = dist(e.x, e.y, e.pullX, e.pullY);
+      if (d > 0.5) this.moveToward(e, e.pullX, e.pullY, Math.max(d, 0.5) / Math.max(0.05, e.pullUntil - this.t), dt);
       return;
     }
 

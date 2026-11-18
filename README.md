@@ -21,8 +21,8 @@ ficam em `packages/shared/src/index.ts` (`CLASS_DEFS`) e o servidor decide todos
 |---|---|---|---|
 | ESPAÇO | Golpe corpo a corpo | Flecha | Raio sagrado |
 | Q | Giro (área ao redor) | Perfurar (flecha que atravessa) | Cura (aliados num raio de 4) |
-| W | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Brasa (aliados +25% de poder por 6 s) |
-| E | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Reviver (levanta um aliado caído a até 8 tiles) |
+| W | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Compressor de Ar (puxa os inimigos de uma área para o ponto mirado e os atordoa por 1,2 s) |
+| E | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Julgamento (dano em área média, atinge após 0,6 s) |
 | R (ultimate) | Terremoto (área grande, 80 de Fúria, recarga 40 s) | Salva Final (chuva enorme, 80 de Foco, 40 s) | Luz Divina (cura forte num raio de 6, 90 de Mana, 45 s) |
 | SHIFT | Esquiva (3 tiles) | Rolamento longo (5 tiles) | Esquiva (3 tiles) |
 
@@ -30,7 +30,7 @@ ficam em `packages/shared/src/index.ts` (`CLASS_DEFS`) e o servidor decide todos
 
 **Celular:** joystick flutuante com o polegar esquerdo (toque em qualquer ponto da metade de baixo à esquerda e arraste; tocar no campo de visão não anda mais);
 botões em arco no canto direito (ataque grande, Q, W, E, R, esquiva e poção). A mira vai para o inimigo mais próximo.
-Quem cai fica 8 s no chão antes de renascer no ponto inicial, o tempo que o Clérigo tem para reviver.
+Quem cai fica 8 s no chão antes de renascer no ponto inicial.
 XP e loot são divididos entre todos os jogadores vivos a até 14 tiles de um abate, e cada um faz a sua rolagem.
 
 ### Recurso de cada classe e HUD
@@ -41,7 +41,7 @@ Cada classe tem um **recurso** que as habilidades gastam e que regenera sozinho 
 |---|---|---|---|---|
 | Guerreiro | Fúria | 100 | 5 | Giro 25, Carga 30, Grito 35 |
 | Arqueiro | Foco | 100 | 6 | Perfurar 20, Cilada 25, Chuva 35 |
-| Clérigo | Mana | 120 | 6 | Raio 4, Cura 30, Brasa 25, Reviver 50 |
+| Clérigo | Mana | 120 | 6 | Raio 4, Cura 30, Compressor de Ar 30, Julgamento 30 |
 
 A Esquiva e os ataques básicos do Guerreiro e do Arqueiro são de graça. O máximo cresce a cada nível (`maxManaFor`).
 A HUD (`packages/client/src/hud.ts`) tem: retrato, nome, vida (coração) e recurso no canto superior esquerdo; as 5 habilidades embaixo
@@ -78,7 +78,7 @@ Botão **PvP** sob o retrato (também no celular). Clicar inicia uma **canaliza�
 **Qualquer dano recebido cancela a canalização na hora** (golpe de inimigo, projétil, habilidade de outro jogador, área, armadilha) e aparece "Canalização interrompida".
 Clicar de novo durante a canalização a cancela. Para sair, o botão canaliza 5 s do mesmo jeito. Quem está em PvP tem o nome em vermelho com ⚔ e o botão "PvP ativo".
 Regras (decididas no servidor, `ZoneRoom`): é todos contra todos na mesma zona, mas o dano entre jogadores só acontece se **ambos** estão em PvP;
-quem está fora nunca é ferido por outro jogador (cura e Brasa continuam valendo para todos). Morrer em PvP usa o respawn normal (8 s, com 2 s de proteção ao renascer), sem perder XP nem itens.
+quem está fora nunca é ferido por outro jogador (a cura continua valendo para todos). Morrer em PvP usa o respawn normal (8 s, com 2 s de proteção ao renascer), sem perder XP nem itens.
 Estado sincronizado no jogador: `pvp` e `pvpChan` (0 nenhuma, 1 entrando, 2 saindo); mensagem do cliente: `pvp { on: boolean }` (validada e com limite de taxa).
 Teste: `SERVER=http://localhost:2999 npm run test:pvp -w @frixep/server` (29 verificações).
 
@@ -89,7 +89,7 @@ Até **4 jogadores**. O grupo vive no servidor (`packages/server/src/game/party.
 - **Chat do grupo**: **`/g texto`** (aparece como "[Grupo] Nome:" e chega aos membros mesmo em outra zona; mesmas regras de tamanho, limpeza e taxa do chat da zona).
 - **Painel** no canto esquerdo, abaixo do retrato: nível (com a borda da faixa), nome, coroa do líder, barras de vida e do recurso, e a zona do membro (ou "ausente"). Clicar no cabeçalho recolhe. O líder clica num colega para **passar a liderança** ou **expulsar**; **Sair** deixa o grupo. Colegas aparecem com a barra de vida azul e o nome azul sobre a cabeça.
 - **Regras** (todas validadas no servidor): convite vale 30 s; só o líder convida; recusa alvo inexistente/offline, já em grupo, o próprio jogador e grupo cheio; um convite pendente por alvo e espera de 1,5 s entre convites do mesmo jogador. Quando o líder sai, o membro mais antigo assume; com um só restante o grupo se desfaz. Quem cai do jogo fica **ausente por 45 s** (dá para recarregar a página ou atravessar um portal) e depois sai do grupo. O grupo **não é salvo no banco**.
-- **Combate**: membros do grupo **nunca se ferem em PvP**; Cura, Brasa e Reviver valem como antes. **XP**: continua rateado entre todo jogador vivo a até 14 tiles do abate, com **+10% por colega de grupo por perto** (máx. +30%); o **loot é individual** (cada um faz a sua rolagem).
+- **Combate**: membros do grupo **nunca se ferem em PvP**; a Cura vale como antes. **XP**: continua rateado entre todo jogador vivo a até 14 tiles do abate, com **+10% por colega de grupo por perto** (máx. +30%); o **loot é individual** (cada um faz a sua rolagem).
 - **Limitação**: o registro de grupos fica na memória do processo, então só funciona com **uma instância** do servidor (como hoje no Render). Com várias instâncias seria preciso um armazenamento compartilhado (ex.: Redis).
 - Mensagens novas (`packages/shared/src/index.ts`): `party_invite`, `party_join`, `party_accept`, `party_decline`, `party_leave`, `party_kick`, `party_lead`, `party_chat`, `party_sync`; eventos `party`, `party_invite`, `party_invite_end`, `party_chat`. O jogador ganha o campo sincronizado `party` (id do grupo).
 - Painel e menu: `packages/client/src/party.ts`. Teste: `PARTY_TEST=1` nos **dois** lados (servidor e teste; encurta o convite para 2 s e a ausência para 3 s e tira a espera entre convites): `PARTY_TEST=1 SERVER=http://localhost:2999 npm run test:party -w @frixep/server` (63 verificações).
