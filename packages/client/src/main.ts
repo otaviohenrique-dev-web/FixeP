@@ -120,7 +120,7 @@ class WorldScene extends Phaser.Scene {
 
     st.enemies.onAdd((e: any, id: string) => {
       const kd = enemyKind(String(e.kind));
-      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : 11 }); // só o Esqueleto tem arte; os outros são corpos provisórios
+      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : 11 }); // Esqueleto e Lobo têm arte; o Espectro ainda é corpo provisório
       const at = toScreen(e.x, e.y);
       view.obj.setPosition(at.sx, at.sy);
       this.sprites.set(`e:${id}`, view);
@@ -431,7 +431,7 @@ class WorldScene extends Phaser.Scene {
           : known!.has(`placeholder/${name}`) // senão, o corpo provisório (assets/placeholder)
             ? { name, png: `/assets/placeholder/${name}.png`, json: `/assets/placeholder/${name}.json` }
             : null;
-    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("skeleton", "monsters")].filter((s): s is AtlasSpec => !!s);
+    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters")].filter((s): s is AtlasSpec => !!s);
     this.atlases = await loadAtlases(this, specs);
   }
 
