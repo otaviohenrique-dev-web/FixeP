@@ -223,7 +223,9 @@ export class ActorView {
       let startFrame = 0;
       if (sameLoop) {
         const total = this.scene.anims.get(r.key)?.getTotalFrames() ?? 1;
-        startFrame = Math.max(0, Math.min(total - 1, Math.floor(this.sprite.anims.getProgress() * total)));
+        const prog = this.sprite.anims.getProgress();
+        // animação de 1 quadro (folhas com uma pose só) dá progresso NaN: sem a guarda o Phaser quebra
+        startFrame = total > 1 && Number.isFinite(prog) ? Math.max(0, Math.min(total - 1, Math.floor(prog * total))) : 0;
       }
       this.sprite.play({ key: r.key, startFrame }, true);
       this.curKey = r.key;
