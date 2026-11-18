@@ -1,4 +1,4 @@
-import { CLASS_DEFS, PVP_CHANNEL_S, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -297,6 +297,10 @@ export function mountHud(opts: HudOptions): Hud {
       for (const [a, e] of els) e.btn.classList.toggle("low", cur < (defs[a].cost ?? 0));
     },
     setProgress(level, xp, need) {
+      const tier = levelTier(level);
+      const tc = hex(LEVEL_TIER_COLORS[tier]);
+      portrait.style.borderColor = tc; // a moldura do retrato acompanha a faixa de nível
+      portrait.style.boxShadow = tier >= 3 ? `0 0 0 1px #000,0 0 12px ${tc}aa,0 6px 16px rgba(0,0,0,.6)` : "";
       const r = need > 0 ? Math.min(1, xp / need) : 1;
       lvTxt.textContent = need > 0 ? `NV ${level}  ·  ${Math.floor(xp)} / ${need}` : `NV ${level}  ·  MÁX`;
       xpFill.style.transform = `scaleX(${r})`;

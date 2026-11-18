@@ -79,9 +79,13 @@ Para trocar por arte desenhada à mão basta substituir os PNGs com os mesmos no
 
 ### Nível, XP e inimigos
 
-- O XP para subir cresce ~40% por nível (`xpToNext`: 60, 84, 118, 165, 231...). A linha fina de XP no pé da tela mostra `NV 4 · 1253 / 2000`.
-- Cada inimigo mostra `Nv N Nome` e `+XP` acima da barra de vida (a cor do texto indica se é fácil, igual ou perigoso para o seu nível).
+- Nível máximo: **50**. O XP para subir cresce 20% por nível (`xpToNext`: 100, 120, 144, 173, 207...). A linha fina de XP no pé da tela mostra `NV 4 · 153 / 173`.
+  A migração `003_level_cap_50.sql` troca a trava do banco (antes 1 a 20); ela roda sozinha ao subir o servidor, inclusive no Supabase.
+- O inimigo mostra o nome acima da barra de vida e o **nível** só como número, grande, à direita da barra (a cor indica se é fácil, igual ou perigoso para o seu nível).
+  O XP ganho aparece como `+N XP` dourado, com a mesma animação do dano, só depois do abate e só para quem recebeu.
   Vida, dano e XP crescem com o nível do inimigo (`enemyHp`, `enemyDmg`, `enemyXp`); o nível de cada ponto de nascimento fica em `ENEMY_SPAWNS`.
+- Todo personagem mostra o **nível** num selo ao lado da barra de vida. A borda muda a cada 10 níveis: bronze (1-9), prata (10-19), ouro com borda dupla (20-29),
+  azul-gelo (30-39), violeta (40-49) e brasa (50), os três últimos com brilho. A moldura do retrato na HUD acompanha a mesma faixa (`levelTier` e `LEVEL_TIER_COLORS` em `packages/shared`).
 - Quem fala no chat da zona também vê o balão de fala sobre a cabeça do personagem por 6 s.
 
 ## Mochila e equipamento

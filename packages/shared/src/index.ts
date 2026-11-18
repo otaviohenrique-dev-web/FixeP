@@ -33,6 +33,7 @@ export const Evt = {
   Pong: "pong", // resposta ao ping, só para quem perguntou
   Inv: "inv", // fotografia completa do inventário (só para o dono)
   Loot: "loot", // item recebido
+  Xp: "xp", // XP ganho num abate (só para quem recebeu)
   Notice: "notice", // aviso de texto para o dono
   Chat: "chat", // { id, name, text }: mensagem de chat de um jogador, para toda a zona
   Pvp: "pvp", // { s: "start" | "cancel" | "stop" | "on" | "off" }: andamento do modo PvP, só para o dono
@@ -67,6 +68,7 @@ export interface SwingEvent { id: string; a: ActionId; x: number; y: number; dir
 export interface TelegraphEvent { id: string; x: number; y: number; r: number; ms: number; friendly?: boolean }
 export interface HitEvent { k: "e" | "p"; id: string; dmg: number; crit: boolean; x: number; y: number; by?: string }
 export interface DiedEvent { k: "e" | "p"; id: string }
+export interface XpEvent { amount: number; x: number; y: number }
 export interface LevelUpEvent { id: string; level: number }
 export interface HealEvent { id: string; amount: number; x: number; y: number; revive?: boolean }
 export interface ProjEvent { id: string; x: number; y: number; dir: number; speed: number; range: number; look: "arrow" | "pierce" | "bolt" }
@@ -224,11 +226,14 @@ export const enemyDmg = (level: number) => Math.round(SKELETON.dmg * (1 + 0.3 * 
 export const enemyXp = (level: number) => Math.round(XP_PER_KILL * Math.pow(1.45, level - 1));
 
 // ------------------------------------------------------------ progressão
-export const LEVEL_CAP = 20;
+export const LEVEL_CAP = 50;
 export const XP_PER_KILL = 20;
 /** XP necessário para sair do nível `level` para o próximo (0 no nível máximo). */
-/** Cresce em ~40% a cada nível (60, 84, 118, 165, 231...). */
-export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : Math.round(60 * Math.pow(1.4, level - 1)));
+/** Cresce 20% a cada nível (100, 120, 144, 173, 207...; ~3,2 mil no nível 20; ~600 mil no 49). */
+export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : Math.round(100 * Math.pow(1.2, level - 1)));
+/** Faixa de borda do nível: muda a cada 10 níveis (1-9, 10-19, 20-29, 30-39, 40-49, 50). */
+export const levelTier = (level: number) => Math.min(5, Math.floor(Math.max(1, level) / 10));
+export const LEVEL_TIER_COLORS = [0x9a8460, 0xc9d3df, 0xf0c34a, 0x4cc3ee, 0xb575f5, 0xff6a3d] as const; // bronze, prata, ouro, gelo, violeta, brasa
 /** Vida máxima: base da classe + 10 por nível + bônus de armadura. */
 export const maxHpFor = (cls: CharClass, level: number, armorHp = 0) => CLASS_DEFS[cls].maxHp + 10 * (level - 1) + armorHp;
 /** Máximo do recurso (Fúria/Foco/Mana): base da classe + bônus por nível. */

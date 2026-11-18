@@ -70,6 +70,7 @@ console.log("\n== Dano de inimigo cancela a canalização ==");
   A.room.send("move_to", { x: 27, y: 16 }); // perto do esqueleto de (30,16): ele ataca em poucos segundos
   const canceled = await until(() => A.ev.pvp.includes("cancel"), 5000);
   check("o golpe do esqueleto cancela na hora (evento cancel)", canceled);
+  await until(() => A.me().pvpChan === 0, 1000); // o estado sincroniza um tick depois do evento
   check("sem entrar no PvP e sem canalização", A.me().pvpChan === 0 && !A.me().pvp, `chan=${A.me().pvpChan} pvp=${A.me().pvp}`);
   await sleep(CH);
   check("continua fora do PvP depois de passar o tempo", !A.me().pvp);
