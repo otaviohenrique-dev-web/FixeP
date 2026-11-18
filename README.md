@@ -44,6 +44,14 @@ A HUD (`packages/client/src/hud.ts`) tem: retrato, nome, vida (coração) e recu
 (tecla, custo, recarga, escurece sem recurso); e uma linha fina de XP na largura toda com o nível. O visual é original do FrixeP.
 Teste: `SERVER=http://localhost:2999 npm run test:mana -w @frixep/server` (17 verificações).
 
+### Chat da zona
+
+Enter abre o campo de texto (e envia), Esc fecha; no celular há um botão de balão no canto. Fechado, as mensagens somem aos poucos.
+Todos na mesma zona veem. O servidor (`ZoneRoom`) é quem manda: usa o **nome do personagem** (ignora qualquer nome vindo do cliente),
+aceita de 1 a 200 caracteres, remove tags HTML e caracteres de controle e limita a 5 mensagens a cada 8 s por jogador (excesso só gera aviso,
+não derruba a conexão). Nada é guardado no banco. Enquanto você digita, as teclas de combate ficam desligadas.
+Painel em `packages/client/src/chat.ts`. Teste: `SERVER=http://localhost:2999 npm run test:chat -w @frixep/server` (13 verificações).
+
 ### Corpos provisórios
 
 Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/` (gerados por

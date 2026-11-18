@@ -13,6 +13,7 @@
     "test:inv": "node test/inventory.mjs",
     "test:classes": "node test/classes.mjs",
     "test:mana": "node test/mana.mjs",
+    "test:chat": "node test/chat.mjs",
     "test:inv:unit": "tsx test/inventory.unit.ts"
   },
   "dependencies": {
