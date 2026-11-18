@@ -56,6 +56,16 @@ aceita de 1 a 200 caracteres, remove tags HTML e caracteres de controle e limita
 não derruba a conexão). Nada é guardado no banco. Enquanto você digita, as teclas de combate ficam desligadas.
 Painel em `packages/client/src/chat.ts`. Teste: `SERVER=http://localhost:2999 npm run test:chat -w @frixep/server` (13 verificações).
 
+### Modo PvP
+
+Botão **PvP** sob o retrato (também no celular). Clicar inicia uma **canalização de 5 s** (barra no centro da tela); só ao terminar sem dano você entra no modo.
+**Qualquer dano recebido cancela a canalização na hora** (golpe de inimigo, projétil, habilidade de outro jogador, área, armadilha) e aparece "Canalização interrompida".
+Clicar de novo durante a canalização a cancela. Para sair, o botão canaliza 5 s do mesmo jeito. Quem está em PvP tem o nome em vermelho com ⚔ e o botão "PvP ativo".
+Regras (decididas no servidor, `ZoneRoom`): é todos contra todos na mesma zona, mas o dano entre jogadores só acontece se **ambos** estão em PvP;
+quem está fora nunca é ferido por outro jogador (cura e Brasa continuam valendo para todos). Morrer em PvP usa o respawn normal (8 s, com 2 s de proteção ao renascer), sem perder XP nem itens.
+Estado sincronizado no jogador: `pvp` e `pvpChan` (0 nenhuma, 1 entrando, 2 saindo); mensagem do cliente: `pvp { on: boolean }` (validada e com limite de taxa).
+Teste: `SERVER=http://localhost:2999 npm run test:pvp -w @frixep/server` (29 verificações).
+
 ### Corpos provisórios
 
 Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/` (gerados por

@@ -1,4 +1,4 @@
-import { CLASS_DEFS, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { CLASS_DEFS, PVP_CHANNEL_S, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -14,6 +14,8 @@ export interface HudOptions {
   onAction(a: ActionId): void;
   /** botão de poção (no celular, onde não há tecla) */
   onPotion?(): void;
+  /** botão PvP: `true` pede para entrar, `false` para sair (o servidor canaliza e decide) */
+  onPvp?(on: boolean): void;
 }
 export interface Hud {
   trigger(a: ActionId): void;
@@ -26,12 +28,17 @@ export interface Hud {
   setBuff(on: boolean, label?: string): void;
   /** liga o layout de toque: botões no canto direito, ao alcance do polegar */
   setTouch(on: boolean): void;
+  /** estado do PvP vindo do servidor: `on` = está no modo; `chan` 0 nenhuma, 1 entrando, 2 saindo */
+  setPvp(on: boolean, chan: number): void;
+  /** aviso curto em destaque no alto da tela (ex.: "Canalização interrompida") */
+  alert(text: string): void;
 }
 
 const ICON: Record<string, string> = {
   heart: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M2 3h4v1h1v1h2V4h1V3h4v1h1v4h-1v1h-1v1h-1v1h-1v1H9v1H7v-1H6v-1H5v-1H4V9H3V8H2z"/><path fill="#fff" opacity=".45" d="M3 4h2v1H3z"/></svg>`,
   flame: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M8 1h1v2h1v2h1v1h1v3h1v3h-1v2h-2v1H6v-1H4v-2H3V9h1V7h1V6h1V3h1z"/><path fill="#fff" opacity=".55" d="M8 8h1v1h1v3H8v1H7v-2h1z"/></svg>`,
   eye: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M5 5h6v1h2v1h2v2h-2v1h-2v1H5v-1H3V9H1V7h2V6h2z"/><path fill="#0b1018" d="M7 6h2v4H7z"/><path fill="#fff" opacity=".6" d="M7 6h1v1H7z"/></svg>`,
+  swords: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M2 2h3l1 1 1 1 1 1 1 1-1 1-1-1-1-1-1-1-1-1H2zM14 2h-3l-1 1-1 1-1 1-1 1 1 1 1-1 1-1 1-1 1-1h3zM3 12l2-2 1 1-2 2zm10 0l-2-2-1 1 2 2zM7 8l1 1 1-1-1-1z"/><path fill="currentColor" d="M2 13h2v1H2zm10 0h2v1h-2z"/></svg>`,
   drop: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M7 1h2v2h1v2h1v2h1v4h-1v2h-1v1H6v-1H5v-2H4V7h1V5h1V3h1z"/><path fill="#fff" opacity=".55" d="M6 8h1v3H6z"/></svg>`,
 };
 
@@ -111,6 +118,28 @@ const CSS = `
 .hd.touch .hd-key{display:none}
 .hd.touch .hd-cost{left:0;right:0;bottom:5px;text-align:center}
 .hd-btn.ult{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.35),0 0 10px rgba(255,190,90,.25)}
+/* ---------- PvP: botão sob o retrato, barra de canalização e avisos ---------- */
+.hd-pvp{position:absolute;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 78px);pointer-events:auto;display:flex;align-items:center;gap:6px;
+  height:30px;padding:0 12px 0 8px;border-radius:10px;cursor:pointer;color:#e9c98a;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;
+  background:linear-gradient(180deg,#22304a,#0d1522);border:2px solid var(--gold-d);box-shadow:inset 0 0 0 1px rgba(255,225,160,.2),0 2px 6px rgba(0,0,0,.6);
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;transition:border-color .15s,box-shadow .15s,color .15s}
+.hd-pvp:hover{border-color:#f0cf86}
+.hd-pvp:active{transform:scale(.96)}
+.hd-pvp:focus-visible{outline:2px solid #ffd9a0;outline-offset:2px}
+.hd-pvp.chan{color:#ffd9a0;border-color:#f0cf86;animation:hd-pvpc 1s ease-in-out infinite}
+.hd-pvp.on{color:#ffb0a0;border-color:#c0392b;background:linear-gradient(180deg,#4a1a1a,#1a0b0b);box-shadow:inset 0 0 0 1px rgba(255,150,130,.3),0 0 14px rgba(220,60,40,.45)}
+@keyframes hd-pvpc{50%{box-shadow:inset 0 0 0 1px rgba(255,225,160,.3),0 0 14px rgba(255,200,110,.55)}}
+.hd-chan{position:absolute;left:50%;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 100px);transform:translateX(-50%);width:min(260px,60vw);display:none;flex-direction:column;gap:4px;align-items:center;pointer-events:none}
+.hd-chan.on{display:flex}
+.hd.touch .hd-chan{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 250px);left:calc(50% - 40px)}
+.hd-chan-t{font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:#f0dfb8;text-shadow:0 1px 3px #000,0 0 6px #000}
+.hd-chan .hd-track{flex:none;width:100%;height:12px}
+.hd-chan-f{position:absolute;inset:0;transform-origin:left;transform:scaleX(0);background:linear-gradient(180deg,#e9c98a,#8d6a2a)}
+.hd-chan.out .hd-chan-f{background:linear-gradient(180deg,#9fb4cf,#46618a)}
+.hd-alert{position:absolute;left:50%;top:calc(max(12px,env(safe-area-inset-top)) + 118px);transform:translateX(-50%);padding:8px 16px;border-radius:10px;max-width:88vw;text-align:center;pointer-events:none;opacity:0;transition:opacity .25s;
+  font:700 12px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#ffb0a0;background:linear-gradient(180deg,#3a1414,#160808);border:2px solid #c0392b;box-shadow:0 6px 16px rgba(0,0,0,.6)}
+.hd-alert.on{opacity:1}
+.hd.pvp .hd-portrait{border-color:#c0392b;box-shadow:0 0 0 1px #000,0 0 12px rgba(220,60,40,.55)}
 @media (max-width:820px){
   .hd-bar{gap:10px}.hd-btn{width:48px;height:48px}.hd-btn.big{width:56px;height:56px}.hd-sn{font-size:7px}
   .hd-portrait{width:56px;height:56px}.hd-track{height:16px}
@@ -138,6 +167,9 @@ export function mountHud(opts: HudOptions): Hud {
         <div class="hd-buff">Grito ativo</div>
       </div>
     </div>
+    <button type="button" class="hd-pvp" aria-label="Modo PvP"><span class="ic"></span><span class="hd-pvp-t">PvP</span></button>
+    <div class="hd-chan"><div class="hd-chan-t"></div><div class="hd-track"><div class="hd-chan-f"></div></div></div>
+    <div class="hd-alert" role="status"></div>
     <div class="hd-bar"></div>
     <div class="hd-lv">NV 1</div>
     <div class="hd-xp"><i></i></div>`;
@@ -163,6 +195,19 @@ export function mountHud(opts: HudOptions): Hud {
   const lvTxt = q(".hd-lv");
   const xpFill = q(".hd-xp i");
   const bar = q(".hd-bar");
+  const pvpBtn = q<HTMLButtonElement>(".hd-pvp");
+  pvpBtn.querySelector(".ic")!.innerHTML = ICON.swords;
+  const pvpTxt = q(".hd-pvp-t");
+  const chanBox = q(".hd-chan");
+  const chanTxt = q(".hd-chan-t");
+  const chanFill = q(".hd-chan-f");
+  const alertEl = q(".hd-alert");
+  let pvpOn = false, pvpChan = 0, chanStart = 0, alertTimer: ReturnType<typeof setTimeout> | undefined;
+  // um clique: se está no modo (ou saindo), pede para sair; senão pede para entrar. Durante a canalização, o clique pede o contrário e cancela.
+  pvpBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    opts.onPvp?.(pvpChan === 1 ? false : pvpChan === 2 ? true : !pvpOn);
+  });
   const deadSub = dead.querySelector("p")!;
 
   const defs = cdef.actions;
@@ -214,6 +259,11 @@ export function mountHud(opts: HudOptions): Hud {
   const tick = () => {
     requestAnimationFrame(tick);
     const now = performance.now();
+    if (pvpChan) {
+      const spent = Math.min(PVP_CHANNEL_S, (now - chanStart) / 1000);
+      chanFill.style.transform = `scaleX(${spent / PVP_CHANNEL_S})`;
+      chanTxt.textContent = `${pvpChan === 1 ? "Entrando em PvP" : "Saindo do PvP"} · ${Math.max(0, PVP_CHANNEL_S - spent).toFixed(1)} s`;
+    }
     for (const [a, e] of els) {
       const left = (cdUntil[a] ?? 0) - now;
       const total = defs[a].cd * 1000;
@@ -266,6 +316,24 @@ export function mountHud(opts: HudOptions): Hud {
     },
     setTouch(on) {
       root.classList.toggle("touch", on);
+    },
+    setPvp(on, chan) {
+      if (chan !== 0 && pvpChan === 0) chanStart = performance.now(); // a contagem começa quando o servidor inicia a canalização
+      pvpOn = on;
+      pvpChan = chan;
+      root.classList.toggle("pvp", on);
+      pvpBtn.classList.toggle("on", on && chan === 0);
+      pvpBtn.classList.toggle("chan", chan !== 0);
+      pvpTxt.textContent = chan === 1 ? "Entrando…" : chan === 2 ? "Saindo…" : on ? "PvP ativo" : "PvP";
+      pvpBtn.setAttribute("aria-pressed", String(on));
+      chanBox.classList.toggle("on", chan !== 0);
+      chanBox.classList.toggle("out", chan === 2);
+    },
+    alert(text) {
+      alertEl.textContent = text;
+      alertEl.classList.add("on");
+      clearTimeout(alertTimer);
+      alertTimer = setTimeout(() => alertEl.classList.remove("on"), 2600);
     },
     setBuff(on, label = "Grito ativo") {
       if (on) buff.textContent = label;

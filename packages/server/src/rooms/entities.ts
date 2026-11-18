@@ -17,6 +17,8 @@ export class Player extends Schema {
   @type("number") maxMana = 0;
   @type("number") level = 1;
   @type("number") xp = 0;
+  @type("boolean") pvp = false; // modo PvP ativo (só entre quem também está nele)
+  @type("number") pvpChan = 0; // canalização: 0 nenhuma, 1 entrando, 2 saindo (o cliente conta os segundos)
 
   // --- só no servidor (não sincronizado) ---
   charId = ""; // linha em `characters`
@@ -37,6 +39,7 @@ export class Player extends Schema {
   invulnUntil = 0;
   buffUntil = 0;
   deadUntil = 0;
+  pvpChanUntil = 0; // fim da canalização (relógio da simulação)
 }
 
 export type EnemyState = "idle" | "chase" | "windup" | "recover" | "dead";
