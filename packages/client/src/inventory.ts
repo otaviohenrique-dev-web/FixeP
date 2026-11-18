@@ -37,6 +37,7 @@ const CSS = `
 .iv-slot[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 14px rgba(255,170,80,.4)}
 .iv-slot svg,.iv-eqs svg{width:70%;height:70%}
 .iv-eqs svg{width:34px;height:34px;flex:none}
+.iv-ic{image-rendering:pixelated;object-fit:contain;flex:none;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
 .iv-qty{position:absolute;right:3px;bottom:2px;font:700 10px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 3px #000}
 .iv-det{margin-top:10px;min-height:92px;padding:10px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2)}
 .iv-det h3{margin:0 0 2px;font:700 13px/1.2 "Cinzel",Georgia,serif}
@@ -61,7 +62,19 @@ const ICONS = {
 } as const;
 const BAG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1.5 12H4.5z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>`;
 
-const icon = (d: ItemDef) => `<span style="color:${RARITY_COLOR[d.rarity]};display:contents">${ICONS[d.kind]}</span>`;
+/** Ícone final em assets/items/item_<id>.png (48x48); se o arquivo ainda não existe, mostra o desenho provisório (SVG). */
+const icon = (d: ItemDef) =>
+  `<img class="iv-ic" src="/assets/items/item_${d.id}.png" alt="" width="40" height="40" draggable="false" data-fb="${d.kind}" data-c="${RARITY_COLOR[d.rarity]}">`;
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains("iv-ic")) return;
+  const k = img.dataset.fb as keyof typeof ICONS | undefined;
+  if (!k || !(k in ICONS)) return;
+  const span = document.createElement("span");
+  span.style.cssText = `color:${img.dataset.c ?? "#b8c4d0"};display:contents`;
+  span.innerHTML = ICONS[k]; // SVG fixo do próprio código
+  img.replaceWith(span);
+}, true);
 
 function statsLine(d: ItemDef): string {
   if (d.dmgPct) return `+${d.dmgPct}% de poder`;
