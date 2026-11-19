@@ -3,7 +3,7 @@ import { mountMarket } from "./market";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent,
+  TRADE_CHAT_MAX_LEN, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent,
 } from "@frixep/shared";
 
 /**
@@ -21,6 +21,8 @@ export interface EconomyUi {
   showTradeInvite(from: string): void;
   endTradeInvite(): void;
   isTrading(): boolean;
+  /** mensagem do chat privado da troca (só existe enquanto a troca está aberta) */
+  tradeChat(name: string, text: string): void;
   /** abre o diálogo de confirmação de quebrar o item do espaço `slot` */
   confirmBreak(slot: number): void;
   setMarketPage(p: MarketPage): void;
@@ -75,6 +77,14 @@ const CSS = `
 @media (max-width:620px){.ec-wallet{right:12px;top:calc(max(14px,env(safe-area-inset-top)) + 54px);height:30px;padding:0 10px;font-size:12px}.ec-wallet img{width:16px;height:16px}.ec-near{bottom:calc(max(96px,env(safe-area-inset-bottom)) + 150px)}.ec-near kbd{display:none}}
 .ec-near kbd{margin-right:8px;font:inherit;opacity:.7}
 .ec-trade{width:min(720px,100%)}
+.ec-tchat{margin:0 14px 8px;border-radius:6px;background:rgba(6,12,20,.6);border:1px solid rgba(201,164,92,.35);display:flex;flex-direction:column}
+.ec-tchat>button{all:unset;cursor:pointer;padding:7px 10px;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#c9a45c;display:flex;justify-content:space-between;touch-action:manipulation}
+.ec-tchat>button:focus-visible{outline:2px solid #ffd2a3}
+.ec-tchat.min .ec-tlog,.ec-tchat.min form{display:none}
+.ec-tlog{height:74px;overflow:auto;padding:4px 10px;font:400 12px/1.4 Georgia,serif;color:#cfe0f3;display:flex;flex-direction:column;gap:2px}
+.ec-tlog b{color:#ffb072;font-weight:700}.ec-tlog .me b{color:#9fe0a8}.ec-tlog i{color:#7fa6cc}
+.ec-tchat form{display:flex;gap:6px;padding:4px 8px 8px}
+.ec-tchat input{flex:1;min-width:0;min-height:34px;box-sizing:border-box;padding:0 8px;border-radius:5px;border:1px solid rgba(160,200,240,.3);background:rgba(6,12,20,.9);color:#fff;font:400 16px/1 Georgia,serif}
 .ec-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 8px;overflow:auto}
 @media (max-width:620px){.ec-cols{grid-template-columns:1fr}}
 .ec-col{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:6px;background:rgba(6,12,20,.55);border:1px solid rgba(160,200,240,.18)}
@@ -359,8 +369,35 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     clearTimeout(sendTimer);
     if (now) sendOffer(); else sendTimer = setTimeout(sendOffer, 200);
   };
+  // chat privado da troca: o histórico vive só enquanto a janela está aberta
+  const tchat = el("div", "ec-tchat");
+  const tchatBtn = el("button", "", "Sussurro da troca");
+  tchatBtn.type = "button";
+  const tlog = el("div", "ec-tlog");
+  tlog.setAttribute("role", "log");
+  const tform = el("form");
+  const tin = el("input");
+  tin.type = "text"; tin.maxLength = TRADE_CHAT_MAX_LEN; tin.placeholder = "Combine o negócio…"; tin.autocomplete = "off"; tin.enterKeyHint = "send";
+  tin.setAttribute("aria-label", "Mensagem privada para o outro jogador");
+  const tsend = el("button", "ec-btn", "Enviar");
+  tsend.type = "submit";
+  tform.append(tin, tsend);
+  tchat.append(tchatBtn, tlog, tform);
+  const setMin = (m: boolean) => { tchat.classList.toggle("min", m); tchatBtn.setAttribute("aria-expanded", String(!m)); tchatBtn.replaceChildren(document.createTextNode("Sussurro da troca"), el("span", "", m ? "▲" : "▼")); };
+  tchatBtn.onclick = () => setMin(!tchat.classList.contains("min"));
+  tform.onsubmit = (e) => { e.preventDefault(); const text = tin.value.trim(); if (text) opts.send(Msg.TradeChat, { text }); tin.value = ""; };
+  tin.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") tin.blur(); };
+  function tradeChat(name: string, text: string) {
+    if (!tradeOpen) return;
+    const l = el("div", last && name !== last.with ? "me" : "");
+    l.append(el("b", "", name + ": "), document.createTextNode(text));
+    tlog.append(l);
+    while (tlog.children.length > 40) tlog.firstElementChild!.remove();
+    tlog.scrollTop = tlog.scrollHeight;
+    if (tchat.classList.contains("min")) tchatBtn.firstChild!.textContent = "Sussurro da troca •";
+  }
   const cancelTrade = () => { opts.send(Msg.TradeCancel, {}); closeTradeUi(); };
-  function closeTradeUi() { tradeOpen = false; tback.classList.remove("open"); clearTimeout(sendTimer); last = null; }
+  function closeTradeUi() { tradeOpen = false; tlog.replaceChildren(); tin.value = ""; tback.classList.remove("open"); clearTimeout(sendTimer); last = null; }
 
   function chips(side: TradeOfferSide, onTake?: (slot: number) => void): HTMLElement {
     const box = el("div", "ec-offer");
@@ -394,6 +431,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     // preserva o foco do campo de moedas (o painel é refeito a cada evento)
     const ae = document.activeElement as HTMLInputElement | null;
     const refocus = ae && tcard.contains(ae) && ae.dataset.kind ? { kind: ae.dataset.kind, at: ae.selectionStart } : null;
+    const chatFocus = document.activeElement === tin;
     tcard.replaceChildren();
     tcard.append(head(`Troca com ${ev.with}`, "Os dois aceitam a mesma oferta. Qualquer mudança desfaz os aceites.", cancelTrade));
     const cols = el("div", "ec-cols");
@@ -455,6 +493,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     const bagWrap = el("div", "ec-bagwrap");
     bagWrap.append(bag);
     tcard.append(bagWrap);
+    tcard.append(tchat);
     const foot = el("div", "ec-foot");
     const note = el("p", "ec-note");
     const ok = el("button", "ec-btn go");
@@ -475,6 +514,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     ok.onclick = () => { if (!ok.disabled) opts.send(Msg.TradeReady, { ready: !mine.ready, rev: ev.rev }); };
     foot.append(note, ok, cancel);
     tcard.append(foot);
+    if (chatFocus) tin.focus();
     if (refocus) {
       const inp = tcard.querySelector<HTMLInputElement>(`input[data-kind="${refocus.kind}"]`);
       if (inp) { inp.focus(); try { inp.setSelectionRange(refocus.at, refocus.at); } catch { /* type=number não aceita seleção */ } }
@@ -507,6 +547,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     if (!tradeOpen) { // abriu: fecha o que estiver aberto e zera a minha oferta
       closeNpc();
       tradeOpen = true;
+      setMin(window.innerWidth <= 620);
       mineSlots = new Map(); mineIron = 0; mineObols = 0; seq = 0; acked = 0;
       tback.classList.add("open");
     }
@@ -609,6 +650,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     showTradeInvite,
     endTradeInvite,
     isTrading: () => tradeOpen,
+    tradeChat,
     confirmBreak,
     setMarketPage: (p) => market.setPage(p),
     setMarketMine: (m) => market.setMine(m),
