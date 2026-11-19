@@ -10,10 +10,10 @@ const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  -> " + detail : ""}`); };
 const until = async (fn, ms) => { for (let t = 0; t < ms; t += 100) { if (fn()) return true; await sleep(100); } return false; };
 
-async function account(tag) {
+async function account(tag, cls = "warrior") {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
   const name = tag + Math.random().toString(36).slice(2, 7);
-  const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
+  const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error("criar personagem " + cr.status);
   return { token, name };
 }
@@ -66,11 +66,13 @@ console.log("\n== Chefe: reset sem ninguém lutando ==");
     await sleep(400);
     return enter(a, "zone");
   };
-  const obs = await toZone1(await account("Ob")); // observador longe do chefe (nasce no portão de volta)
-  const fighter = await toZone1(await account("Ft"));
-  fighter.r.send("move_to", { x: 31.5, y: 8 });
+  const go = async (P, via) => { for (const [x, y] of via) { P.r.send("move_to", { x, y }); await until(() => Math.hypot(P.me().x - x, P.me().y - y) < 0.8 || P.me().dead, 12_000); } };
+  const obs = await toZone1(await account("Ob")); // observador: fica longe do chefe e dos esqueletos
+  await go(obs, [[10, 19], [18, 18], [20, 12]]);
+  const fighter = await toZone1(await account("Ft", "archer")); // de longe: o chefe mata um guerreiro nível 1 de uma pancada antes de ser ferido
+  await go(fighter, [[10, 19], [18, 18], [24.5, 8.5]]); // contorna esqueletos e o portal de volta; para a ~8,5 tiles do chefe (33, 7), dentro do alcance da flecha (9)
   let wounded = false;
-  for (let t = 0; t < 60_000 && !wounded; t += 300) {
+  for (let t = 0; t < 25_000 && !wounded; t += 300) {
     const bs = fighter.boss();
     if (bs) fighter.r.send("act", { a: "attack", ax: bs.x, ay: bs.y });
     await sleep(300);
