@@ -5,6 +5,7 @@ import { Client } from "colyseus.js";
 
 const HTTP = process.env.SERVER ?? "http://localhost:2999";
 const WS = HTTP.replace(/^http/, "ws");
+let ROOM = "zone4"; // as lojas ficam na cidade; a seção do abate vai às Cinzas (zona 1)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -20,11 +21,12 @@ async function account(prefix) {
   return { token, name };
 }
 async function enter(acc) {
-  const room = await new Client(WS).joinOrCreate("zone", { token: acc.token });
+  const room = await new Client(WS).joinOrCreate(ROOM, { token: acc.token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
-  const st = { snap: null, notices: [], oks: [], coins: [], trade: null, trades: [], invite: null, loot: [], left: null };
+  const st = { travel: [], snap: null, notices: [], oks: [], coins: [], trade: null, trades: [], invite: null, loot: [], left: null };
   room.onMessage("inv", (s) => (st.snap = s));
   room.onMessage("notice", (m) => (m.ok ? st.oks : st.notices).push(m.text));
+  room.onMessage("travel", (m) => st.travel.push(m));
   room.onMessage("coins", (m) => st.coins.push(m));
   room.onMessage("trade", (m) => { st.trade = m; st.trades.push(m); });
   room.onMessage("trade_invite", (m) => (st.invite = m));
@@ -58,7 +60,7 @@ console.log("\n== 2. Comerciante (distância, saldo, espaço) ==");
   A.room.send("shop_buy", { npc: NPC, id: "pocao_de_vida", qty: 1 }); // longe: nasce a 5 tiles dele
   await sleep(300);
   check("longe do comerciante não compra", A.st.snap.iron === 50000 && /perto/i.test(lastNotice(A.st)), lastNotice(A.st));
-  await goto(A, 20, 16.5);
+  await goto(A, 19, 25.5);
   A.room.send("shop_buy", { npc: NPC, id: "pocao_de_vida", qty: 3 });
   await sleep(300);
   check("perto: compra 3 poções pelo preço (14 cada)", A.st.snap.iron === 50000 - 42 && count(A.st.snap, "pocao_de_vida") === 8, `iron ${A.st.snap.iron}`);
@@ -83,7 +85,7 @@ console.log("\n== 2. Comerciante (distância, saldo, espaço) ==");
   const poor = await account("Pobre");
   const P = await enter(poor);
   P.room.send("shop_sell", { npc: NPC, slot: 0, qty: 1 });
-  await goto(P, 20, 16.5);
+  await goto(P, 19, 25.5);
   for (let i = 0; i < 9; i++) { const s = slotOf(P.st.snap, "warrior_armor_rare"); if (s >= 0) P.room.send("shop_sell", { npc: NPC, slot: s, qty: 1 }); }
   // esvazia o saldo vendendo e comprando não é possível; usa troca: manda tudo para A
   await P.room.leave();
@@ -114,16 +116,16 @@ console.log("\n== 3. Quebrar (confirmação) ==");
 
 console.log("\n== 4. Ferreira (fusão) ==");
 {
-  await goto(A, 18.2, 18.2); // a ferreira está em (17, 19)
+  await goto(A, 29, 25.5); // a ferreira está em (29, 24)
   const base = count(A.st.snap, "warrior_armor_common");
   A.room.send("smith_merge", { npc: "merchant", slots: [0, 1, 2] }); // NPC errado
   await sleep(250);
   check("NPC errado não funde", count(A.st.snap, "warrior_armor_common") === base);
   // as armaduras comuns estão nos espaços 4..; acha 3 iguais (restam 2 depois de quebrar 1: compra mais uma)
-  await goto(A, 20, 16.5);
+  await goto(A, 19, 25.5);
   A.room.send("shop_buy", { npc: "merchant", id: "warrior_armor_common", qty: 1 });
   await sleep(300);
-  await goto(A, 18.2, 18.2);
+  await goto(A, 29, 25.5);
   const slots = A.st.snap.inv.flatMap((s, i) => (s?.id === "warrior_armor_common" ? [i] : [])).slice(0, 3);
   const ironB = A.st.snap.iron, tot = totalItems(A.st.snap);
   A.room.send("smith_merge", { npc: "smith", slots });
@@ -137,7 +139,7 @@ console.log("\n== 4. Ferreira (fusão) ==");
   await sleep(300);
   check("espaços repetidos ou inválidos são recusados", totalItems(A.st.snap) === tot - 2);
   // longe da ferreira
-  await goto(A, 26, 22);
+  await goto(A, 24, 34);
   const s2 = A.st.snap.inv.flatMap((s, i) => (s?.id === "warrior_armor_uncommon" ? [i] : [])).slice(0, 3);
   A.room.send("smith_merge", { npc: "smith", slots: s2 });
   await sleep(300);
@@ -191,24 +193,42 @@ console.log("\n== 6. Troca entre jogadores ==");
   for (const bad of [{ items: [{ slot: pa, qty: 2 }] }, { iron: iA + 1 }, { iron: -5 }, { iron: 1.5 }, { items: [{ slot: -1, qty: 1 }] }, { items: [{ slot: pa, qty: 1 }, { slot: pa, qty: 1 }] }, { items: "x" }, null, 7]) A.room.send("trade_offer", bad);
   await sleep(500);
   check("ofertas inválidas não mudam a oferta", (A.st.trade.mine.items.length === 0) && A.st.trade.mine.iron === 0);
-  A.room.send("trade_offer", { items: [{ slot: pa, qty: 1 }], iron: 1000, obols: 1 });
+  check("aceitar com a oferta vazia dos dois lados é recusado", (B.room.send("trade_ready", { ready: true, rev: B.st.trade.rev }), await sleep(250), B.st.trade.mine.ready === false && /algo/i.test(lastNotice(B.st))));
+  A.room.send("trade_offer", { items: [{ slot: pa, qty: 1 }], iron: 1000, obols: 1, seq: 1 });
   await sleep(300);
   check("a oferta aparece para os dois lados", A.st.trade.mine.items[0]?.id === "warrior_armor_uncommon" && B.st.trade.theirs.items[0]?.id === "warrior_armor_uncommon" && B.st.trade.theirs.iron === 1000 && B.st.trade.theirs.obols === 1);
-  B.room.send("trade_ready", { ready: true }); // logo depois da mudança: o servidor segura o aceite
+  check("o servidor confirma o pedido (seq) e o item fica na oferta com o espaço de origem", A.st.trade.mine.seq === 1 && A.st.trade.mine.items[0].slot === pa);
+  // BUG DA TROCA: o outro lado mexer na oferta (ou reenviar a mesma) não pode tirar o item de quem já ofereceu nem derrubar o aceite possível
+  const rev1 = B.st.trade.rev;
+  B.room.send("trade_offer", { items: [], iron: 3, obols: 0, seq: 1 });
+  await sleep(300);
+  check("BUG: o item que A colocou continua na oferta quando B mexe na dele", A.st.trade.mine.items.length === 1 && A.st.trade.mine.items[0].id === "warrior_armor_uncommon" && B.st.trade.theirs.items.length === 1);
+  check("a versão da oferta sobe quando algo muda", B.st.trade.rev > rev1, `${rev1} -> ${B.st.trade.rev}`);
+  A.room.send("trade_offer", { items: [{ slot: pa, qty: 1 }], iron: 1000, obols: 1, seq: 2 }); // pedido idêntico: não muda versão nem aceites
+  await sleep(250);
+  const rev2 = B.st.trade.rev;
+  B.room.send("trade_ready", { ready: true, rev: rev2 }); // aceite imediato, sem espera artificial
+  await sleep(250);
+  check("aceitar logo depois de editar funciona (sem atraso) e o botão do outro lado vê o aceite", B.st.trade.mine.ready === true && A.st.trade.theirs.ready === true, JSON.stringify(B.st.trade.mine));
+  A.room.send("trade_offer", { items: [{ slot: pa, qty: 1 }], iron: 1000, obols: 1, seq: 3 }); // reenviar IGUAL não desfaz o aceite de B
+  await sleep(250);
+  check("reenviar a mesma oferta não desfaz aceites nem muda a versão", B.st.trade.mine.ready === true && B.st.trade.rev === rev2);
+  B.room.send("trade_ready", { ready: false });
   await sleep(200);
-  check("aceitar logo depois de a oferta mudar é recusado (anti-golpe)", B.st.trade.mine.ready === false && /mudar/i.test(lastNotice(B.st)), `${lastNotice(B.st)} | ${JSON.stringify(B.st.trade.mine)}`);
-  await sleep(1600);
-  A.room.send("trade_ready", { ready: true });
+  A.room.send("trade_ready", { ready: true, rev: rev2 - 1 }); // versão velha: recusada
+  await sleep(250);
+  check("aceitar uma versão antiga da oferta é recusado", A.st.trade.mine.ready === false && /mudou/i.test(lastNotice(A.st)), lastNotice(A.st));
+  A.room.send("trade_ready", { ready: true, rev: rev2 });
+  await sleep(250);
+  check("só um lado aceitou: nada acontece ainda", A.st.trade.open && A.st.trade.mine.ready === true && B.st.trade.theirs.ready === true && A.st.snap.iron === iA);
+  B.room.send("trade_offer", { items: [], iron: 5, obols: 0, seq: 2 }); // B muda a oferta: os aceites caem
   await sleep(300);
-  check("só um lado confirmou: nada acontece ainda", A.st.trade.open && A.st.trade.mine.ready === true && B.st.trade.theirs.ready === true && A.st.snap.iron === iA);
-  B.room.send("trade_offer", { items: [], iron: 5, obols: 0 }); // B muda a oferta: as confirmações caem
-  await sleep(300);
-  check("mudar a oferta desfaz as confirmações dos DOIS lados", A.st.trade.mine.ready === false && B.st.trade.theirs.ready === false);
-  await sleep(1700);
-  A.room.send("trade_ready", { ready: true });
-  B.room.send("trade_ready", { ready: true });
+  check("mudar a oferta desfaz os aceites dos DOIS lados", A.st.trade.mine.ready === false && B.st.trade.theirs.ready === false);
+  const staleRev = B.st.trade.rev;
+  A.room.send("trade_ready", { ready: true, rev: staleRev });
+  B.room.send("trade_ready", { ready: true, rev: staleRev });
   await sleep(500);
-  check("com os dois confirmando, a troca acontece e a janela fecha", A.st.trade?.open === false && A.st.trade.done === true && B.st.trade.done === true);
+  check("com os dois aceitando a MESMA versão, a troca acontece e a janela fecha", A.st.trade?.open === false && A.st.trade.done === true && B.st.trade.done === true);
   check("A perdeu o item, 1000 tostões e 1 óbolo, e recebeu 5 tostões", slotOf(A.st.snap, "warrior_armor_uncommon") === -1 && A.st.snap.iron === iA - 1000 + 5 && A.st.snap.obols === 1, `iron ${A.st.snap.iron} obols ${A.st.snap.obols}`);
   check("B recebeu o item, 1000 tostões e 1 óbolo", slotOf(B.st.snap, "warrior_armor_uncommon") >= 0 && B.st.snap.obols >= 3 - 0, `obols ${B.st.snap.obols}`);
   check("nada foi criado nem destruído (itens, tostões e óbolos conservados)", totA() === ironSum && A.st.snap.obols + B.st.snap.obols === obolSum && totalItems(A.st.snap) + totalItems(B.st.snap) === itemSum);
@@ -244,6 +264,13 @@ console.log("\n== 6. Troca entre jogadores ==");
 
 console.log("\n== 7. Abate: tostões garantidos, sacola e Óbolo no chão ==");
 {
+  // vai às Cinzas pelo portal leste da cidade (A anda até lá e o servidor aprova a travessia)
+  A.room.send("move_to", { x: 44, y: 24 });
+  for (let t = 0; t < 150 && !A.st.travel?.length; t++) await sleep(100);
+  await A.room.leave();
+  await sleep(500);
+  ROOM = "zone";
+  A = await enter(accA);
   const e1 = A.room.state.enemies.get("e1");
   const ironAntes = A.st.snap.iron, obolAntes = A.st.snap.obols;
   A.st.coins.length = 0;

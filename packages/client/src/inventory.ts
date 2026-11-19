@@ -26,10 +26,9 @@ const CSS = `
 .iv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .iv-title{margin:0;font-size:14px;font-weight:700;letter-spacing:.35em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 14px rgba(255,120,40,.5)}
 .iv-x{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#bcd8f5;background:transparent;border:1px solid rgba(160,200,240,.3);font:700 16px/1 Georgia,serif}
-.iv-body{display:grid;grid-template-columns:230px 1fr;gap:14px}
-@media (max-width:600px){.iv-body{grid-template-columns:1fr}.iv-eq{grid-template-columns:1fr 1fr}.iv-eqs b{font-size:10px}}
-.iv-left{display:flex;flex-direction:column;gap:6px}
-.iv-eq{display:grid;grid-template-columns:1fr;gap:5px}
+.iv-body{display:grid;grid-template-columns:272px 1fr;gap:14px}
+@media (max-width:640px){.iv-body{grid-template-columns:1fr}.iv-card{padding:12px}}
+.iv-left{display:flex;flex-direction:column;gap:6px;align-items:center}
 .iv-stats{white-space:pre-line}
 .iv-wallet{display:flex;gap:14px;align-items:center;margin:0 0 8px;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9}
 .iv-wallet span{display:flex;align-items:center;gap:5px}
@@ -38,14 +37,53 @@ const CSS = `
 .iv-sort:hover,.iv-sort:focus-visible{opacity:1;color:#fff;border-color:#ff9a4d;outline:none}
 .iv-sort svg{width:16px;height:16px}
 .iv-head-r{display:flex;align-items:center}
-.iv-eqs{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2);min-height:46px;cursor:pointer;text-align:left;color:inherit;font:inherit}
-.iv-eqs small{display:block;font:400 9px/1.2 Georgia,serif;letter-spacing:.12em;text-transform:uppercase;color:#7fa6cc}
-.iv-eqs b{display:block;font:700 11px/1.2 "Cinzel",Georgia,serif}
-.iv-stats{font:400 12px/1.5 Georgia,serif;color:#9fc0e0;margin:4px 0 0;text-align:left}
+/* boneco: silhueta com os espaços de equipamento sobre o corpo */
+.iv-doll{--s:52px;position:relative;width:100%;max-width:262px;aspect-ratio:262/330;border-radius:10px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 38%,rgba(255,140,60,.13),rgba(6,12,20,0) 62%),linear-gradient(180deg,rgba(10,16,26,.92),rgba(4,8,14,.96));border:1px solid rgba(255,150,70,.28);
+  box-shadow:inset 0 0 40px rgba(0,0,0,.7)}
+@media (max-width:640px){.iv-doll{--s:42px;max-width:200px}.iv-es .lbl{display:none}.iv-acc{padding:6px 0 0}.iv-acc .iv-es{--s:34px;width:34px;height:34px}.iv-stats{margin:2px 0 0;font-size:11px}}
+.iv-sil{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.iv-sil .em{animation:iv-ember 3.6s ease-in-out infinite}
+@keyframes iv-ember{0%,100%{opacity:.55}50%{opacity:1}}
+.iv-es{position:absolute;width:var(--s);height:var(--s);transform:translate(-50%,-50%);display:grid;place-items:center;padding:0;border-radius:7px;cursor:pointer;color:#7a8da3;
+  --rc:rgba(160,200,240,.35);background:radial-gradient(circle at 50% 35%,rgba(26,38,56,.92),rgba(5,9,15,.96));border:2px solid var(--rc);box-shadow:inset 0 0 10px rgba(0,0,0,.8);
+  transition:transform .12s,box-shadow .18s,border-color .15s}
+.iv-es:hover:not(:disabled){transform:translate(-50%,-50%) scale(1.07);border-color:#ffd08a}
+.iv-es.full{box-shadow:0 0 9px var(--rc),inset 0 0 10px rgba(0,0,0,.7)}
+.iv-es[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 14px rgba(255,190,100,.55),inset 0 0 8px rgba(0,0,0,.7)}
+.iv-es svg{width:56%;height:56%;opacity:.55}
+.iv-es .iv-ic{width:82%;height:82%}
+.iv-es:disabled{cursor:not-allowed;border-style:dashed;border-color:rgba(160,200,240,.16);opacity:.55}
+.iv-es:disabled svg{opacity:.3}
+.iv-es.can{border-color:#7dd68a;animation:iv-can 1s ease-in-out infinite}
+.iv-es.no{opacity:.35}
+.iv-es .lbl{position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);font:700 8px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:#6f8eab;white-space:nowrap;pointer-events:none}
+.iv-es .qn{position:absolute;right:2px;bottom:1px;font:700 10px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 3px #000;color:#fff}
+@keyframes iv-can{0%,100%{box-shadow:0 0 4px #7dd68a}50%{box-shadow:0 0 16px #7dd68a}}
+@keyframes iv-pulse{0%,100%{box-shadow:0 0 5px var(--rc),inset 0 0 8px rgba(0,0,0,.6)}50%{box-shadow:0 0 16px var(--rc),inset 0 0 8px rgba(0,0,0,.6)}}
+.iv-es.p1,.iv-slot.p1{animation:iv-pulse 3.2s ease-in-out infinite}
+.iv-es.p2,.iv-slot.p2{animation:iv-pulse 2.2s ease-in-out infinite}
+.iv-es.p3,.iv-slot.p3{animation:iv-pulse 1.5s ease-in-out infinite}
+.iv-es.can,.iv-es.no{animation-name:iv-can}
+@media (prefers-reduced-motion:reduce){.iv-es,.iv-slot,.iv-sil .em{animation:none!important}}
+.iv-acc{display:flex;gap:18px;justify-content:center;padding:12px 0 2px}
+.iv-acc .iv-es{position:relative;transform:none;left:auto;top:auto;--s:40px;width:40px;height:40px}
+.iv-acc .iv-es:hover:not(:disabled){transform:scale(1.07)}
+.iv-tip{position:fixed;z-index:40;max-width:260px;padding:9px 11px;border-radius:6px;pointer-events:none;color:#dbeaff;font:400 12px/1.4 Georgia,serif;
+  background:linear-gradient(180deg,rgba(18,28,44,.98),rgba(6,10,18,.99));border:1px solid var(--rc,#ff9a4d);box-shadow:0 8px 24px rgba(0,0,0,.8),0 0 14px var(--rc,transparent)}
+.iv-tip h4{margin:0 0 1px;font:700 13px/1.2 "Cinzel",Georgia,serif}
+.iv-tip small{display:block;color:#8fb0cf;margin-bottom:4px}
+.iv-tip .row{display:flex;justify-content:space-between;gap:10px;color:#b9d2ea}
+.iv-tip .up{color:#7dd68a}.iv-tip .dn{color:#ff8f7e}.iv-tip .eq{color:#8fb0cf}
+.iv-tip hr{border:0;border-top:1px solid rgba(160,200,240,.18);margin:5px 0}
+.iv-tip .bad{color:#ff9d8a}
+.iv-stats{font:400 12px/1.5 Georgia,serif;color:#9fc0e0;margin:6px 0 0;text-align:center}
 .iv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.iv-slot{position:relative;aspect-ratio:1;border-radius:5px;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;
-  background:rgba(6,12,20,.8);border:1px solid rgba(160,200,240,.2);transition:border-color .15s}
-.iv-slot:hover{border-color:#ff9a4d}
+.iv-slot{position:relative;aspect-ratio:1;border-radius:5px;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;--rc:rgba(160,200,240,.2);
+  background:radial-gradient(circle at 50% 35%,rgba(20,30,46,.9),rgba(5,9,15,.9));border:1.5px solid var(--rc);transition:border-color .15s,transform .12s}
+.iv-slot.full{box-shadow:0 0 6px var(--rc)}
+.iv-slot.drop{border-color:#7dd68a}
+.iv-slot:hover{border-color:#ff9a4d;transform:scale(1.04)}
 .iv-slot[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 14px rgba(255,170,80,.4)}
 .iv-slot svg,.iv-eqs svg{width:70%;height:70%}
 .iv-eqs svg{width:34px;height:34px;flex:none}
@@ -107,6 +145,48 @@ function statLines(d: ItemDef): string[] {
   return o;
 }
 
+const STAT_DEFS: { k: keyof ItemDef; name: string; unit: string; line: (v: number) => string }[] = [
+  { k: "dmgPct", name: "poder", unit: "%", line: (v) => `+${v}% de poder` }, { k: "hp", name: "vida", unit: "", line: (v) => `+${v} de vida` },
+  { k: "crit", name: "crítico", unit: "%", line: (v) => `+${v}% de crítico` }, { k: "dr", name: "defesa", unit: "%", line: (v) => `−${v}% de dano recebido` },
+  { k: "cdr", name: "recarga menor", unit: "%", line: (v) => `−${v}% de recarga` }, { k: "mana", name: "recurso", unit: "", line: (v) => `+${v} de recurso máx.` },
+  { k: "regen", name: "regen.", unit: "/s", line: (v) => `+${v}/s de recurso` },
+];
+/** diferença de atributos entre o item novo e o equipado (só o que muda) */
+function compareStats(a: ItemDef, b: ItemDef): { text: string; delta: number }[] {
+  const out: { text: string; delta: number }[] = [];
+  for (const st of STAT_DEFS) {
+    const d = Math.round((((a[st.k] as number) ?? 0) - ((b[st.k] as number) ?? 0)) * 100) / 100;
+    if (d) out.push({ text: `${d > 0 ? "+" : "−"}${Math.abs(d)}${st.unit} ${st.name}`, delta: d });
+  }
+  return out;
+}
+/** 0 = sem brilho; épico pulsa leve, lendário médio, mítico forte */
+const pulse = (d: ItemDef): string[] => { const r = ["common", "uncommon", "rare", "epic", "legendary", "mythic"].indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
+
+const SILHOUETTE = `<svg class="iv-sil" viewBox="0 0 262 330" aria-hidden="true"><defs><linearGradient id="ivg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3a52"/><stop offset="1" stop-color="#0d1522"/></linearGradient></defs>
+  <g fill="url(#ivg)" stroke="rgba(255,150,70,.45)" stroke-width="1.4" stroke-linejoin="round">
+    <circle cx="131" cy="62" r="20"/>
+    <path d="M110 86h42l22 12 8 70-18 6-6-44-4 70 10 82h-26l-8-70-8 70h-26l10-82-4-70-6 44-18-6 8-70z"/>
+  </g>
+  <g class="em" fill="#ff8a3d"><circle cx="131" cy="122" r="2.4"/><circle cx="124" cy="132" r="1.4"/><circle cx="139" cy="140" r="1.4"/></g>
+  <path d="M30 300h202" stroke="rgba(255,150,70,.18)" stroke-width="2"/></svg>`;
+
+/** posições (em % do boneco) de cada espaço */
+const EQ_POS: Record<EquipSlot | "potion", [number, number]> = {
+  helmet: [50, 11], armor: [50, 40], boots: [50, 85], weapon: [14, 40], offhand: [86, 40], cape: [14, 12], potion: [14, 68],
+};
+interface Ph { key: string; label: string; icon: string; pos?: [number, number]; acc?: boolean }
+const PLACEHOLDERS: Ph[] = [
+  { key: "bag", label: "Bolsa", icon: "bag", pos: [86, 12] }, { key: "food", label: "Comida", icon: "food", pos: [86, 68] },
+  { key: "ring", label: "Anel", icon: "ring", acc: true }, { key: "amulet", label: "Amuleto", icon: "amulet", acc: true },
+];
+const PH_ICONS: Record<string, string> = {
+  bag: ICONS_BAG(), food: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11h14a7 7 0 0 1-14 0z"/><path d="M9 7c0-2 2-1.5 2-3.5M13 7c0-2 2-1.5 2-3.5"/></svg>`,
+  ring: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="6"/><path d="M9.5 6.5L12 3l2.5 3.5z"/></svg>`,
+  amulet: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3c0 6 12 6 12 0"/><path d="M12 11l3 4-3 5-3-5z"/></svg>`,
+};
+function ICONS_BAG() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1.5 12H4.5z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>`; }
+
 export function mountInventory(opts: { send(type: string, payload: unknown): void; getLevel(): number; getClass(): CharClass; onBreak?(slot: number): void }): InventoryUi {
   const style = document.createElement("style");
   style.textContent = CSS;
@@ -124,7 +204,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     <div class="iv-card" role="dialog" aria-modal="true" aria-label="Mochila">
       <div class="iv-head"><h2 class="iv-title">Mochila</h2><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
       <div class="iv-body">
-        <div class="iv-left"><div class="iv-eq"></div><p class="iv-stats"></p></div>
+        <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><p class="iv-stats"></p></div>
         <div><div class="iv-wallet" aria-label="Moedas"></div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
       </div>
     </div>`;
@@ -133,7 +213,8 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   toasts.setAttribute("aria-live", "polite");
   document.body.append(btn, back, toasts);
 
-  const eqEl = back.querySelector<HTMLElement>(".iv-eq")!;
+  const dollEl = back.querySelector<HTMLElement>(".iv-doll")!;
+  const accEl = back.querySelector<HTMLElement>(".iv-acc")!;
   const statsEl = back.querySelector<HTMLElement>(".iv-stats")!;
   const gridEl = back.querySelector<HTMLElement>(".iv-grid")!;
   const detEl = back.querySelector<HTMLElement>(".iv-det")!;
@@ -147,6 +228,167 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const open = () => { back.classList.add("open"); render(); };
   const close = () => { back.classList.remove("open"); btn.focus(); };
   const toggle = () => (isOpen() ? close() : open());
+
+  function toast(text: string, color = "#ffffff") {
+    const t = document.createElement("div");
+    t.className = "iv-toast";
+    t.textContent = text; // textContent: nunca interpretar HTML vindo do servidor
+    t.style.color = color;
+    toasts.append(t);
+    while (toasts.children.length > 4) toasts.firstElementChild?.remove();
+    setTimeout(() => t.remove(), 2900);
+  }
+
+  const equippedDef = (k: EquipSlot): ItemDef | null => (snap.equip[k] ? ITEMS[snap.equip[k]!] ?? null : null);
+
+  // ---- dica flutuante (passar o mouse): atributos e comparação com o equipado
+  const tip = document.createElement("div");
+  tip.className = "iv-tip";
+  tip.style.display = "none";
+  document.body.append(tip);
+  const hideTip = () => { tip.style.display = "none"; };
+  function showTip(e: MouseEvent, data: { def: ItemDef; cmp?: ItemDef | null; extra?: string }) {
+    const d = data.def;
+    tip.replaceChildren();
+    tip.style.setProperty("--rc", RARITY_COLOR[d.rarity]);
+    const h = document.createElement("h4"); h.textContent = d.name; h.style.color = RARITY_COLOR[d.rarity];
+    const sm = document.createElement("small");
+    sm.textContent = `${RARITY_NAME[d.rarity]}${d.kind !== "potion" ? ` · ${EQUIP_SLOT_NAME[d.kind as EquipSlot]}` : ""}${d.hands ? ` · ${d.hands === 2 ? "duas mãos" : "uma mão"}` : ""}`;
+    tip.append(h, sm);
+    const cmp = data.cmp && data.cmp.id !== d.id ? data.cmp : null;
+    for (const st of STAT_DEFS) {
+      const v = (d[st.k] as number) ?? 0;
+      if (!v && !(cmp && (cmp[st.k] as number))) continue;
+      const row = document.createElement("div"); row.className = "row";
+      const l = document.createElement("span"); l.textContent = v ? st.line(v) : `— ${st.name}`;
+      row.append(l);
+      if (cmp) {
+        const diff = v - (((cmp[st.k] as number) ?? 0));
+        const r = document.createElement("span");
+        r.className = diff > 0 ? "up" : diff < 0 ? "dn" : "eq";
+        r.textContent = diff > 0 ? `▲ ${diff}` : diff < 0 ? `▼ ${-diff}` : "=";
+        row.append(r);
+      }
+      tip.append(row);
+    }
+    if (d.heal) { const r = document.createElement("div"); r.textContent = `Cura ${d.heal} de vida`; tip.append(r); }
+    const wtd = d.wtype ? WEAPON_TYPES[d.wtype] : null;
+    if (wtd) { const r = document.createElement("div"); r.className = "eq"; r.textContent = wtd.name; tip.append(r); }
+    if (d.cls && d.cls !== opts.getClass()) { const r = document.createElement("div"); r.className = "bad"; r.textContent = `Exclusivo: ${CLASS_DEFS[d.cls].name}`; tip.append(document.createElement("hr"), r); }
+    else if (d.minLevel > opts.getLevel()) { const r = document.createElement("div"); r.className = "bad"; r.textContent = `Requer nível ${d.minLevel}`; tip.append(document.createElement("hr"), r); }
+    if (cmp) { const r = document.createElement("div"); r.className = "eq"; r.textContent = `vs. equipado: ${cmp.name}`; tip.append(r); }
+    if (data.extra) { const r = document.createElement("div"); r.className = "eq"; r.textContent = data.extra; tip.append(r); }
+    tip.style.display = "block";
+    moveTip(e);
+  }
+  function moveTip(e: MouseEvent) {
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = `${Math.max(6, Math.min(innerWidth - w - 6, e.clientX + 14))}px`;
+    tip.style.top = `${Math.max(6, Math.min(innerHeight - h - 6, e.clientY + 14))}px`;
+  }
+  /** só com mouse: no toque o painel de detalhes (com a mesma comparação) faz esse papel e a tela não se polui */
+  function attachTip(b: HTMLElement, get: () => { def: ItemDef; cmp?: ItemDef | null; extra?: string }) {
+    b.onmouseenter = (e) => showTip(e, get());
+    b.onmousemove = moveTip;
+    b.onmouseleave = hideTip;
+  }
+
+  // ---- arrastar e soltar (mouse): destaca os espaços compatíveis
+  type Drag = { from: "slot"; i: number } | { from: "equip"; s: EquipSlot };
+  let drag: Drag | null = null;
+  const dragDef = (): ItemDef | null => (!drag ? null : drag.from === "slot" ? (snap.inv[drag.i] ? ITEMS[snap.inv[drag.i]!.id] : null) : equippedDef(drag.s));
+  function startDrag(e: DragEvent, d: Drag) {
+    drag = d;
+    hideTip();
+    e.dataTransfer?.setData("text/plain", "item");
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    const def = dragDef();
+    dollEl.querySelectorAll<HTMLElement>(".iv-es[data-eq]").forEach((n) => {
+      const ok = !!def && (n.dataset.eq === def.kind || (n.dataset.eq === "potion" && def.kind === "potion"));
+      const usable = ok && (n.dataset.eq === "potion" || (!def!.cls || def!.cls === opts.getClass()));
+      n.classList.toggle("can", d.from === "slot" && usable);
+      n.classList.toggle("no", !(d.from === "slot" && ok));
+    });
+    if (d.from === "equip") gridEl.classList.add("dropping");
+  }
+  function endDrag() {
+    drag = null;
+    dollEl.querySelectorAll<HTMLElement>(".iv-es").forEach((n) => n.classList.remove("can", "no"));
+    gridEl.classList.remove("dropping");
+  }
+  gridEl.ondragover = (e) => { if (drag?.from === "equip") e.preventDefault(); };
+  gridEl.ondrop = (e) => { e.preventDefault(); if (drag?.from === "equip") opts.send(Msg.InvUnequip, { slot: drag.s }); endDrag(); };
+
+  function slotButton(key: string, label: string): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "iv-es";
+    b.dataset.slot = key;
+    const lb = document.createElement("span"); lb.className = "lbl"; lb.textContent = label;
+    b.append(lb);
+    return b;
+  }
+  const place = (b: HTMLElement, pos?: [number, number]) => { if (pos) { b.style.left = `${pos[0]}%`; b.style.top = `${pos[1]}%`; } };
+
+  function placeholderSlot(ph: Ph): HTMLElement {
+    const b = slotButton(ph.key, ph.label);
+    b.disabled = true;
+    b.title = `${ph.label}: em breve`;
+    b.setAttribute("aria-label", `${ph.label} (em breve)`);
+    b.insertAdjacentHTML("afterbegin", PH_ICONS[ph.icon]);
+    place(b, ph.pos);
+    return b;
+  }
+
+  function equipSlot(s: EquipSlot): HTMLElement {
+    const def = equippedDef(s);
+    const b = slotButton(s, EQUIP_SLOT_NAME[s] === "Mão secundária" ? "Secundária" : EQUIP_SLOT_NAME[s]);
+    b.dataset.eq = s;
+    b.setAttribute("aria-pressed", String(sel?.kind === "equip" && sel.s === s));
+    b.setAttribute("aria-label", def ? `${EQUIP_SLOT_NAME[s]}: ${def.name}` : `${EQUIP_SLOT_NAME[s]} vazio`);
+    if (def) {
+      b.insertAdjacentHTML("afterbegin", icon(def));
+      b.classList.add("full", ...pulse(def));
+      b.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
+      b.draggable = true;
+      b.ondragstart = (e) => startDrag(e, { from: "equip", s });
+      b.ondragend = endDrag;
+      b.ondblclick = () => opts.send(Msg.InvUnequip, { slot: s });
+      attachTip(b, () => ({ def, extra: "Duplo clique: desequipar" }));
+    } else b.insertAdjacentHTML("afterbegin", ICONS[s]);
+    b.onclick = () => { sel = def ? { kind: "equip", s } : null; confirmDrop = false; render(); };
+    b.ondragover = (e) => { if (drag?.from === "slot" && dragDef()?.kind === s) e.preventDefault(); };
+    b.ondrop = (e) => {
+      e.preventDefault();
+      if (drag?.from === "slot" && dragDef()?.kind === s) opts.send(Msg.InvEquip, { slot: drag.i });
+      endDrag();
+    };
+    place(b, EQ_POS[s]);
+    return b;
+  }
+
+  /** espaço da poção: mostra a pilha de poções que a tecla de atalho usa (a poção entra aqui sozinha, de qualquer espaço da mochila) */
+  function potionSlot(): HTMLElement {
+    const i = snap.inv.findIndex((x) => x && ITEMS[x.id]?.kind === "potion");
+    const total = snap.inv.reduce((n, x) => n + (x && ITEMS[x.id]?.kind === "potion" ? x.qty : 0), 0);
+    const b = slotButton("potion", "Poção");
+    b.dataset.eq = "potion";
+    b.setAttribute("aria-label", i >= 0 ? `Poção: ${total} (usar)` : "Poção vazia");
+    if (i >= 0) {
+      const def = ITEMS[snap.inv[i]!.id];
+      b.insertAdjacentHTML("afterbegin", icon(def));
+      b.classList.add("full");
+      b.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
+      const q = document.createElement("span"); q.className = "qn"; q.textContent = String(total);
+      b.append(q);
+      attachTip(b, () => ({ def, extra: "Clique: usar · tecla F" }));
+      b.onclick = () => opts.send(Msg.InvUse, { slot: i });
+    } else b.insertAdjacentHTML("afterbegin", ICONS.potion);
+    b.ondragover = (e) => { if (drag?.from === "slot" && dragDef()?.kind === "potion") e.preventDefault(); };
+    b.ondrop = (e) => { e.preventDefault(); if (drag?.from === "slot" && dragDef()?.kind === "potion") toast("A poção já fica pronta aqui sozinha. Clique para usar.", "#9fe0a8"); endDrag(); };
+    place(b, EQ_POS.potion);
+    return b;
+  }
 
   function renderWallet() {
     walletEl.replaceChildren();
@@ -163,25 +405,14 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   }
 
   function render() {
+    hideTip();
     renderWallet();
-    // equipamento
-    eqEl.innerHTML = "";
-    for (const s of EQUIP_SLOTS) {
-      const label = EQUIP_SLOT_NAME[s];
-      const id = snap.equip[s];
-      const def = id ? ITEMS[id] : null;
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "iv-eqs";
-      b.setAttribute("aria-pressed", String(sel?.kind === "equip" && sel.s === s));
-      b.innerHTML = `${def ? icon(def) : `<span style="width:34px;height:34px;flex:none"></span>`}<span><small></small><b></b></span>`;
-      b.querySelector("small")!.textContent = label;
-      const nm = b.querySelector("b")!;
-      nm.textContent = def?.name ?? "Vazio";
-      if (def) nm.style.color = RARITY_COLOR[def.rarity];
-      b.onclick = () => { sel = def ? { kind: "equip", s } : null; confirmDrop = false; render(); };
-      eqEl.append(b);
-    }
+    // equipamento: silhueta com os espaços sobre o corpo
+    dollEl.innerHTML = SILHOUETTE;
+    accEl.replaceChildren();
+    for (const ph of PLACEHOLDERS) (ph.acc ? accEl : dollEl).append(placeholderSlot(ph));
+    for (const s of EQUIP_SLOTS) dollEl.append(equipSlot(s));
+    dollEl.append(potionSlot());
     // bônus totais do que está equipado
     const g = gearBonuses(snap.equip, opts.getClass());
     const lines = [`Poder +${g.dmgPct}%`, `Vida +${g.hp}`];
@@ -206,7 +437,13 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
         b.innerHTML = `${icon(def)}${st.qty > 1 ? `<span class="iv-qty"></span>` : ""}`;
         const q = b.querySelector(".iv-qty");
         if (q) q.textContent = String(st.qty);
-        b.style.borderColor = RARITY_COLOR[def.rarity] + "66";
+        b.classList.add("full", ...pulse(def));
+        b.style.setProperty("--rc", RARITY_COLOR[def.rarity] + "aa");
+        b.draggable = true;
+        b.ondragstart = (e) => startDrag(e, { from: "slot", i });
+        b.ondragend = endDrag;
+        b.ondblclick = () => { if (def.kind === "potion") opts.send(Msg.InvUse, { slot: i }); else opts.send(Msg.InvEquip, { slot: i }); };
+        attachTip(b, () => ({ def, cmp: def.kind !== "potion" ? equippedDef(def.kind as EquipSlot) : null }));
       }
       b.onclick = () => { sel = def ? { kind: "slot", i } : null; confirmDrop = false; render(); };
       gridEl.append(b);
@@ -232,6 +469,17 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     const p2 = document.createElement("p");
     p2.textContent = def.desc;
     detEl.append(h, p1, p2);
+    if (sel.kind === "slot" && def.kind !== "potion") {
+      const cmp = equippedDef(def.kind as EquipSlot);
+      if (cmp && cmp.id !== def.id) {
+        const pc = document.createElement("p");
+        pc.append(document.createTextNode(`Comparado ao equipado (${cmp.name}): `));
+        const ds = compareStats(def, cmp);
+        if (!ds.length) pc.append(document.createTextNode("igual."));
+        ds.forEach((d, k) => { const sp = document.createElement("span"); sp.textContent = `${k ? " · " : ""}${d.text}`; sp.style.color = d.delta > 0 ? "#7dd68a" : "#ff8f7e"; pc.append(sp); });
+        detEl.append(pc);
+      }
+    }
     const wtd = def.wtype ? WEAPON_TYPES[def.wtype] : null;
     if (wtd) {
       const pk = document.createElement("p");
@@ -302,14 +550,6 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     toggle,
     isOpen,
     firstPotionSlot: () => snap.inv.findIndex((s) => s && ITEMS[s.id]?.kind === "potion"),
-    toast(text, color = "#ffffff") {
-      const t = document.createElement("div");
-      t.className = "iv-toast";
-      t.textContent = text; // textContent: nunca interpretar HTML vindo do servidor
-      t.style.color = color;
-      toasts.append(t);
-      while (toasts.children.length > 4) toasts.firstElementChild?.remove();
-      setTimeout(() => t.remove(), 2900);
-    },
+    toast,
   };
 }

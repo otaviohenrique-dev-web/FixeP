@@ -94,6 +94,7 @@ export function mergeItems(inv: Inventory, slots: unknown, zoneId: number, rng: 
 
 // ------------------------------------------------------------ troca entre jogadores
 export interface TradeOffer { items: { slot: number; id: string; qty: number }[]; iron: number; obols: number }
+export const sameOffer = (a: TradeOffer, b: TradeOffer) => a.iron === b.iron && a.obols === b.obols && a.items.length === b.items.length && a.items.every((x, i) => x.slot === b.items[i].slot && x.id === b.items[i].id && x.qty === b.items[i].qty);
 export const emptyOffer = (): TradeOffer => ({ items: [], iron: 0, obols: 0 });
 
 /** Valida e normaliza o que o cliente mandou como oferta (nunca confia no id: o id vem do que está no espaço). */
@@ -116,6 +117,7 @@ export function parseOffer(inv: Inventory, raw: unknown): { ok: true; offer: Tra
     seen.add(slot);
     items.push({ slot, id: st.id, qty });
   }
+  items.sort((x, y) => x.slot - y.slot);
   return { ok: true, offer: { items, iron, obols } };
 }
 

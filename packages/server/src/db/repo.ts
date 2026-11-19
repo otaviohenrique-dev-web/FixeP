@@ -39,7 +39,7 @@ export function validateName(raw: unknown): { ok: true; name: string } | { ok: f
 }
 
 export class Repo {
-  constructor(private db: Db) {}
+  constructor(readonly db: Db) {}
 
   async upsertAccount(provider: string, providerId: string, name: string): Promise<{ id: string; name: string }> {
     const { rows } = await this.db.query<{ id: string; name: string }>(
@@ -131,7 +131,7 @@ export class Repo {
     };
   }
 
-  private async writeInventory(q: Tx["query"], charId: string, r: InvRows) {
+  async writeInventoryTx(q: Tx["query"], charId: string, r: InvRows) {
     await q("select pg_advisory_xact_lock(hashtext($1))", [`inv:${charId}`]);
     await q("delete from inventory_items where character_id = $1", [charId]);
     await q("delete from equipment where character_id = $1", [charId]);
@@ -176,19 +176,19 @@ export class Repo {
   /** Grava bolsa E baú do mesmo personagem na MESMA transação: o item está num lugar ou no outro, nunca nos dois nem em nenhum. */
   async saveInventoryAndVault(charId: string, inv: Inventory, v: Vault): Promise<void> {
     const ir = this.inventoryRows(inv), vr = this.vaultRows(v);
-    await this.db.tx(async ({ query: q }) => { await this.writeInventory(q, charId, ir); await this.writeVault(q, charId, vr); });
+    await this.db.tx(async ({ query: q }) => { await this.writeInventoryTx(q, charId, ir); await this.writeVault(q, charId, vr); });
   }
 
   /** Troca o inventário (e o saldo) salvo pelo estado atual, numa transação. A fotografia é copiada ANTES de qualquer espera. */
   async saveInventory(charId: string, inv: Inventory): Promise<void> {
     const rows = this.inventoryRows(inv);
-    await this.db.tx(({ query: q }) => this.writeInventory(q, charId, rows));
+    await this.db.tx(({ query: q }) => this.writeInventoryTx(q, charId, rows));
   }
 
   /** Grava DOIS personagens na MESMA transação (a troca entre jogadores: ou grava os dois lados ou nenhum, sem duplicar nem perder item). */
   async saveInventoryPair(a: [string, InvRows], b: [string, InvRows]): Promise<void> {
     await this.db.tx(async ({ query: q }) => {
-      for (const [id, r] of [a, b].sort((x, y) => (x[0] < y[0] ? -1 : 1))) await this.writeInventory(q, id, r); // ordem fixa: sem impasse entre trocas
+      for (const [id, r] of [a, b].sort((x, y) => (x[0] < y[0] ? -1 : 1))) await this.writeInventoryTx(q, id, r); // ordem fixa: sem impasse entre trocas
     });
   }
 }

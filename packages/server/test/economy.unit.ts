@@ -9,7 +9,7 @@ import {
   enemyKind, mobIron, bossIron, rarityIndex, zoneNpcs, NPC_REACH, PLAYABLE_CLASSES, INV_SLOTS,
 } from "@frixep/shared";
 import { emptyInventory, addItem, snapshot, type Inventory } from "../src/game/inventory.js";
-import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer } from "../src/game/economy.js";
+import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer } from "../src/game/economy.js";
 import { rollMobLoot, rollChestLoot } from "../src/game/loot.js";
 import { openDb } from "../src/db/index.js";
 import { Repo } from "../src/db/repo.js";

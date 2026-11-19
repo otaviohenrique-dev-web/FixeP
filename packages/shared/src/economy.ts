@@ -51,17 +51,18 @@ export const ZONE_COINS: Record<number, { bag: number; obol: number; bossObol: n
 export const coinZone = (zoneId: number) => ZONE_COINS[zoneId] ?? ZONE_COINS[1];
 
 // ------------------------------------------------------------ NPCs
-export type NpcKind = "merchant" | "smith";
+export type NpcKind = "merchant" | "smith" | "auctioneer";
 export interface NpcDef { id: string; kind: NpcKind; name: string; title: string; x: number; y: number }
 /** Distância (tiles) até o NPC para conversar, comprar, vender e fundir. O servidor valida a cada pedido. */
 export const NPC_REACH = 3.5;
-const npcPair = (mx: number, my: number, sx: number, sy: number): NpcDef[] => [
+const npcPair = (mx: number, my: number, sx: number, sy: number, ax: number, ay: number): NpcDef[] => [
   { id: "merchant", kind: "merchant", name: "Garrick", title: "Comerciante", x: mx, y: my },
   { id: "smith", kind: "smith", name: "Brasa", title: "Ferreira", x: sx, y: sy },
+  { id: "auctioneer", kind: "auctioneer", name: "Ossian", title: "Leiloeiro", x: ax, y: ay },
 ];
 /** Os NPCs de ofício ficam só na cidade segura (zona 4), na praça: comerciante à esquerda da fonte, ferreira à direita. */
 export const ZONE_NPCS: Record<number, NpcDef[]> = {
-  4: npcPair(19, 24, 29, 24),
+  4: npcPair(19, 24, 29, 24, 24, 18.5),
 };
 export const zoneNpcs = (zoneId: number): NpcDef[] => ZONE_NPCS[zoneId] ?? [];
 

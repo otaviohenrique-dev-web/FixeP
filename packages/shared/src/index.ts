@@ -39,14 +39,20 @@ export const Msg = {
   TradeInvite: "trade_invite", // { name }: convida um jogador da zona, por perto, para uma troca
   TradeAccept: "trade_accept", // {}: aceita o convite de troca
   TradeDecline: "trade_decline", // {}: recusa o convite
-  TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols }: define a minha oferta (reinicia as confirmações dos dois lados)
-  TradeReady: "trade_ready", // { ready: boolean }: confirma (ou retira a confirmação); com os dois confirmados o servidor executa
+  TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols, seq }: define a minha oferta (reinicia as confirmações dos dois lados); seq = contador do cliente, devolvido em mine.seq
+  TradeReady: "trade_ready", // { ready: boolean, rev }: aceita a versão `rev` da oferta (ou retira o aceite); executa quando os dois aceitaram a MESMA versão
   TradeCancel: "trade_cancel", // {}: cancela a troca
   VaultOpen: "vault_open", // {}: abre o baú da cidade (o servidor valida a distância e envia Evt.Vault)
   VaultDeposit: "vault_deposit", // { slot, qty?, to? }: bolsa -> baú (to = espaço do baú, opcional)
   VaultWithdraw: "vault_withdraw", // { slot, qty?, to? }: baú -> bolsa (to = espaço da bolsa, opcional)
   VaultMove: "vault_move", // { from, to }: dentro do baú (troca de lugar ou junta pilhas)
   VaultCoins: "vault_coins", // { coin: "iron" | "obols", amount, dir: "in" | "out" }: deposita ou retira moedas
+  MarketBrowse: "market_browse", // { npc, filter }: pede uma página de listagens (Evt.MarketPage)
+  MarketMy: "market_my", // { npc }: pede as minhas listagens e vendas a recolher (Evt.MarketMine)
+  MarketList: "market_list", // { npc, slot, qty, price }: põe um item da mochila à venda (cobra a taxa de listagem)
+  MarketBuy: "market_buy", // { npc, id }: compra uma listagem
+  MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
+  MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
   QMode: "q_mode", // { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
 } as const;
 
@@ -79,16 +85,19 @@ export const Evt = {
   TradeInvite: "trade_invite", // { from }: convite de troca recebido (expira em TRADE_INVITE_S)
   TradeInviteEnd: "trade_invite_end", // {}: o convite acabou
   Vault: "vault", // VaultSnapshot: o conteúdo do baú pessoal (só para o dono, depois de abrir ou de qualquer operação)
+  MarketPage: "market_page", // MarketPage: resposta a MarketBrowse
+  MarketMine: "market_mine", // MarketMineEvent: minhas listagens e vendas
+  MarketDone: "market_done", // MarketDoneEvent: resultado de listar, comprar, cancelar ou recolher
 } as const;
 
 // ------------------------------------------------------------ troca entre jogadores
 export const TRADE_INVITE_S = 20; // validade do convite
 export const TRADE_RANGE = 8; // distância máxima (tiles) entre os dois, no convite e na execução
 export const TRADE_MAX_ITEMS = 8; // espaços de item por oferta
-export const TRADE_READY_DELAY_S = 1.5; // depois de qualquer mudança na oferta, só se confirma passado este tempo (anti-golpe do clique rápido)
-export interface TradeOfferSide { items: { id: string; qty: number }[]; iron: number; obols: number; ready: boolean }
+/** `slot` só vem no meu lado (para o cliente reconciliar a seleção); `seq` é o número do último pedido de oferta meu que o servidor processou. */
+export interface TradeOfferSide { items: { id: string; qty: number; slot?: number }[]; iron: number; obols: number; ready: boolean; seq?: number }
 /** Estado da janela de troca. `open: false` = fechou (reason explica). */
-export interface TradeEvent { open: boolean; with?: string; mine?: TradeOfferSide; theirs?: TradeOfferSide; reason?: string; done?: boolean; readyIn?: number }
+export interface TradeEvent { open: boolean; with?: string; mine?: TradeOfferSide; theirs?: TradeOfferSide; reason?: string; done?: boolean; /** versão da oferta (sobe a cada mudança de qualquer lado): o aceite só vale para a versão que o jogador viu */ rev?: number }
 export interface CoinsEvent { iron: number; obols: number; x: number; y: number }
 
 // ------------------------------------------------------------ grupo (party)
@@ -408,5 +417,7 @@ export function classAction(cls: CharClass, a: ActionId, qMode = 0): ActionDef {
 export * from "./items";
 export * from "./balance";
 export * from "./economy";
+export * from "./market";
 export * from "./zones";
 export * from "./vault";
+export * from "./skilltips";

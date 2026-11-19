@@ -4,7 +4,7 @@ import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type VaultSnapshot,
+  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type VaultSnapshot,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -126,7 +126,7 @@ class WorldScene extends Phaser.Scene {
 
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
-    this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId));
+    this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
     this.selG = this.add.graphics().setDepth(0.35);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
@@ -220,7 +220,7 @@ class WorldScene extends Phaser.Scene {
     // mochila: registra os receptores ANTES de pedir a fotografia (evita perder a mensagem inicial)
     this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     // economia: saldo na HUD, comerciante, ferreira, troca e confirmação de quebrar
-    this.econ = mountEconomy({ send: (t, p) => this.room.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c) });
+    this.econ = mountEconomy({ send: (t, p) => this.room.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
     this.room.onMessage(Evt.Coins, (m: CoinsEvent) => {
       if (m.iron) this.floatText(m.x, m.y - 0.9, `+${m.iron} Tostões`, "#cfd4dc", 16, false);
       if (m.obols) { this.floatText(m.x, m.y - 1.3, `+${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color, 18, true); this.inv.toast(`+ ${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color); }
@@ -229,6 +229,9 @@ class WorldScene extends Phaser.Scene {
     this.vault = mountVault({ send: (t, p) => this.room.send(t, p) });
     this.room.onMessage(Evt.Vault, (m: VaultSnapshot) => this.vault.setVault(m));
     this.room.onMessage(Evt.Trade, (m: TradeEvent) => this.econ.setTrade(m));
+    this.room.onMessage(Evt.MarketPage, (m: MarketPage) => this.econ.setMarketPage(m));
+    this.room.onMessage(Evt.MarketMine, (m: MarketMineEvent) => this.econ.setMarketMine(m));
+    this.room.onMessage(Evt.MarketDone, (m: MarketDoneEvent) => this.econ.setMarketDone(m));
     this.room.onMessage(Evt.TradeInvite, (m: { from: string }) => this.econ.showTradeInvite(String(m.from)));
     this.room.onMessage(Evt.TradeInviteEnd, () => this.econ.endTradeInvite());
     this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => {
@@ -556,7 +559,7 @@ class WorldScene extends Phaser.Scene {
           : known!.has(`placeholder/${name}`) // senão, o corpo provisório (assets/placeholder)
             ? { name, png: `/assets/placeholder/${name}.png`, json: `/assets/placeholder/${name}.json` }
             : null;
-    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("mage", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters"), spec("bone_king", "monsters"), spec("frost_alpha", "monsters"), spec("crypt_lord", "monsters")].filter((s): s is AtlasSpec => !!s);
+    const specs = [spec("warrior", "characters"), spec("archer", "characters"), spec("cleric", "characters"), spec("mage", "characters"), spec("skeleton", "monsters"), spec("wolf", "monsters"), spec("wraith", "monsters"), spec("bone_king", "monsters"), spec("frost_alpha", "monsters"), spec("crypt_lord", "monsters"), spec("npc_smith", "npcs"), spec("npc_merchant", "npcs"), spec("npc_auctioneer", "npcs")].filter((s): s is AtlasSpec => !!s);
     this.atlases = await loadAtlases(this, specs);
   }
 
