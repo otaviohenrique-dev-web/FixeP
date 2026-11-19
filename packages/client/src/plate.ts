@@ -2,7 +2,7 @@ import type Phaser from "phaser";
 import { LEVEL_TIER_COLORS, levelTier } from "@frixep/shared";
 
 /**
- * Placa de cada personagem e inimigo (nome em cima; embaixo, selo de nível à esquerda + barra de vida segmentada).
+ * Placa de cada personagem e inimigo (nome em cima; embaixo, selo de nível ao lado esquerdo da barra, sem cobri-la + de vida segmentada).
  * O selo é o destaque: a moldura muda a cada 10 níveis e ganha enfeites (rebites, gema, brilho que pulsa) para dar vontade de chegar à próxima faixa.
  * Só desenha (o texto do nome e o número ficam em objetos de texto posicionados com o retorno).
  */
@@ -38,9 +38,11 @@ export function drawPlate(
   const col = LEVEL_TIER_COLORS[tier];
   const light = mix(col, 0xffffff, 0.55);
   const size = (tier >= 4 ? 26 : tier >= 2 ? 24 : 22) * K;
-  const barLeft = o.x - W / 2 + size / 2 - 5; // o conjunto selo+barra fica centrado no personagem
+  const gap = 4; // folga entre o contorno do selo e a barra
+  const total = size + gap + W; // selo + folga + barra: o conjunto fica centrado no personagem
+  const cx = o.x - total / 2 + size / 2; // centro do selo: à ESQUERDA da barra, sem cobrir nenhum pedaço dela
+  const barLeft = cx + size / 2 + gap; // a barra (e o nome, centrado nela) começa logo depois do selo
   const cy = o.y;
-  const cx = barLeft; // centro do selo (ele cobre a ponta esquerda da barra)
 
   // ----- barra de vida
   g.fillStyle(0x05080d, 0.92).fillRoundedRect(barLeft - 1, cy - H / 2 - 1, W + 2, H + 2, 3);

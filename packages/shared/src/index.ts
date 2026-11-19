@@ -87,7 +87,7 @@ export interface CoinsEvent { iron: number; obols: number; x: number; y: number 
 // ------------------------------------------------------------ grupo (party)
 export const PARTY_MAX = 4; // membros por grupo
 export const PARTY_INVITE_S = 30; // validade do convite
-export const PARTY_XP_BONUS = 0.1; // +10% de XP por membro do grupo (vivo e por perto) além de você, no abate
+export const PARTY_XP_BONUS = 0.25; // o XP do abate cresce +25% por membro elegível além do primeiro e é DIVIDIDO igualmente entre eles
 /** Multiplicador de XP para quem abate com `near` membros do mesmo grupo por perto (contando a si mesmo). */
 export const partyXpMult = (near: number) => 1 + PARTY_XP_BONUS * Math.max(0, Math.min(PARTY_MAX, near) - 1);
 export interface PartyMemberInfo {
@@ -145,7 +145,21 @@ export const PLAYER_RADIUS = 0.4;
 export const CRIT = { chance: 0.1, mult: 1.5 } as const;
 export const DAMAGE_VARIANCE = 0.1; // +-10%
 export const RESPAWN_S = 8; // tempo caído; dá tempo de um Clérigo ressuscitar
-export const SHARE_RADIUS = 14; // quem estiver a até 14 tiles de um abate divide XP e loot
+export const SHARE_RADIUS = 14; // colegas de grupo (vivos) a até 14 tiles do abate entram na divisão de XP e loot
+export const ELIGIBLE_DMG_PCT = 0.1; // fora de grupo, só recebe XP/loot quem causou pelo menos 10% da vida máxima do alvo
+export const PLAYER_REGEN_DELAY_S = 6; // sem causar nem receber dano por 6 s, o personagem começa a recuperar vida
+export const PLAYER_REGEN_PCT_S = 0.02; // ...a 2% da vida máxima por segundo (vida cheia em ~50 s)
+/** Regeneração dos inimigos: só parados em casa ou voltando para ela, e só depois de ficarem sem receber dano. */
+export const ENEMY_REGEN = { delayS: 5, pctS: 0.1, bossDelayS: 8, bossPctS: 0.03 } as const;
+
+// ------------------------------------------------------------ chefes: exigem grupo
+export const BOSS_GROUP_MIN = 3; // tanque + curandeiro + dano
+export const BOSS_ENRAGE_S = 150; // depois de 150 s de luta o chefe enfurece (dano cresce +50% a cada 30 s, até x4)
+export const BOSS_COUNT_RADIUS = 24; // jogadores elegíveis vivos a até 24 tiles do chefe contam para o tamanho do grupo
+/** Multiplicador do dano do chefe (golpe, pancada e pulso) pelo nº de jogadores elegíveis: solo x2,5, dupla x1,75, trio ou mais x1. */
+export const bossDmgMult = (n: number) => 1 + 0.75 * Math.max(0, BOSS_GROUP_MIN - Math.max(1, n));
+/** Fúria por tempo de luta (s): x1 até BOSS_ENRAGE_S, depois +0,5 a cada 30 s, teto x4. */
+export const bossEnrageMult = (fightS: number) => Math.min(4, 1 + 0.5 * Math.max(0, (fightS - BOSS_ENRAGE_S) / 30));
 
 // ------------------------------------------------------------ itens no chão
 export const LOOT_LOCK_S = 30; // só quem abateu (ou o grupo dele) pega nesse tempo; depois, qualquer um
@@ -309,7 +323,7 @@ export interface EnemyKindDef {
   scale?: number;
 }
 /** Mecânica dos chefes: golpe normal mais forte + "pancada" em área em volta dele a cada `slamEveryS`; abaixo de `enrageAt` da vida ele fica furioso. */
-export interface BossDef { xpMul: number; slamEveryS: number; slamRadius: number; slamMul: number; slamWindupS: number; enrageAt: number; enrageSpeed: number }
+export interface BossDef { pulseEveryS: number; pulsePct: number; pulseRadius: number; xpMul: number; slamEveryS: number; slamRadius: number; slamMul: number; slamWindupS: number; enrageAt: number; enrageSpeed: number }
 const base = { aggro: SKELETON.aggro, leash: SKELETON.leash, engage: SKELETON.engage, windupS: SKELETON.windupS, strikeOffset: SKELETON.strikeOffset,
   strikeRadius: SKELETON.strikeRadius, recoverS: SKELETON.recoverS, respawnS: SKELETON.respawnS, radius: SKELETON.radius, speed: SKELETON.speed };
 export const ENEMY_KINDS = {
@@ -317,12 +331,13 @@ export const ENEMY_KINDS = {
   wolf: { ...base, name: "Lobo Gélido", hpMul: 0.8, dmgMul: 0.9, speed: 3.6, aggro: 8, engage: 1.5, windupS: 0.5, strikeOffset: 0.9, strikeRadius: 1.1, recoverS: 0.8, radius: 0.4, color: 0x8fb3d9 },
   wraith: { ...base, name: "Espectro", hpMul: 1.3, dmgMul: 1.4, speed: 2.0, aggro: 9, leash: 16, engage: 2.2, windupS: 0.9, strikeOffset: 1.4, strikeRadius: 1.6, recoverS: 1.2, radius: 0.5, color: 0x9a7ad0 },
 } as Record<EnemyKind, EnemyKindDef>;
-const bossBase: Pick<BossDef, "slamWindupS" | "enrageAt" | "enrageSpeed"> = { slamWindupS: 1.3, enrageAt: 0.3, enrageSpeed: 1.3 };
-ENEMY_KINDS.bone_king = { ...base, name: "Rei Ossudo", hpMul: 6, dmgMul: 1.2, speed: 2.2, aggro: 9, leash: 18, engage: 2.0, strikeOffset: 1.3, strikeRadius: 1.8, radius: 0.7, respawnS: 300, color: 0xe8e0c8,
+// pulso sombrio: a cada pulseEveryS atinge TODOS a até pulseRadius (ignora esquiva) com pulsePct da vida máxima de cada um: sem curandeiro não se aguenta
+const bossBase: Pick<BossDef, "slamWindupS" | "enrageAt" | "enrageSpeed" | "pulseEveryS" | "pulsePct" | "pulseRadius"> = { slamWindupS: 1.3, enrageAt: 0.3, enrageSpeed: 1.3, pulseEveryS: 6, pulsePct: 0.4, pulseRadius: 24 };
+ENEMY_KINDS.bone_king = { ...base, name: "Rei Ossudo", hpMul: 18, dmgMul: 1.2, speed: 2.2, aggro: 9, leash: 18, engage: 2.0, strikeOffset: 1.3, strikeRadius: 1.8, radius: 0.7, respawnS: 300, color: 0xe8e0c8,
   scale: 1.7, boss: { xpMul: 8, slamEveryS: 9, slamRadius: 3.4, slamMul: 1.4, ...bossBase } };
-ENEMY_KINDS.frost_alpha = { ...base, name: "Lobo Alfa", hpMul: 5, dmgMul: 1.2, speed: 3.6, aggro: 10, leash: 18, engage: 2.0, windupS: 0.6, strikeOffset: 1.2, strikeRadius: 1.6, recoverS: 0.9, radius: 0.7, respawnS: 420, color: 0xbfd8f2,
+ENEMY_KINDS.frost_alpha = { ...base, name: "Lobo Alfa", hpMul: 15, dmgMul: 1.2, speed: 3.6, aggro: 10, leash: 18, engage: 2.0, windupS: 0.6, strikeOffset: 1.2, strikeRadius: 1.6, recoverS: 0.9, radius: 0.7, respawnS: 420, color: 0xbfd8f2,
   scale: 1.7, boss: { xpMul: 8, slamEveryS: 8, slamRadius: 3.2, slamMul: 1.4, ...bossBase } };
-ENEMY_KINDS.crypt_lord = { ...base, name: "Soberano das Catacumbas", hpMul: 6, dmgMul: 1.3, speed: 2.3, aggro: 11, leash: 20, engage: 2.6, windupS: 0.9, strikeOffset: 1.6, strikeRadius: 2.0, recoverS: 1.1, radius: 0.8, respawnS: 600, color: 0xc9a8ff,
+ENEMY_KINDS.crypt_lord = { ...base, name: "Soberano das Catacumbas", hpMul: 18, dmgMul: 1.3, speed: 2.3, aggro: 11, leash: 20, engage: 2.6, windupS: 0.9, strikeOffset: 1.6, strikeRadius: 2.0, recoverS: 1.1, radius: 0.8, respawnS: 600, color: 0xc9a8ff,
   scale: 1.8, boss: { xpMul: 10, slamEveryS: 8, slamRadius: 4, slamMul: 1.5, ...bossBase } };
 export const enemyKind = (k: string): EnemyKindDef => ENEMY_KINDS[k as EnemyKind] ?? ENEMY_KINDS.skeleton;
 
