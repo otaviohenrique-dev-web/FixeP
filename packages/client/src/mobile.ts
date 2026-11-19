@@ -32,6 +32,11 @@ body.mob .hd-name{font-size:calc(9px*var(--hs));letter-spacing:.1em}
 body.mob .hd-name small,body.mob .hd-meter>.ic,body.mob .hd-buff{display:none}
 body.mob .hd-track{height:calc(10px*var(--hs));border-radius:5px}
 body.mob .hd-txt{font-size:calc(7px*var(--hs));letter-spacing:.06em}
+body.mob .hd-hp .hd-track{height:calc(14px*var(--hs))}
+body.mob .hd-hp .hd-txt{font-size:calc(9px*var(--hs));letter-spacing:.03em}
+body.mob .hd-tr .hd-thin{height:calc(3px*var(--hs))}
+body.mob .hd-tt{font-size:calc(7px*var(--hs))}
+body.mob .hd-shd{font-size:calc(7px*var(--hs));letter-spacing:.12em}
 body.mob .hd-tr .hd-txt{letter-spacing:.08em}
 body.mob .hd-pvp{left:${SAFE_L};top:calc(${SAFE_T} + 50px*var(--hs));height:calc(26px*var(--hs));padding:0 8px 0 6px;font-size:calc(9px*var(--hs));gap:4px;border-radius:8px;opacity:.82}
 body.mob .hd-pvp.on,body.mob .hd-pvp.chan{opacity:1}

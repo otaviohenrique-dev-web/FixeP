@@ -37,7 +37,7 @@ await until(() => Z.ev.travel.length > 0, 5000);
 await Z.r.leave(true);
 await sleep(400);
 Z = await enter(acc, "zone");
-const spawn = { x: 20, y: 20 }; // ponto de nascimento da zona 1 (meio do mapa)
+const spawn = { x: 12, y: 31 }; // ponto de nascimento da zona 1 (clareira a sudoeste)
 Z.r.send("move_to", { x: 30, y: 16 }); // direto para os esqueletos
 check("morre numa zona de combate", await until(() => Z.me()?.dead, 90_000), `hp ${Z.me()?.hp}`);
 const body = { x: Z.me().x, y: Z.me().y };

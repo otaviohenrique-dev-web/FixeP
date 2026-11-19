@@ -9,7 +9,10 @@ import { LEVEL_TIER_COLORS, levelTier } from "@frixep/shared";
 
 export type PlateKind = "me" | "ally" | "enemy" | "pvp" | "party";
 
-const FILL: Record<PlateKind, number> = { me: 0x35d6a0, ally: 0x4cc26a, enemy: 0xd0402e, pvp: 0xff5a4a, party: 0x4aa8ff }; // party = colega de grupo (azul)
+/** Paleta das barras de vida. O vermelho vivo do jogador (o MESMO da barra de vida da HUD, ver hud.ts) é inequívoco: o inimigo usa um tijolo escuro e
+ *  fosco, o PvP um laranja de alerta, o aliado verde e o colega de grupo azul (com filete claro em volta). */
+export const PLAYER_RED = 0xe5202e;
+const FILL: Record<PlateKind, number> = { me: PLAYER_RED, ally: 0x4cc26a, enemy: 0x8a3226, pvp: 0xff8a1f, party: 0x4aa8ff };
 
 export interface PlateGeom {
   /** centro do número do nível */

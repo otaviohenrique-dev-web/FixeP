@@ -13,6 +13,7 @@ export class Player extends Schema {
   @type("number") maxHp = CLASS_DEFS.warrior.maxHp;
   @type("boolean") dead = false;
   @type("string") cls = "warrior";
+  @type("boolean") shield = false; // bolha de proteção da chegada (imune a dano): os outros jogadores veem a bolha
   @type("boolean") buff = false; // Escudo Refletor ativo (mitigação)
   @type("boolean") ember = false; // Brasa do Clérigo ativa
   @type("boolean") reflect = false; // Escudo Refletor do Guerreiro ativo
@@ -47,6 +48,8 @@ export class Player extends Schema {
   dashVy = 0;
   dashLeft = 0;
   invulnUntil = 0;
+  shieldPending = false; // bolha já ativa, mas ainda sem contar: o cliente está carregando (começa em Msg.Ready)
+  shieldUntil = 0; // fim da bolha (relógio da simulação); com shieldPending vale como o prazo máximo da espera
   buffUntil = 0;
   buffRed = 0; // redução de dano do buff ativo (Escudo Refletor)
   reflectUntil = 0;
