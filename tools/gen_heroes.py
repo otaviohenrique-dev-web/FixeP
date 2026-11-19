@@ -241,12 +241,19 @@ def archer(cv, back, p, anim):
         cv.line((cx - 2, top + 3), (cx - 3 + wob * 0.5, hem - 3), GREEN[0])
         cv.line((cx + 3, top + 3), (cx + 4 + wob * 0.5, hem - 4), GREEN[0])
 
-    # braço de trás (segura o arco) — ângulo muda no ataque
-    oa = p.off * -fx
-    ox, oy = pt(cx - 7 * fx, top + 3, oa - 0.9 * fx, 9)
-    if anim in ("attack", "skill"):
-        ox, oy = cx - 7 * fx + fx * -1 * 6, top + 4
-    cv.part(lambda d: thick(d, (cx - 7 * fx, top + 3), (ox, oy), 4), LEATHER)
+    # O arco fica na mão da FRENTE (braço esticado para o alvo); a mão de TRÁS puxa a corda até o rosto.
+    drawing = anim in ("attack", "skill")
+    sh_f = (cx + 6 * fx, top + 3)  # ombro da frente
+    sh_b = (cx - 6 * fx, top + 3)  # ombro de trás
+    if drawing:
+        ox, oy = cx + 15 * fx, top + 3  # mão do arco, braço esticado
+        hx, hy2 = cx + 1 * fx, top + 3  # mão da corda junto ao rosto
+    else:
+        swing = int(p.step * 0.25)
+        ox, oy = cx + 10 * fx + swing * fx, top + 7  # arco baixo, na frente
+        hx, hy2 = cx - 8 * fx - swing * fx, top + 10  # mão de trás solta ao lado do corpo
+    if not drawing:
+        cv.part(lambda d: thick(d, sh_b, (hx, hy2), 4), LEATHER)  # relaxado: o braço de trás fica atrás do tronco
 
     # tronco: gibão de couro com tiras cruzadas
     cv.part(lambda d: d.rounded_rectangle([cx - 6, top, cx + 6, hip + by + 1], radius=3, fill=255), LEATHER)
@@ -277,31 +284,32 @@ def archer(cv, back, p, anim):
     else:
         cv.line((cx, hy - 6), (cx, hy + 2), GREEN[0])
 
-    # braço da frente puxando a corda
-    a = p.arm * fx
-    shx, shy = cx + 7 * fx, top + 3
-    hx, hy2 = pt(shx, shy, a * 0.5, 9)
-    if anim in ("attack", "skill"):
-        hx, hy2 = cx + 7 * fx - fx * 4, top + 4  # mão junto ao rosto, corda esticada
-    cv.part(lambda d: thick(d, (shx, shy), (hx, hy2), 4), LEATHER)
-    cv.rect(hx - 1, hy2 - 1, hx + 1, hy2 + 1, SKIN[1])
+    # braço da frente segura o arco; em ataque o braço de trás (puxando a corda) aparece na frente do tronco
+    if drawing:
+        cv.part(lambda d: thick(d, sh_b, (hx, hy2), 4), LEATHER)
+    cv.part(lambda d: thick(d, sh_f, (ox, oy), 4), LEATHER)
+    cv.rect(ox - 1, oy - 1, ox + 1, oy + 1, SKIN[1])
+    if drawing:
+        cv.rect(hx - 1, hy2 - 1, hx + 1, hy2 + 1, SKIN[1])
 
-    # arco longo de osso e madeira escura (na mão de trás)
+    # arco longo de osso e madeira escura: a barriga (madeira) aponta para o ALVO (frente) e a corda fica do lado do arqueiro
     bx, by2 = ox, oy
     span = 16
-    bow = [(bx + fx * 4 - (k * 0.0), by2 - span + (k * 2 * span / 8.0)) for k in range(9)]
-    # arco curvo: pontos numa parábola
     pts = []
     for k in range(9):
         t = k / 8.0 * 2 - 1
-        pts.append((bx + fx * (3 - 5 * t * t), by2 + t * span))
+        pts.append((bx + fx * (2 - 4.5 * t * t), by2 + t * span))
     cv.part(lambda d: d.line(pts, fill=255, width=3), WOODC)
-    cv.line(pts[0], pts[-1], ASH[2])  # corda
-    cv.px(pts[0][0], pts[0][1] - 1, ASH[2]); cv.px(pts[-1][0], pts[-1][1] + 1, ASH[2])
-    if anim in ("attack", "skill"):
-        # flecha encaixada
-        cv.line((hx, hy2), (bx + fx * 12, by2), ASH[2])
-        cv.px(bx + fx * 13, by2, STEEL[2]); cv.px(bx + fx * 12, by2 - 1, STEEL[2]); cv.px(bx + fx * 12, by2 + 1, STEEL[2])
+    for q in (pts[0], pts[-1]):  # pontas de osso
+        cv.px(q[0], q[1], ASH[2])
+    if drawing:
+        # corda puxada até a mão, flecha encaixada apontando para o alvo
+        cv.line(pts[0], (hx, hy2), ASH[2])
+        cv.line((hx, hy2), pts[-1], ASH[2])
+        cv.line((hx, hy2), (bx + fx * 11, by2), ASH[2])
+        cv.px(bx + fx * 12, by2, STEEL[2]); cv.px(bx + fx * 11, by2 - 1, STEEL[2]); cv.px(bx + fx * 11, by2 + 1, STEEL[2])
+    else:
+        cv.line(pts[0], pts[-1], ASH[2])  # corda reta
     if p.glow:
         for k in range(4):
             cv.px(bx + fx * (4 + k * 3), by2 - 1 + (k % 2), EMBER[2])
