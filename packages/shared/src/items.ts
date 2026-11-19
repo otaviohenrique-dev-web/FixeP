@@ -31,22 +31,22 @@ export interface WeaponTypeDef {
 export const WEAPON_TYPES: Record<string, WeaponTypeDef> = {};
 const wt = (d: WeaponTypeDef) => { WEAPON_TYPES[d.id] = d; return d; };
 // Guerreiro: 3 espadas de duas mãos OU a espada de uma mão com mão secundária (escudo ou adaga)
-wt({ id: "montante", cls: "warrior", name: "Montante", hands: 2, focus: "Golpes lentos e devastadores; Terremoto maior e mais forte.", minLevelAdd: 2, kit: { dmg: 1.15, cd: 1.2, act: { ultimate: { dmg: 1.25, radius: 1.15 } } } });
+wt({ id: "montante", cls: "warrior", name: "Montante", hands: 2, focus: "Golpes lentos e devastadores; Queda do Colosso maior e mais forte.", minLevelAdd: 2, kit: { dmg: 1.15, cd: 1.2, act: { ultimate: { dmg: 1.25, radius: 1.15 } } } });
 wt({ id: "espada_larga", cls: "warrior", name: "Espada Larga", hands: 2, focus: "Equilíbrio: golpes mais rápidos e chance de crítico.", minLevelAdd: 1, kit: { dmg: 1.05, cd: 0.9, crit: 4 } });
-wt({ id: "lamina_runica", cls: "warrior", name: "Lâmina Rúnica", hands: 2, focus: "Giro e Carga mais fortes, e habilidades gastam menos Fúria.", minLevelAdd: 3, kit: { cost: 0.8, act: { skill1: { dmg: 1.2, radius: 1.15 }, skill2: { dmg: 1.2 } } } });
+wt({ id: "lamina_runica", cls: "warrior", name: "Lâmina Rúnica", hands: 2, focus: "Investida e Correntes mais fortes, e habilidades gastam menos Fúria.", minLevelAdd: 3, kit: { cost: 0.8, act: { skill1: { dmg: 1.2, radius: 1.15 }, skill2: { dmg: 1.2 } } } });
 wt({ id: "espada_1m", cls: "warrior", name: "Espada de Uma Mão", hands: 1, focus: "Rápida; libera a mão secundária (escudo ou adaga).", minLevelAdd: 0, kit: { cd: 0.85, crit: 3 } });
 // Arqueiro
-wt({ id: "arco_longo", cls: "archer", name: "Arco Longo", hands: 2, focus: "Alcance maior e tiros mais fortes, porém mais lentos.", minLevelAdd: 2, kit: { dmg: 1.1, cd: 1.1, range: 1.3 } });
+wt({ id: "arco_longo", cls: "archer", name: "Arco Longo", hands: 2, focus: "Alcance maior e tiros mais fortes, porém mais lentos.", minLevelAdd: 2, kit: { dmg: 1.05, cd: 1.1, range: 1.3 } });
 wt({ id: "arco_curto", cls: "archer", name: "Arco Curto", hands: 1, focus: "Disparos rápidos de curto alcance; aceita aljava.", minLevelAdd: 0, kit: { dmg: 0.95, cd: 0.8, range: 0.85 } });
-wt({ id: "besta", cls: "archer", name: "Besta", hands: 1, focus: "Virotes pesados e críticos; Perfurar mais forte; aceita aljava.", minLevelAdd: 3, kit: { dmg: 1.3, cd: 1.35, crit: 6, act: { skill1: { dmg: 1.15 } } } });
+wt({ id: "besta", cls: "archer", name: "Besta", hands: 1, focus: "Virotes pesados e críticos; Perfurar mais forte; aceita aljava.", minLevelAdd: 3, kit: { dmg: 1.15, cd: 1.35, crit: 6, act: { skill1: { dmg: 1.1 } } } });
 // Clérigo
 wt({ id: "cajado_sagrado", cls: "cleric", name: "Cajado Sagrado", hands: 2, focus: "Curas mais fortes e habilidades mais baratas.", minLevelAdd: 1, kit: { heal: 1.25, cost: 0.9 } });
 wt({ id: "cetro", cls: "cleric", name: "Cetro", hands: 1, focus: "Mais dano e mais velocidade; aceita escudo ou relicário.", minLevelAdd: 0, kit: { dmg: 1.2, cd: 0.9 } });
 wt({ id: "maca", cls: "cleric", name: "Maça", hands: 1, focus: "Misto de dano e cura; aceita escudo ou relicário.", minLevelAdd: 2, kit: { dmg: 1.1, heal: 1.1 } });
 // Mago
-wt({ id: "cajado_arcano", cls: "mage", name: "Cajado Arcano", hands: 2, focus: "Explosões maiores e mais fortes, em troca de recarga.", minLevelAdd: 2, kit: { dmg: 1.2, cd: 1.1, radius: 1.15 } });
+wt({ id: "cajado_arcano", cls: "mage", name: "Cajado Arcano", hands: 2, focus: "Explosões maiores e mais fortes, em troca de recarga.", minLevelAdd: 2, kit: { dmg: 1.1, cd: 1.1, radius: 1.15 } });
 wt({ id: "varinha", cls: "mage", name: "Varinha", hands: 1, focus: "Conjuração rápida e barata; aceita tomo ou orbe.", minLevelAdd: 0, kit: { dmg: 0.95, cd: 0.8, cost: 0.85 } });
-wt({ id: "orbe_instavel", cls: "mage", name: "Orbe Instável", hands: 2, focus: "Bola de Fogo e Meteoro devastadores; o resto mais lento.", minLevelAdd: 3, kit: { cd: 1.15, act: { skill1: { dmg: 1.35, radius: 1.3 }, ultimate: { dmg: 1.3 } } } });
+wt({ id: "orbe_instavel", cls: "mage", name: "Orbe Instável", hands: 2, focus: "Bola de Fogo e Meteoro devastadores; o resto mais lento.", minLevelAdd: 3, kit: { cd: 1.15, act: { skill1: { dmg: 1.2, radius: 1.2 }, ultimate: { dmg: 1.15 } } } });
 
 export interface ItemDef {
   id: string;
@@ -83,6 +83,8 @@ const BOOT_CDR = [0, 0, 2, 4, 6, 9];
 const HELM_MANA = [0, 0, 5, 10, 18, 30];
 const CAPE_REGEN = [0.2, 0.4, 0.7, 1, 1.4, 2];
 const OFF_PCT = [1, 2, 3, 5, 7, 10];
+/** Quanto do bônus percentual de arma cada classe recebe: as de dano em área (Arqueiro e Mago) ganham menos, para não passarem dos outros. */
+const WEAPON_PCT_SCALE: Record<CharClass, number> = { warrior: 1, cleric: 1, archer: 0.75, mage: 0.7 };
 
 export const ITEMS: Record<string, ItemDef> = {};
 const add = (d: Omit<ItemDef, "stack"> & { stack?: number }) => { ITEMS[d.id] = { stack: 1, ...d }; };
@@ -90,7 +92,7 @@ const add = (d: Omit<ItemDef, "stack"> & { stack?: number }) => { ITEMS[d.id] = 
 for (const t of Object.values(WEAPON_TYPES)) {
   RARITIES.forEach((rarity, r) => add({
     id: `${t.id}_${rarity}`, name: `${t.name} ${SUFFIX[r]}`, kind: "weapon", rarity, minLevel: LEVEL_BY_RARITY[r] + t.minLevelAdd, cls: t.cls, wtype: t.id, hands: t.hands,
-    dmgPct: WEAPON_PCT[r], desc: t.focus,
+    dmgPct: Math.round(WEAPON_PCT[r] * WEAPON_PCT_SCALE[t.cls]), desc: t.focus,
   }));
 }
 
@@ -99,11 +101,11 @@ interface OffFamily { id: string; cls: CharClass; name: string; desc: string; st
 const OFFHANDS: OffFamily[] = [
   { id: "escudo_guerra", cls: "warrior", name: "Escudo de Guerra", desc: "Mão secundária: vida e defesa.", stats: (r) => ({ hp: Math.round(ARMOR_HP[r] * 0.6), dr: OFF_PCT[r] }) },
   { id: "adaga_sombria", cls: "warrior", name: "Adaga", desc: "Mão secundária: golpes críticos.", stats: (r) => ({ crit: OFF_PCT[r], dmgPct: Math.round(WEAPON_PCT[r] * 0.2) }) },
-  { id: "aljava", cls: "archer", name: "Aljava", desc: "Mão secundária: pontaria e dano.", stats: (r) => ({ crit: OFF_PCT[r], dmgPct: Math.round(WEAPON_PCT[r] * 0.25) }) },
+  { id: "aljava", cls: "archer", name: "Aljava", desc: "Mão secundária: pontaria e dano.", stats: (r) => ({ crit: OFF_PCT[r], dmgPct: Math.round(WEAPON_PCT[r] * 0.18) }) },
   { id: "escudo_sagrado", cls: "cleric", name: "Escudo Sagrado", desc: "Mão secundária: vida e defesa.", stats: (r) => ({ hp: Math.round(ARMOR_HP[r] * 0.5), dr: OFF_PCT[r] }) },
   { id: "relicario", cls: "cleric", name: "Relicário", desc: "Mão secundária: poder e mana.", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.35), mana: HELM_MANA[r] + 4 * r }) },
-  { id: "tomo_arcano", cls: "mage", name: "Tomo Arcano", desc: "Mão secundária: poder e mana.", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.4), mana: HELM_MANA[r] + 4 * r }) },
-  { id: "orbe_flutuante", cls: "mage", name: "Orbe Flutuante", desc: "Mão secundária: poder explosivo (crítico).", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.3), crit: OFF_PCT[r] }) },
+  { id: "tomo_arcano", cls: "mage", name: "Tomo Arcano", desc: "Mão secundária: poder e mana.", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.28), mana: HELM_MANA[r] + 4 * r }) },
+  { id: "orbe_flutuante", cls: "mage", name: "Orbe Flutuante", desc: "Mão secundária: poder explosivo (crítico).", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.2), crit: OFF_PCT[r] }) },
 ];
 for (const f of OFFHANDS) {
   RARITIES.forEach((rarity, r) => add({ id: `${f.id}_${rarity}`, name: `${f.name} ${SUFFIX[r]}`, kind: "offhand", rarity, minLevel: LEVEL_BY_RARITY[r] + 1, cls: f.cls, desc: f.desc, ...f.stats(r) }));
