@@ -141,7 +141,7 @@ function brief(d: ItemDef): string {
   return `${RARITY_NAME[d.rarity]} · nv ${d.minLevel}${o.length ? " · " + o.join(" · ") : ""}`;
 }
 
-export function mountEconomy(opts: { send(type: string, payload: unknown): void; getClass(): CharClass; getZone(): number; getLevel(): number; toast(text: string, color?: string): void }): EconomyUi {
+export function mountEconomy(opts: { send(type: string, payload: unknown): void; getClass(): CharClass; getZone(): number; getLevel(): number; toast(text: string, color?: string): void; onNpc?(npc: NpcDef): void }): EconomyUi {
   const style = el("style");
   style.textContent = CSS;
   document.head.append(style);
@@ -183,6 +183,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   const closeNpc = () => { back.classList.remove("open"); market.close(); npc = null; picked.clear(); confirmSell.clear(); };
   function openNpc(n: NpcDef) {
     if (tradeOpen) return;
+    opts.onNpc?.(n);
     if (n.kind === "auctioneer") { closeNpc(); market.open(n); return; }
     market.close();
     npc = n; tab = "buy"; picked.clear(); confirmSell.clear();
