@@ -182,8 +182,8 @@ check("segundo convite ao mesmo alvo com um pendente é recusado", await until((
 E.decline();
 await sleep(300);
 
-console.log("\n== XP com bônus e loot individual ==");
-// X e Y em grupo; Z no mesmo lugar mas fora do grupo. X mata o esqueleto nível 1 de (31,24): X e Y ganham 22 (20 +10%), Z ganha 20.
+console.log("\n== XP dividido no grupo e passante sem nada ==");
+// X e Y em grupo; Z no mesmo lugar mas fora do grupo. X mata o esqueleto nível 1 de (31,24): X e Y dividem 25 (20 +25%): 13 cada; Z (passante) não ganha nada.
 const [X, Y, Z] = await Promise.all([spawn("warrior"), spawn("warrior"), spawn("warrior")]);
 await group(X, Y, 2);
 X.room.send("move_to", { x: 29.2, y: 24 });
@@ -195,8 +195,8 @@ for (let i = 0; i < 25 && X.ev.xp.length === 0; i++) {
   await sleep(650);
 }
 await sleep(400);
-check("quem está no grupo ganha o XP com o bônus (+10% por colega por perto = 22)", X.ev.xp[0] === 22 && Y.ev.xp[0] === 22, `X ${X.ev.xp} Y ${Y.ev.xp}`);
-check("quem está por perto mas fora do grupo ganha o XP normal (20)", Z.ev.xp[0] === 20, `Z ${Z.ev.xp}`);
+check("o XP do abate é DIVIDIDO no grupo: 20 x 1,25 (bônus de 2 membros) / 2 = 13 para cada um", X.ev.xp[0] === 13 && Y.ev.xp[0] === 13, `X ${X.ev.xp} Y ${Y.ev.xp}`);
+check("quem está por perto, fora do grupo e sem dano relevante NÃO ganha XP", Z.ev.xp.length === 0, `Z ${Z.ev.xp}`);
 await Promise.all([X, Y, Z].map((p) => p.room.leave()));
 
 console.log("\n== PvP: membros do grupo não se ferem ==");

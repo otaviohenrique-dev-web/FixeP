@@ -62,19 +62,19 @@ await sleep(250);
 const t1 = Date.now(); // início da reserva (aproximado)
 const gs = items(A);
 check("o abate deixa 3 itens no chão (arma, armadura e poções)", e1.st === "dead" && gs.length === 3, gs.map((g) => g.itemId).join(",") + ` | loot A=${A.ev.loot.map((l) => l.id)} B=${B.ev.loot.map((l) => l.id)} C=${C.ev.loot.map((l) => l.id)} | e1 ${e1.x.toFixed(1)},${e1.y.toFixed(1)} A ${A.me().x.toFixed(1)},${A.me().y.toFixed(1)} B ${B.me().x.toFixed(1)},${B.me().y.toFixed(1)} C ${C.me().x.toFixed(1)},${C.me().y.toFixed(1)}`);
-check("os itens são do arqueiro (dono) e levam o grupo dele", gs.every((g) => g.owner === A.id && g.party !== "" && g.party === A.me().party));
+check("os itens são divididos por rodízio entre o arqueiro e o clérigo do grupo (dono exclusivo; o de fora não leva)", gs.every((g) => (g.owner === A.id || g.owner === C.id) && g.party === "") && gs.some((g) => g.owner === A.id) && gs.some((g) => g.owner === C.id));
 check("a reserva anunciada é de 3 s (LOOT_LOCK_S) e os itens são visíveis a todos", gs.every((g) => g.lockS === 3) && items(B).length === 3 && items(C).length === 3);
 check("ninguém recebeu nada ainda (só o chão)", A.ev.loot.length + B.ev.loot.length + C.ev.loot.length === 0);
 
 console.log("\n== 3. Durante a reserva ==");
-const [i0, i1, i2] = gs;
+const i1 = gs.find((g) => g.owner === C.id), i0 = gs.find((g) => g.owner === A.id); // i0 é do arqueiro (reservado); i1 é do clérigo
 B.go(i0.x, i0.y); // de fora do grupo
-C.go(i1.x, i1.y); // do grupo do dono
+C.go(i1.x, i1.y); // o clérigo vai ao SEU item
 await sleep(1100);
 check("quem é de fora NÃO pega durante a reserva (andando em cima do item)", B.ev.loot.length === 0 && items(B).some((g) => g.id === i0.id));
 B.room.send("pickup", { id: i0.id });
 check("pedir para pegar um item reservado é recusado com aviso", await until(() => B.ev.notice.some((t) => t.includes("Reservado") || t.includes("perto")), 2000));
-check("o membro do grupo do dono pega o item durante a reserva", await until(() => C.ev.loot.some((l) => l.id === i1.itemId), 3000) && !items(C).some((g) => g.id === i1.id), C.ev.loot.map((l) => l.id).join(","));
+check("o dono do item (clérigo) pega só os SEUS durante a reserva (nunca os do arqueiro)", await until(() => C.ev.loot.length >= 1, 3000) && C.ev.loot.length <= gs.filter((g) => g.owner === C.id).length, C.ev.loot.map((l) => l.id).join(","));
 
 console.log("\n== 4. Depois da reserva qualquer um pega ==");
 const left = 3000 - (Date.now() - t1);
@@ -107,7 +107,7 @@ check("o chefe cai", await until(() => boss.st === "dead", 8000), boss.st);
 check("o anúncio da derrota chega a todos", await until(() => B.ev.notice.some((t) => t.includes("Rei Ossudo foi derrotado")), 3000));
 check("o evento do baú chega a todos (animação) com a raridade", await until(() => A.ev.chest.length === 1 && B.ev.chest.length === 1, 3000) && A.ev.chest[0].rarity === "uncommon" && A.ev.chest[0].boss === "Rei Ossudo", JSON.stringify(A.ev.chest[0]));
 const bs = items(A);
-check("os itens do baú caem no chão, reservados a quem lutou", bs.length === 2 && bs.every((g) => g.owner === A.id) && bs.some((g) => g.itemId === "archer_helmet_uncommon"), bs.map((g) => g.itemId).join(","));
+check("cada elegível (arqueiro e o clérigo do grupo) tem o SEU baú: 2 itens para cada, reservados ao dono", bs.length === 4 && bs.filter((g) => g.owner === A.id).length === 2 && bs.filter((g) => g.owner === C.id).length === 2 && bs.some((g) => g.itemId === "archer_helmet_uncommon") && bs.some((g) => g.itemId === "cleric_helmet_uncommon"), bs.map((g) => g.itemId).join(","));
 check("o XP do chefe é muito maior que o de um esqueleto", (A.ev.xp.at(-1) ?? 0) >= 500 && A.me().level > lv0, `xp ${A.ev.xp.at(-1)} nível ${lv0}→${A.me().level}`);
 check("quem não lutou não recebe baú próprio", items(B).every((g) => g.owner !== B.id));
 check("ninguém foi desconectado", A.ev.left === null && B.ev.left === null && C.ev.left === null);

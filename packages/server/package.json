@@ -20,6 +20,8 @@
     "test:mago": "node test/mago.mjs",
     "test:loot": "node test/loot.mjs",
     "test:inv:unit": "tsx test/inventory.unit.ts",
+    "test:boss:unit": "tsx test/boss.unit.ts",
+    "test:combate": "node test/combate.mjs",
     "test:econ:unit": "tsx test/economy.unit.ts",
     "test:econ": "node test/economy.mjs"
   },

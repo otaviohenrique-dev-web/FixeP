@@ -7,6 +7,7 @@ import {
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
+  ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
   TRADE_INVITE_S, TRADE_RANGE, TRADE_READY_DELAY_S, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
@@ -532,8 +533,8 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   /** Coloca os itens no chão em volta de (x, y), reservados a `owner` (e ao grupo dele) por `lockS`. O mais antigo sai se passar do limite. */
-  private spawnGround(drops: Drop[], x: number, y: number, owner: string, lockS: number): GroundItem[] {
-    const party = this.state.players.get(owner)?.party ?? "";
+  private spawnGround(drops: Drop[], x: number, y: number, owner: string, lockS: number, shareParty = true): GroundItem[] {
+    const party = shareParty ? this.state.players.get(owner)?.party ?? "" : ""; // drops de abate: dono EXCLUSIVO (a divisão é por rodízio)
     const made: GroundItem[] = [];
     drops.forEach((d, i) => {
       const g = new GroundItem();
@@ -784,12 +785,18 @@ export class ZoneRoom extends Room<ZoneState> {
         p.mana = p.maxMana;
         p.x = p.tx = this.zone.spawn.x; // renasce na zona onde caiu
         p.y = p.ty = this.zone.spawn.y;
+        p.combatAt = -1e9;
         p.invulnUntil = this.t + 2; // um respiro ao renascer (evita ser abatido de novo no ponto de início)
       }
       return;
     }
     p.buff = this.t < p.buffUntil;
     p.ember = this.t < p.emberUntil;
+    if (p.hp < p.maxHp && this.t - p.combatAt >= PLAYER_REGEN_DELAY_S) { // fora de combate: recupera aos poucos (o servidor decide)
+      p.regenAcc += p.maxHp * PLAYER_REGEN_PCT_S * dt;
+      const whole = Math.floor(p.regenAcc);
+      if (whole >= 1) { p.hp = Math.min(p.maxHp, p.hp + whole); p.regenAcc -= whole; }
+    } else if (p.hp >= p.maxHp) p.regenAcc = 0;
     if (p.manaF < p.maxMana) { // regenera o recurso; só mexe no valor sincronizado quando o inteiro muda
       p.manaF = Math.min(p.maxMana, p.manaF + (this.classOf(p).resource.regen + p.gear.regen) * dt);
       const m = Math.floor(p.manaF);
@@ -1064,11 +1071,16 @@ export class ZoneRoom extends Room<ZoneState> {
   private damageEnemy(by: string, eid: string, e: Enemy, baseDmg: number) {
     if (e.st === "dead") return;
     const crit = Math.random() < this.critChance(by);
-    e.contrib.add(by);
     const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
     const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult : 1)));
+    const shown = Math.min(dmg, e.hp);
     e.hp = Math.max(0, e.hp - dmg);
-    if (!e.targetId) e.targetId = by; // quem bate chama a atenção
+    e.contrib.set(by, (e.contrib.get(by) ?? 0) + shown); // o dano real define a elegibilidade a XP e loot
+    e.lastHurt = this.t; // o dano recebido SEMPRE conta: nada de regenerar enquanto apanha
+    if (!e.fightStart) { e.fightStart = this.t; e.nextPulse = this.t + (enemyKind(e.kind).boss?.pulseEveryS ?? 0); }
+    const att = this.state.players.get(by);
+    if (att) att.combatAt = this.t;
+    if (!e.targetId && e.st !== "evade") e.targetId = by; // quem bate chama a atenção (inimigo voltando para casa ignora)
     this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by });
     if (e.hp > 0) return;
     e.st = "dead";
@@ -1076,39 +1088,75 @@ export class ZoneRoom extends Room<ZoneState> {
     e.targetId = "";
     this.broadcast(Evt.Died, { k: "e", id: eid });
     const K = enemyKind(e.kind);
-    // todo jogador vivo por perto recebe XP; quem tem colegas de grupo por perto ganha um bônus
-    const near: [string, Player][] = [];
-    this.state.players.forEach((pl, pid) => { if (!pl.dead && dist(pl.x, pl.y, e.x, e.y) <= SHARE_RADIUS) near.push([pid, pl]); });
-    for (const [pid, pl] of near) {
-      const mates = pl.party ? near.filter(([, o]) => o.party === pl.party).length : 1;
-      const gain = Math.round(enemyXp(e.level) * (K.boss?.xpMul ?? 1) * partyXpMult(mates));
-      this.addXp(pid, pl, gain);
-      this.clients.getById(pid)?.send(Evt.Xp, { amount: gain, x: e.x, y: e.y });
-      const iron = addCoins(pl.inv, "iron", K.boss ? bossIron(e.level) : mobIron(e.level)); // tostões garantidos a todos por perto (como o XP)
-      if (iron > 0) { pl.invDirty = true; this.sendInv(pid, pl); this.clients.getById(pid)?.send(Evt.Coins, { iron, obols: 0, x: e.x, y: e.y }); }
-    }
-    if (K.boss) return this.openBossChest(e, K.name, by);
-    // os itens caem no chão: quem abateu (e o grupo) tem a reserva; depois qualquer um pega
-    const killer = this.state.players.get(by);
-    if (killer) this.spawnGround(rollMobLoot(this.zone, Math.random, killer.cls as CharClass, e.level), e.x, e.y, by, this.lockSeconds(LOOT_LOCK_S));
+    const els = this.eligible(e);
+    this.rewardKill(e, K.boss ? K.name : "", els);
     e.contrib.clear();
+    e.fightStart = 0;
   }
 
-  /** O baú do chefe: cada jogador que lutou (e está por perto) tem a SUA rolagem, reservada a ele; o centro da tela mostra a animação da melhor raridade. */
-  private openBossChest(e: Enemy, name: string, lastHit: string) {
+  /**
+   * Quem é ELEGÍVEL a XP e loot de um abate (nunca "todo mundo por perto"):
+   *  1) quem causou pelo menos ELIGIBLE_DMG_PCT da vida máxima do alvo (vivo, a até 2x SHARE_RADIUS);
+   *  2) os colegas de grupo (vivos, a até 1,5x SHARE_RADIUS do alvo) de qualquer elegível do passo 1.
+   * Passante sem grupo e sem dano relevante não recebe nada. Ordem estável (por sessão) para o rodízio.
+   */
+  private eligible(e: Enemy, pct = ELIGIBLE_DMG_PCT): [string, Player][] {
+    const min = Math.max(1, e.maxHp * pct);
+    const out = new Map<string, Player>();
+    const parties = new Set<string>();
+    e.contrib.forEach((dmg, sid) => {
+      const pl = this.state.players.get(sid);
+      if (!pl || pl.dead || pl.traveling || dmg < min || dist(pl.x, pl.y, e.x, e.y) > SHARE_RADIUS * 2) return;
+      out.set(sid, pl);
+      if (pl.party) parties.add(pl.party);
+    });
+    if (parties.size) this.state.players.forEach((pl, sid) => {
+      if (!out.has(sid) && pl.party && parties.has(pl.party) && !pl.dead && !pl.traveling && dist(pl.x, pl.y, e.x, e.y) <= SHARE_RADIUS * 1.5) out.set(sid, pl);
+    });
+    return [...out].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  }
+
+  private lootRr = 0; // rodízio dos itens entre os elegíveis (um item por vez, em ordem)
+
+  /**
+   * XP, tostões e itens de um abate. Cada GRUPO elegível divide o XP (pool = base x partyXpMult(membros), em partes iguais) e os tostões;
+   * quem está fora de grupo recebe o valor cheio. Os itens saem por rodízio entre todos os elegíveis, com dono exclusivo durante a reserva
+   * (depois, qualquer um pega). No chefe, cada elegível tem a SUA rolagem do baú.
+   */
+  private rewardKill(e: Enemy, bossName: string, els: [string, Player][]) {
+    const K = enemyKind(e.kind);
+    const units = new Map<string, [string, Player][]>(); // grupo (ou a sessão, se solo) -> membros elegíveis
+    for (const m of els) { const k = m[1].party || `solo:${m[0]}`; units.set(k, [...(units.get(k) ?? []), m]); }
+    const baseXp = enemyXp(e.level) * (K.boss?.xpMul ?? 1);
+    for (const members of units.values()) {
+      const n = members.length;
+      const xpEach = Math.round((baseXp * partyXpMult(n)) / n);
+      const ironEach = Math.max(1, Math.round((K.boss ? bossIron(e.level) : mobIron(e.level)) / n));
+      for (const [pid, pl] of members) {
+        this.addXp(pid, pl, xpEach);
+        this.clients.getById(pid)?.send(Evt.Xp, { amount: xpEach, x: e.x, y: e.y });
+        const iron = addCoins(pl.inv, "iron", ironEach);
+        if (iron > 0) { pl.invDirty = true; this.sendInv(pid, pl); this.clients.getById(pid)?.send(Evt.Coins, { iron, obols: 0, x: e.x, y: e.y }); }
+      }
+    }
+    if (K.boss) return this.openBossChest(e, bossName, els);
+    const drops = rollMobLoot(this.zone, Math.random, (els[0]?.[1].cls ?? "warrior") as CharClass, e.level);
+    if (!els.length) { this.spawnGround(drops, e.x, e.y, "", 0); return; } // ninguém elegível (ex.: dano de quem já saiu): fica livre
+    const per = new Map<string, Drop[]>();
+    for (const d of drops) { const [sid] = els[this.lootRr++ % els.length]; per.set(sid, [...(per.get(sid) ?? []), d]); }
+    for (const [sid, ds] of per) this.spawnGround(ds, e.x, e.y, sid, this.lockSeconds(LOOT_LOCK_S), false);
+  }
+
+  /** O baú do chefe: cada elegível tem a SUA rolagem, reservada a ele; o centro da tela mostra a animação da melhor raridade. */
+  private openBossChest(e: Enemy, name: string, els: [string, Player][]) {
     this.broadcast(Evt.Notice, { text: `${name} foi derrotado!` });
-    const who = new Set<string>(e.contrib);
-    who.add(lastHit);
     let best: Rarity = "common";
-    for (const pid of who) {
-      const pl = this.state.players.get(pid);
-      if (!pl || pl.dead || dist(pl.x, pl.y, e.x, e.y) > SHARE_RADIUS * 2) continue;
+    for (const [pid, pl] of els) {
       const drops = rollChestLoot(this.zone, Math.random, pl.cls as CharClass);
       for (const d of drops) if (ITEMS[d.id] && rarityIndex(ITEMS[d.id].rarity) > rarityIndex(best)) best = ITEMS[d.id].rarity;
-      this.spawnGround(drops, e.x, e.y, pid, this.lockSeconds(CHEST_LOCK_S));
+      this.spawnGround(drops, e.x, e.y, pid, this.lockSeconds(CHEST_LOCK_S), false);
     }
     this.broadcast(Evt.Chest, { x: e.x, y: e.y, rarity: best, boss: name });
-    e.contrib.clear();
   }
 
   private hitEnemies(by: string, baseDmg: number, inArea: (e: Enemy) => boolean) {
@@ -1119,15 +1167,61 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   // ------------------------------------------------------------------ IA do esqueleto
-  private nearestPlayer(e: Enemy, maxDist: number): [string, Player] | null {
+  private nearestPlayer(e: Enemy, maxDist: number, leash: number): [string, Player] | null {
     let best: [string, Player] | null = null;
     let bestD = maxDist;
     this.state.players.forEach((p, id) => {
-      if (p.dead || p.traveling) return;
+      if (p.dead || p.traveling || dist(p.x, p.y, e.sx, e.sy) > leash) return; // além da coleira: não vira alvo
       const d = dist(e.x, e.y, p.x, p.y);
       if (d < bestD) { bestD = d; best = [id, p]; }
     });
     return best;
+  }
+
+  /** Coleira do inimigo (tiles do ponto de origem). ENEMY_LEASH_TEST=n (só fora de produção) a fixa em n: o teste do evade precisa de uma coleira curta. */
+  private leashOf(K: ReturnType<typeof enemyKind>): number {
+    const o = Number(process.env.ENEMY_LEASH_TEST);
+    return process.env.NODE_ENV !== "production" && Number.isFinite(o) && o > 0 ? o : K.leash;
+  }
+
+  /** Regeneração do inimigo: só sem apanhar há ENEMY_REGEN.delayS (o chefe é mais lento). Ao encher, esquece quem lutou. */
+  private regenEnemy(e: Enemy, boss: boolean, dt: number) {
+    if (e.hp >= e.maxHp) return;
+    if (this.t - e.lastHurt < (boss ? ENEMY_REGEN.bossDelayS : ENEMY_REGEN.delayS)) return;
+    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * (boss ? ENEMY_REGEN.bossPctS : ENEMY_REGEN.pctS) * dt);
+    if (e.hp >= e.maxHp) { e.contrib.clear(); e.fightStart = 0; }
+  }
+
+  /** "Evade": o inimigo desiste da luta e volta para casa SEM voltar a perseguir ninguém (nem provocação) até chegar. Dano recebido continua contando. */
+  private startEvade(e: Enemy) {
+    e.st = "evade";
+    e.targetId = "";
+    e.tauntUntil = 0;
+    e.slam = false;
+  }
+
+  /** Jogadores elegíveis vivos perto do chefe (define o multiplicador de dano: solo e dupla apanham muito mais). */
+  private bossGroupSize(e: Enemy): number {
+    return this.eligible(e, 0.02).filter(([, p]) => dist(p.x, p.y, e.x, e.y) <= BOSS_COUNT_RADIUS).length;
+  }
+
+  /** multiplicador total do dano do chefe agora: tamanho do grupo x fúria por tempo de luta */
+  private bossMult(e: Enemy): number {
+    return bossDmgMult(this.bossGroupSize(e)) * bossEnrageMult(e.fightStart ? this.t - e.fightStart : 0);
+  }
+
+  /** Pulso Sombrio do chefe: telégrafo de 1,5 s e depois dano a todos no raio (ignora esquiva): sem curandeiro e tanque não se sobrevive. */
+  private bossPulse(id: string, e: Enemy, B: NonNullable<ReturnType<typeof enemyKind>["boss"]>) {
+    e.nextPulse = this.t + B.pulseEveryS;
+    this.broadcast(Evt.Telegraph, { id: `${id}-pulso`, x: e.x, y: e.y, r: B.pulseRadius, ms: 1500 });
+    this.pending.push({ at: this.t + 1.5, run: () => {
+      if (e.st === "dead" || e.st === "evade") return;
+      const mult = this.bossMult(e);
+      this.state.players.forEach((p, pid) => {
+        if (p.dead || p.traveling || dist(p.x, p.y, e.x, e.y) > B.pulseRadius) return;
+        this.damagePlayer(pid, p, p.maxHp * B.pulsePct * mult);
+      });
+    } });
   }
 
   private updateEnemy(_id: string, e: Enemy, dt: number) {
@@ -1138,6 +1232,8 @@ export class ZoneRoom extends Room<ZoneState> {
         e.y = e.sy;
         e.st = "idle";
         e.contrib.clear();
+        e.fightStart = 0;
+        e.lastHurt = -1e9;
         const KB = enemyKind(e.kind);
         if (KB.boss) { e.nextSlam = this.t + KB.boss.slamEveryS; this.broadcast(Evt.Notice, { text: `${KB.name} despertou!` }); }
       }
@@ -1151,33 +1247,40 @@ export class ZoneRoom extends Room<ZoneState> {
     }
 
     const K = enemyKind(e.kind);
-    // alvo: provocação ativa > quem já está em combate > mais próximo no raio de aggro
+
+    if (e.st === "evade") { // voltando para casa: sem alvo, sem provocação; só regenera se ninguém o feriu há alguns segundos
+      this.moveToward(e, e.sx, e.sy, K.speed * 1.4, dt);
+      this.regenEnemy(e, !!K.boss, dt);
+      if (dist(e.x, e.y, e.sx, e.sy) < 0.2) { e.x = e.sx; e.y = e.sy; e.st = "idle"; }
+      return;
+    }
+
+    // alvo: provocação ativa > quem já está em combate > mais próximo no raio de aggro (e dentro da coleira: quem está além dela não "puxa" o inimigo)
     let target: [string, Player] | null = null;
     const taunter = this.t < e.tauntUntil ? this.state.players.get(e.tauntId) : undefined;
     if (taunter && !taunter.dead && !taunter.traveling) target = [e.tauntId, taunter];
     else {
       const current = e.targetId ? this.state.players.get(e.targetId) : undefined;
       if (current && !current.dead && !current.traveling && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
-      else target = this.nearestPlayer(e, K.aggro);
+      else target = this.nearestPlayer(e, K.aggro, this.leashOf(K));
     }
     e.targetId = target ? target[0] : "";
 
-    const away = dist(e.x, e.y, e.sx, e.sy) > K.leash;
+    const away = dist(e.x, e.y, e.sx, e.sy) > this.leashOf(K);
+    // histerese: passou da coleira OU perdeu o alvo no meio da luta -> evade (volta inteiro para casa antes de agir de novo)
+    if ((away || (!target && (e.st === "chase" || e.st === "recover"))) && e.st !== "windup") return this.startEvade(e);
+
+    if (K.boss && e.fightStart && this.t >= e.nextPulse && e.st !== "idle") this.bossPulse(_id, e, K.boss);
 
     switch (e.st) {
       case "idle":
-        if (target && !away) e.st = "chase";
+        if (target) e.st = "chase";
+        else if (dist(e.x, e.y, e.sx, e.sy) > 0.5) this.startEvade(e);
+        else this.regenEnemy(e, !!K.boss, dt);
         break;
 
       case "chase": {
-        if (!target || away) {
-          // volta para casa e recupera a vida
-          this.moveToward(e, e.sx, e.sy, K.speed * 1.4, dt);
-          e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2 * dt);
-          if (dist(e.x, e.y, e.sx, e.sy) < 0.2) e.st = "idle";
-          break;
-        }
-        const p = target[1];
+        const p = target![1];
         const d = dist(e.x, e.y, p.x, p.y);
         const enraged = !!K.boss && e.hp < e.maxHp * K.boss.enrageAt;
         if (d > K.engage * 0.85) this.moveToward(e, p.x, p.y, K.speed * (enraged ? K.boss!.enrageSpeed : 1), dt);
@@ -1207,10 +1310,11 @@ export class ZoneRoom extends Room<ZoneState> {
 
       case "windup":
         if (this.t >= e.windupEnd) {
+          const mult = K.boss ? this.bossMult(e) : 1;
           this.state.players.forEach((p, pid) => {
             if (p.dead || this.t < p.invulnUntil) return; // esquiva (i-frames)
             const rad = e.slam && K.boss ? K.boss.slamRadius : K.strikeRadius;
-            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= rad + PLAYER_RADIUS) this.damagePlayer(pid, p, enemyDmg(e.level, e.kind) * (e.slam && K.boss ? K.boss.slamMul : 1));
+            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= rad + PLAYER_RADIUS) this.damagePlayer(pid, p, enemyDmg(e.level, e.kind) * (e.slam && K.boss ? K.boss.slamMul : 1) * mult);
           });
           e.slam = false;
           e.recoverEnd = this.t + K.recoverS;
@@ -1219,7 +1323,7 @@ export class ZoneRoom extends Room<ZoneState> {
         break;
 
       case "recover":
-        if (this.t >= e.recoverEnd) e.st = target ? "chase" : "idle";
+        if (this.t >= e.recoverEnd) e.st = "chase";
         break;
     }
   }
@@ -1235,6 +1339,9 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false) {
+    p.combatAt = this.t; // em combate: a regeneração de vida recomeça só depois de um tempo
+    p.regenAcc = 0;
+    if (by) { const a = this.state.players.get(by); if (a) a.combatAt = this.t; }
     this.interruptPvp(id, p); // qualquer dano (inimigo, projétil, habilidade, área) cancela a canalização do PvP
     const reduction = Math.min(0.8, (this.t < p.buffUntil ? (CLASS_DEFS.warrior.actions.skill3.reduction ?? 0) : 0) + p.gear.dr / 100);
     const dmg = Math.max(1, Math.round(baseDmg * (1 - reduction)));

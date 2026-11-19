@@ -128,13 +128,18 @@ check("depois de alguns segundos ele renasce com a vida cheia", await until(() =
 
 console.log("\n== 5b. Chuva de flechas (esqueleto vivo) ==");
 {
+  // o inimigo que perdeu o alvo volta para casa (evade): o Arqueiro renasce longe e precisa chegar ao alcance da chuva (8 tiles)
+  A.room.send("move_to", { x: e2.x - 4.5, y: e2.y });
+  await sleep(1800);
+  A.room.send("move_to", { x: A.me().x, y: A.me().y });
+  await sleep(300);
   const teleAntes = A.ev.tele.filter((t) => t.friendly).length;
   const hitsAntes = A.ev.hit.filter((h) => h.k === "e").length;
   A.act("skill3", e2.x, e2.y);
   check("a chuva é telegrafada em azul (área amiga)", await until(() => A.ev.tele.filter((t) => t.friendly).length > teleAntes, 2000));
   check("o dano da chuva cai DEPOIS do atraso, não na hora", A.ev.hit.filter((h) => h.k === "e").length === hitsAntes);
   await sleep(1300);
-  check("a chuva machuca quem estiver na área", A.ev.hit.filter((h) => h.k === "e").length > hitsAntes || e2.st === "dead");
+  check("a chuva machuca quem estiver na área", A.ev.hit.filter((h) => h.k === "e").length > hitsAntes || e2.st === "dead", `e2 ${e2.st} em ${e2.x.toFixed(1)},${e2.y.toFixed(1)} alvo ${"" + 0}`);
 }
 
 console.log("\n== 6. XP e loot em grupo ==");
@@ -179,15 +184,13 @@ await sleep(700);
 check("o Arqueiro também ganha XP do abate", A.me().level > lvA0 || A.me().xp > xpA0, `xp ${xpA0} → ${A.me().xp}`);
 check("o Clérigo ganha XP mesmo sem dar o golpe final (rateio)", C.me().level > lvC0 || C.me().xp > xpC0, `xp ${xpC0} → ${C.me().xp} (nv ${C.me().level})`);
 {
-  const owners = []; // o abate solta UMA rolagem no chão, reservada a quem deu o golpe final
+  const owners = []; // os itens do abate saem por rodízio entre quem participou (aqui: Arqueiro e Clérigo)
   A.room.state.items.forEach((g) => owners.push(g.owner));
-  const killer = owners[owners.length - 1];
-  check("o abate solta itens no chão reservados a quem abateu (um dos dois)", owners.length >= 1 && owners.every((o) => o === A.id || o === C.id), `${owners.length} itens, dono ${killer}`);
-  const winner = killer === A.id ? A : C;
-  await collect(winner);
+  check("o abate solta itens no chão com dono exclusivo, divididos entre os dois que lutaram", owners.length >= 2 && owners.every((o) => o === A.id || o === C.id) && owners.includes(A.id) && owners.includes(C.id), `${owners.length} itens`);
+  await Promise.all([collect(A), collect(C)]);
   await sleep(300);
-  const got = winner.ev.loot.slice(winner === A ? lootA0 : lootC0).map((l) => l.id);
-  check("o dono do abate pega os itens ao andar até eles", got.includes(winner === A ? "arco_curto_common" : "cetro_common"), got.join(","));
+  const gotA = A.ev.loot.slice(lootA0).map((l) => l.id), gotC = C.ev.loot.slice(lootC0).map((l) => l.id);
+  check("cada um pega os itens que são seus (nenhum item some nem é pego por quem não é o dono)", gotA.length + gotC.length === owners.length && gotA.length >= 1 && gotC.length >= 1, `A ${gotA} | C ${gotC}`);
 }
 
 console.log("\n== 7. Estabilidade ==");

@@ -46,9 +46,11 @@ export class Player extends Schema {
   dropAt = 0; // último item solto no chão (limite de frequência)
   traveling = false; // travessia aprovada: o jogador não age nem é alvo até sair da sala
   pvpChanUntil = 0; // fim da canalização (relógio da simulação)
+  combatAt = -1e9; // último instante em que causou ou recebeu dano (a regeneração de vida espera PLAYER_REGEN_DELAY_S)
+  regenAcc = 0; // fração de vida regenerada ainda não aplicada (hp é inteiro)
 }
 
-export type EnemyState = "idle" | "chase" | "windup" | "recover" | "dead";
+export type EnemyState = "idle" | "chase" | "windup" | "recover" | "evade" | "dead";
 
 export class Enemy extends Schema {
   @type("string") kind = "skeleton";
@@ -76,7 +78,10 @@ export class Enemy extends Schema {
   respawnAt = 0;
   nextSlam = 0; // chefe: próxima pancada em área
   slam = false; // o golpe em preparo é a pancada em área
-  contrib = new Set<string>(); // sessões que feriram (o baú do chefe é de quem lutou)
+  contrib = new Map<string, number>(); // sessão -> dano causado (define quem é elegível a XP e loot)
+  lastHurt = -1e9; // último dano recebido: o inimigo só regenera depois de ENEMY_REGEN.delayS sem apanhar
+  fightStart = 0; // chefe: início da luta (fúria por tempo); 0 = fora de combate
+  nextPulse = 0; // chefe: próximo pulso sombrio
 }
 
 /** Item no chão: visível a todos; só o dono (e o grupo dele) pega até `lockS` esgotar, depois qualquer um. */

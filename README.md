@@ -33,7 +33,7 @@ O **Mago** tem o maior dano e o menor sustain (75 de vida, nenhuma cura). Suas h
 **Celular:** joystick flutuante com o polegar esquerdo (toque em qualquer ponto da metade de baixo à esquerda e arraste; tocar no campo de visão não anda mais);
 botões em arco no canto direito (ataque grande, Q, W, E, R, esquiva e poção). A mira vai para o inimigo mais próximo.
 Quem cai fica 8 s no chão antes de renascer no ponto inicial.
-O XP é dividido entre todos os jogadores vivos a até 14 tiles de um abate; o loot cai no chão (veja "Mochila, equipamento, raridades e chefes").
+XP e loot só vão para quem **participou** do abate (veja "Regras de combate e grupo"); os itens caem no chão (veja "Mochila, equipamento, raridades e chefes").
 
 ### Recurso de cada classe e HUD
 
@@ -92,10 +92,10 @@ Até **4 jogadores**. O grupo vive no servidor (`packages/server/src/game/party.
 - **Chat do grupo**: **`/g texto`** (aparece como "[Grupo] Nome:" e chega aos membros mesmo em outra zona; mesmas regras de tamanho, limpeza e taxa do chat da zona).
 - **Painel** no canto esquerdo, abaixo do retrato: nível (com a borda da faixa), nome, coroa do líder, barras de vida e do recurso, e a zona do membro (ou "ausente"). Clicar no cabeçalho recolhe. O líder clica num colega para **passar a liderança** ou **expulsar**; **Sair** deixa o grupo. Colegas aparecem com a barra de vida azul e o nome azul sobre a cabeça.
 - **Regras** (todas validadas no servidor): convite vale 30 s; só o líder convida; recusa alvo inexistente/offline, já em grupo, o próprio jogador e grupo cheio; um convite pendente por alvo e espera de 1,5 s entre convites do mesmo jogador. Quando o líder sai, o membro mais antigo assume; com um só restante o grupo se desfaz. Quem cai do jogo fica **ausente por 45 s** (dá para recarregar a página ou atravessar um portal) e depois sai do grupo. O grupo **não é salvo no banco**.
-- **Combate**: membros do grupo **nunca se ferem em PvP**; a Cura vale como antes. **XP**: continua rateado entre todo jogador vivo a até 14 tiles do abate, com **+10% por colega de grupo por perto** (máx. +30%); o **loot é individual** (cada um faz a sua rolagem).
+- **Combate**: membros do grupo **nunca se ferem em PvP**; a Cura vale como antes. **XP e loot são divididos entre os membros elegíveis** (regras na seção "Regras de combate e grupo").
 - **Limitação**: o registro de grupos fica na memória do processo, então só funciona com **uma instância** do servidor (como hoje no Render). Com várias instâncias seria preciso um armazenamento compartilhado (ex.: Redis).
 - Mensagens novas (`packages/shared/src/index.ts`): `party_invite`, `party_join`, `party_accept`, `party_decline`, `party_leave`, `party_kick`, `party_lead`, `party_chat`, `party_sync`; eventos `party`, `party_invite`, `party_invite_end`, `party_chat`. O jogador ganha o campo sincronizado `party` (id do grupo).
-- Painel e menu: `packages/client/src/party.ts`. Teste: `PARTY_TEST=1` nos **dois** lados (servidor e teste; encurta o convite para 2 s e a ausência para 3 s e tira a espera entre convites): `PARTY_TEST=1 SERVER=http://localhost:2999 npm run test:party -w @frixep/server` (63 verificações).
+- Painel e menu: `packages/client/src/party.ts`. Teste: `PARTY_TEST=1` nos **dois** lados (servidor e teste; encurta o convite para 2 s e a ausência para 3 s e tira a espera entre convites): `PARTY_TEST=1 SERVER=http://localhost:2999 npm run test:party -w @frixep/server` (63 verificações; XP dividido: 13 para cada um no abate em dupla, passante sem nada).
 
 ### Corpos provisórios
 
@@ -145,17 +145,46 @@ O botão discreto no topo da mochila (setas) **organiza**: junta pilhas e ordena
 
 Arma de duas mãos libera a mão secundária (o item volta à mochila); com arma de duas mãos não se equipa a secundária. Não há atributos no jogo, então o requisito é só de **nível**.
 
-**Drops no chão** (`ZoneRoom`): o abate solta os itens no chão, visíveis a todos na cor da raridade (brilho; coluna de luz de raro para cima). Só **quem abateu e o grupo dele** pegam por 30 s (baú do chefe: 60 s);
+**Drops no chão** (`ZoneRoom`): o abate solta os itens no chão, visíveis a todos na cor da raridade (brilho; coluna de luz de raro para cima). Só o **dono de cada item** (rodízio entre os elegíveis do abate) pega por 30 s (baú do chefe: 60 s);
 um **anel em volta do item esvazia como relógio** e um número mostra os segundos (colorido para quem pode pegar, cinza para os outros). Depois disso qualquer um pega; o item some em 3 min. Para pegar, basta andar até ele (ou clicar nele de perto: `pickup { id }`).
 **Raridade do drop**: cada zona tem um **teto** (tabela `drops` em `zones.ts`): impossível épico na zona 1. Taxas baixas: 7%/9%/11% de equipamento por abate e 8%/10%/12% de poção; raro ou melhor fica abaixo de ~2% dos abates. Lendário e mítico **só saem de baús de chefe**.
 **Animação de raridade**: ao receber item raro ou melhor, o centro da tela mostra um efeito que cresce com a raridade (`packages/client/src/loot-fx.ts`): raro, anel azul; épico, raios dourados; lendário, chamas e anéis vermelhos; mítico, aura púrpura pulsante com estrelas.
 
-**Chefes** (um por zona, `boss` em `zones.ts`): aparecem sempre em campo, com 5 a 6 vezes a vida de um inimigo do mesmo nível, golpe mais forte, **pancada em área** telegrafada em volta deles (a cada 8 a 9 s) e **fúria** abaixo de 30% de vida (mais rápidos, pancadas mais seguidas). Dão 8 a 10 vezes o XP.
-Ao morrer reaparecem em 5 / 7 / 10 min (`respawnS`) e o servidor avisa a todos ("Rei Ossudo despertou!"). **O baú** só existe quando o chefe morre: **cada jogador que lutou** (e está por perto) ganha a sua própria rolagem, reservada a ele, e o cliente mostra a explosão do baú (`chest`).
+**Chefes** (um por zona, `boss` em `zones.ts`): aparecem sempre em campo, com 15 a 18 vezes a vida de um inimigo do mesmo nível, golpe mais forte, **pancada em área** telegrafada em volta deles (a cada 8 a 9 s) e **fúria** abaixo de 30% de vida (mais rápidos, pancadas mais seguidas). Dão 8 a 10 vezes o XP.
+Ao morrer reaparecem em 5 / 7 / 10 min (`respawnS`) e o servidor avisa a todos ("Rei Ossudo despertou!"). **O baú** só existe quando o chefe morre: **cada jogador que lutou** (e está por perto) ganha a sua própria rolagem (elegíveis: veja "Regras de combate e grupo"), reservada a ele, e o cliente mostra a explosão do baú (`chest`).
 Zona 1: 2 itens, no máximo incomuns; zona 2: 3 itens, o primeiro pelo menos raro, até épico; zona 3: 3 itens, o primeiro pelo menos épico, com lendário (~18%) e mítico (~2%).
 
 **Itens antigos**: os 13 itens da primeira versão são traduzidos ao carregar o inventário (`migrateItemId`: espada → Espada de Uma Mão; arco/cajado → equivalente; armadura → a da classe do personagem, mesma raridade) e gravados de novo no próximo salvamento. A migração `006_equipamentos.sql` libera os novos espaços de equipamento e a `005_mago.sql`, a classe `mage`.
 Os ícones novos ainda não existem (`assets/items/item_<id>.png`); enquanto isso o cliente mostra um desenho provisório por tipo de item.
+
+## Regras de combate e grupo
+
+Tudo é decidido pelo servidor (`ZoneRoom.ts`); as constantes e fórmulas ficam em `packages/shared/src/index.ts`.
+
+**Regeneração de vida (jogadores)**: sem causar nem receber dano por **6 s** (`PLAYER_REGEN_DELAY_S`), o personagem recupera **2% da vida máxima por segundo** (`PLAYER_REGEN_PCT_S`; vida cheia em ~50 s). Qualquer dano dado ou recebido (inclusive PvP) zera a espera.
+
+**IA dos inimigos (correção do "vai e volta")**: antes, o inimigo que passava da coleira (`leash`) ou perdia o alvo voltava para casa **se curando 20%/s** e, ao entrar de novo na coleira com o jogador por perto, voltava a persegui-lo: oscilava e a cura anulava o dano. Agora:
+- Estados: `idle → chase → windup → recover` e o novo **`evade`**. Passou da coleira ou perdeu o alvo no meio da luta: entra em `evade`, ignora jogadores e provocação (Grito) e **só volta a agir ao chegar em casa**. Não oscila.
+- **O dano recebido sempre conta**: em `evade` o inimigo continua apanhando e **não recupera vida** enquanto for ferido.
+- Cura: só **parado em casa ou voltando (`evade`) e sem apanhar há 5 s** (`ENEMY_REGEN`): 10% da vida máxima por segundo; chefe 8 s e 3%/s. Nada de cura durante a perseguição.
+- Quem está além da coleira do ponto de origem do inimigo não vira alvo dele (evita "puxar" e perder o alvo em seguida).
+
+**Quem recebe XP, tostões e loot de um abate (elegibilidade)**: nunca "todo mundo por perto". É elegível:
+1. quem causou **pelo menos 10% da vida máxima** do alvo (`ELIGIBLE_DMG_PCT`), vivo e a até 28 tiles; e
+2. os **colegas de grupo** (vivos, a até 21 tiles do alvo) de qualquer elegível, mesmo que não tenham atacado (curandeiro, tanque que só provoca).
+
+Jogador **fora de grupo** e sem dano relevante **não ganha nada**; quem luta sozinho só recebe o que ele mesmo abateu/participou.
+- **XP**: cada grupo elegível forma um pool `XP base x (1 + 0,25 x (membros - 1))` (`PARTY_XP_BONUS`, máx. 4 membros) e **divide em partes iguais** (ex.: 2 membros: 20 x 1,25 / 2 = 13 cada). Quem está fora de grupo recebe o XP cheio. Os **tostões do abate** seguem a mesma divisão.
+- **Itens do abate**: saem por **rodízio** entre todos os elegíveis (um item para cada um, em ordem, contador por sala), cada um com **dono exclusivo** durante a reserva (30 s); esgotada, o item fica livre para qualquer um, como já era. Sem elegível (ex.: quem bateu saiu do jogo), o item cai livre.
+- **Baú de chefe**: **cada elegível tem a SUA rolagem completa**, reservada a ele por 60 s.
+
+**Chefes exigem grupo (tanque + curandeiro + dano)**: um jogador solo com build convencional não consegue vencer. Fórmula (`shared/src/index.ts`; `n` = jogadores elegíveis vivos a até 24 tiles do chefe):
+- **Vida**: 15 a 18 vezes a de um inimigo do mesmo nível (antes 5 a 6): Rei Ossudo 3.240, Lobo Alfa 4.500, Soberano 9.720. O trio mata em ~1 a 2 min; o solo, não.
+- **Dano do chefe** (golpe, pancada e pulso) `x bossDmgMult(n) = 1 + 0,75 x max(0, 3 - n)`: solo **x2,5**, dupla **x1,75**, trio ou mais **x1** (`BOSS_GROUP_MIN = 3`).
+- **Pulso Sombrio**: a cada 6 s (telégrafo de 1,5 s) atinge **todos** a até 24 tiles com **40% da vida máxima** de cada um (x o multiplicador do grupo), **ignorando a esquiva**. Só se aguenta com **curandeiro** (Cura/Luz Divina); o **tanque** (Grito: -50% de dano e provocação) segura os golpes e pancadas para os que têm pouca vida; poções sozinhas (40 de vida a cada 6 s) não sustentam.
+- **Fúria por tempo**: depois de 150 s de luta (`BOSS_ENRAGE_S`) o dano cresce +50% a cada 30 s, até x4 (`bossEnrageMult`). A fúria por vida baixa (<30%) continua.
+- O contador de luta e o pulso começam no primeiro dano e zeram quando o chefe volta a se curar por inteiro, e ele só se cura depois de 8 s sem apanhar.
+- Testes: `npm run test:boss:unit -w @frixep/server` (21 verificações, sem servidor) simula, com as constantes reais, que o solo (mesmo com todas as habilidades sem custo e armadura boa) morre antes de matar, que o trio com curandeiro aguenta o pulso e mata antes da fúria, e que o trio sem curandeiro não aguenta.
 
 Tudo é decidido e validado no servidor e salvo no banco. **Ainda não feito**: efeitos visuais finais das armas (as skills são genéricas), ícones dos itens novos e arte própria dos chefes (usam o corpo do monstro maior, em escala e cor diferentes).
 
@@ -207,6 +236,14 @@ Itens no chão e chefe (servidor com `LOOT_LOCK_S=3 BOSS_TEST=1`: reserva de 3 s
 ```
 PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 LOOT_TEST=1 LOOT_LOCK_S=3 BOSS_TEST=1 npm run start
 SERVER=http://localhost:2999 npm run test:loot                             # 21 verificações
+```
+
+Regras de combate e grupo (regeneração, evade do inimigo, elegibilidade de XP e loot; servidor com `LOOT_TEST=1 LOOT_LOCK_S=3 ENEMY_LEASH_TEST=9`, que encurta a coleira para 9 tiles só fora de produção):
+
+```
+PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 LOOT_TEST=1 LOOT_LOCK_S=3 ENEMY_LEASH_TEST=9 npm run start
+SERVER=http://localhost:2999 npm run test:combate -w @frixep/server        # 23 verificações
+npm run test:boss:unit -w @frixep/server                                   # 21 verificações, sem servidor
 ```
 
 Reinicie o servidor entre as suítes. No PowerShell: `$env:PORT=2999; $env:PGLITE_DIR="memory"; $env:API_RATE_MULT=100; $env:LOOT_TEST=1; npm.cmd run start`.
