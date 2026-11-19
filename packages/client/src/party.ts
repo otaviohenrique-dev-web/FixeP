@@ -15,7 +15,7 @@ export interface PartyOptions {
   /** manda um pedido ao servidor (Msg.Party*) */
   send(type: string, payload: unknown): void;
   /** nome da zona em que o jogador está agora (para só mostrar a zona de quem está em outra) */
-  zoneId: number;
+  getZone(): number;
   myName: string;
   /** o menu do jogador selecionado foi fechado (Esc, X ou uma opção escolhida) */
   onMenuClose?(): void;
@@ -286,7 +286,7 @@ export function mountParty(opts: PartyOptions): PartyUi {
       r.lv.textContent = String(m.level);
       r.nm.textContent = m.name;
       const away = m.zone === 0;
-      r.zone.textContent = away ? "ausente" : m.zone !== opts.zoneId ? (ZONES[m.zone]?.name ?? "outra zona") : "";
+      r.zone.textContent = away ? "ausente" : m.zone !== opts.getZone() ? (ZONES[m.zone]?.name ?? "outra zona") : "";
       r.hp.style.transform = `scaleX(${m.maxHp > 0 ? Math.max(0, Math.min(1, m.hp / m.maxHp)) : 0})`;
       const res = CLASS_DEFS[m.cls as CharClass]?.resource;
       r.rs.style.background = res ? hex(res.color) : "#4aa8ff";
