@@ -1,21 +1,90 @@
 import Phaser from "phaser";
 import { NPC_REACH, type NpcDef } from "@frixep/shared";
+import { gridAngleToDir, pickDirection, type Dir } from "./sprites-core";
+import type { ActorAtlas } from "./sprites";
 
 /**
  * NPCs da zona (comerciante e ferreira), desenhados por código até a arte chegar: figura simples + placa com nome e ofício.
  * Ficam parados num ponto fixo (os dados vêm de shared/economy.ts: o servidor valida a distância com os mesmos números).
  */
 type ToScreen = (x: number, y: number) => { sx: number; sy: number };
-interface View { def: NpcDef; sx: number; sy: number; ring: Phaser.GameObjects.Graphics; body: Phaser.GameObjects.Container }
+interface View {
+  def: NpcDef; sx: number; sy: number; ring: Phaser.GameObjects.Graphics; body: Phaser.GameObjects.Container;
+  sprite?: Phaser.GameObjects.Sprite; atlas?: ActorAtlas; dir: Dir; cur: string; busyUntil: number; nextAct: number;
+}
+/** animação de ofício de cada NPC (tocada de tempos em tempos) e escala do sprite (o quadro de 64 px é do tamanho dos personagens) */
+const ACT: Record<string, string> = { smith: "work", merchant: "count", auctioneer: "gavel" };
+const SPRITE_SCALE = 1.5;
 
 export class NpcLayer {
   private views = new Map<string, View>();
 
-  constructor(private scene: Phaser.Scene, private toScreen: ToScreen, npcs: readonly NpcDef[]) {
+  constructor(private scene: Phaser.Scene, private toScreen: ToScreen, npcs: readonly NpcDef[], private atlases: ReadonlyMap<string, ActorAtlas> = new Map()) {
     for (const n of npcs) this.build(n);
   }
 
+  /** placa de madeira pendurada por correntes, com um emblema do ofício (martelo, balança ou martelo de leilão), o nome e o ofício */
+  private sign(n: NpcDef, y: number): Phaser.GameObjects.GameObject[] {
+    const s = this.scene;
+    const g = s.add.graphics();
+    g.lineStyle(1, 0x8a93a3, 1).lineBetween(-40, y - 4, -40, y + 4).lineBetween(40, y - 4, 40, y + 4); // correntes
+    g.fillStyle(0x2a1b10, 1).fillRoundedRect(-58, y + 2, 116, 38, 5);
+    g.fillStyle(0x4a2e1a, 1).fillRoundedRect(-56, y + 4, 112, 34, 4);
+    g.lineStyle(2, 0xc9a45c, 1).strokeRoundedRect(-56, y + 4, 112, 34, 4);
+    g.fillStyle(0xc9a45c, 1).fillCircle(-52, y + 8, 1.5).fillCircle(52, y + 8, 1.5).fillCircle(-52, y + 34, 1.5).fillCircle(52, y + 34, 1.5); // pregos
+    // emblema (esquerda)
+    const ex = -42, ey = y + 21;
+    g.fillStyle(0xe6c27a, 1);
+    if (n.kind === "smith") { g.fillRect(ex - 6, ey - 7, 12, 6).fillRect(ex - 1, ey - 2, 3, 11); g.fillStyle(0x8a93a3, 1).fillRect(ex - 6, ey - 7, 12, 2); }
+    else if (n.kind === "merchant") { g.fillRect(ex - 1, ey - 8, 3, 15).fillRect(ex - 8, ey - 6, 16, 2).fillRect(ex - 6, ey + 6, 12, 2); g.fillCircle(ex - 7, ey + 1, 3).fillCircle(ex + 7, ey + 1, 3); }
+    else { g.fillRect(ex - 7, ey - 6, 9, 5).fillRect(ex - 2, ey - 1, 3, 10); g.fillStyle(0xb8462e, 1).fillRect(ex - 7, ey - 6, 2, 5); g.fillStyle(0xe6c27a, 1).fillRect(ex + 4, ey + 7, 8, 2); }
+    const nm = s.add.text(8, y + 15, n.name, { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "13px", color: "#f4e6b8", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5);
+    const tt = s.add.text(8, y + 30, n.title.toUpperCase(), { fontFamily: "Cinzel, Georgia, serif", fontSize: "9px", color: "#c9a45c", stroke: "#000", strokeThickness: 2 }).setOrigin(0.5);
+    return [g, nm, tt];
+  }
+
   private build(n: NpcDef) {
+    const atlas = this.atlases.get(`npc_${n.kind}`);
+    if (atlas) return this.buildSprite(n, atlas);
+    this.buildFallback(n);
+  }
+
+  private buildSprite(n: NpcDef, atlas: ActorAtlas) {
+    const s = this.scene;
+    const { sx, sy } = this.toScreen(n.x, n.y);
+    const sprite = s.add.sprite(0, 0, atlas.key, atlas.firstFrame).setOrigin(0.5, 52 / 64).setScale(SPRITE_SCALE);
+    const post = s.add.graphics();
+    post.fillStyle(0x2a1b10, 1).fillRect(-2, -100, 4, 30); // poste da placa
+    const body = s.add.container(sx, sy, [post, sprite, ...this.sign(n, -134)]).setDepth(sy);
+    const ring = s.add.graphics().setDepth(0.7);
+    const v: View = { def: n, sx, sy, ring, body, sprite, atlas, dir: "se", cur: "", busyUntil: 0, nextAct: 3000 + Math.random() * 5000 };
+    this.views.set(n.id, v);
+    this.play(v, "idle");
+  }
+
+  /** toca uma animação na direção atual (com espelhamento para SW/NW); só reinicia se mudou */
+  private play(v: View, anim: string, force = false) {
+    if (!v.sprite || !v.atlas) return;
+    const pick = pickDirection(v.dir, (d) => v.atlas!.has.has(`${anim}_${d}`));
+    if (!pick) return;
+    const key = `${v.atlas.key}:${anim}:${pick.dir}`;
+    v.sprite.setFlipX(pick.flip);
+    if (key === v.cur && !force) return;
+    v.cur = key;
+    v.sprite.play(key, true);
+    if (anim !== "idle") {
+      v.busyUntil = this.scene.time.now + (v.atlas.durations.get(key) ?? 600);
+      v.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => { v.busyUntil = 0; v.cur = ""; this.play(v, "idle"); });
+    }
+  }
+
+  /** a conversa abriu: o NPC gesticula (animação "talk") */
+  talk(id: string) {
+    const v = this.views.get(id);
+    if (v?.sprite) this.play(v, "talk", true);
+  }
+
+  private buildFallback(n: NpcDef) {
     const s = this.scene;
     const { sx, sy } = this.toScreen(n.x, n.y);
     const smith = n.kind === "smith";
@@ -44,17 +113,13 @@ export class NpcLayer {
     g.fillStyle(0x0d121b, 1).fillRect(-5, -38, 3, 3).fillRect(2, -38, 3, 3); // olhos fundos
     if (smith) { g.fillStyle(0x6c7684, 1).fillRect(-16, -22, 5, 14); g.fillStyle(0x3a2819, 1).fillRect(-15, -10, 3, 12); } // martelo
     else { g.fillStyle(0xd9b25a, 1).fillCircle(16, -22, 5); g.fillStyle(0x2b2f38, 1).fillCircle(16, -22, 2); } // bolsa de moedas
-    // placa: tábua de madeira num poste, com nome e ofício
     const sign = s.add.graphics();
     sign.fillStyle(0x2a1b10, 1).fillRect(-2, -92, 4, 40);
-    sign.fillStyle(0x4a2e1a, 1).fillRoundedRect(-52, -112, 104, 36, 5);
-    sign.lineStyle(2, 0xc9a45c, 1).strokeRoundedRect(-52, -112, 104, 36, 5);
-    const nm = s.add.text(0, -103, n.name, { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "13px", color: "#f4e6b8", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5);
-    const tt = s.add.text(0, -88, n.title.toUpperCase(), { fontFamily: "Cinzel, Georgia, serif", fontSize: "9px", color: "#c9a45c", stroke: "#000", strokeThickness: 2 }).setOrigin(0.5);
-    const body = s.add.container(sx, sy, [g, sign, nm, tt]).setDepth(sy);
+    const plate = this.sign(n, -112);
+    const body = s.add.container(sx, sy, [g, sign, ...plate]).setDepth(sy);
     s.tweens.add({ targets: g, y: -1.5, duration: 1400 + Math.random() * 400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" }); // respiração
     const ring = s.add.graphics().setDepth(0.7);
-    this.views.set(n.id, { def: n, sx, sy, ring, body });
+    this.views.set(n.id, { def: n, sx, sy, ring, body, dir: "se", cur: "", busyUntil: 0, nextAct: Infinity });
   }
 
   /** NPC mais próximo do ponto (em tiles) dentro de `maxD`, ou null */
@@ -81,6 +146,15 @@ export class NpcLayer {
   /** anel dourado no chão do NPC enquanto o jogador está ao alcance (convite para falar) */
   update(time: number, gx: number, gy: number) {
     for (const v of this.views.values()) {
+      if (v.sprite) { // vira-se para o jogador quando ele está por perto; de tempos em tempos faz o seu ofício
+        const dx = gx - v.def.x, dy = gy - v.def.y;
+        if (Math.hypot(dx, dy) < 9) {
+          const d = gridAngleToDir(Math.atan2(dy, dx));
+          const diag: Dir = d === "e" || d === "s" || d === "se" ? "se" : d === "n" || d === "ne" ? "ne" : d === "w" || d === "sw" ? "sw" : "nw";
+          if (diag !== v.dir) { v.dir = diag; if (!v.busyUntil) { v.cur = ""; this.play(v, "idle"); } }
+        }
+        if (!v.busyUntil && time > v.nextAct) { this.play(v, ACT[v.def.kind] ?? "idle", true); v.nextAct = time + 7000 + Math.random() * 6000; }
+      }
       v.ring.clear();
       if (Math.hypot(v.def.x - gx, v.def.y - gy) <= NPC_REACH) {
         const a = 0.55 + 0.25 * Math.sin(time / 260);
