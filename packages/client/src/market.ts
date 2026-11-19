@@ -1,5 +1,5 @@
 import {
-  ITEMS, Msg, RARITY_COLOR, RARITY_NAME, RARITIES, COIN_IRON, COIN_OBOL, MARKET_PRICE, MARKET_CURRENCY_NAME, MARKET_FEE_PCT, MARKET_DAYS, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MARKET_SORTS, MARKET_SORT_NAME, MARKET_MAX_ACTIVE,
+  ITEMS, Msg, RARITY_COLOR, RARITY_NAME, RARITIES, COIN_IRON, COIN_OBOL, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_FEE_PCT, MARKET_DAYS, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MARKET_SORTS, MARKET_SORT_NAME, MARKET_MAX_ACTIVE,
   EQUIP_SLOT_NAME, CLASS_DEFS, itemValue, listingFee, suggestedPrice,
   type InventorySnapshot, type ItemDef, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type MarketFilter, type MyListing, type MarketCurrency, type CharClass, type ItemKind, type Rarity,
 } from "@frixep/shared";
@@ -270,9 +270,11 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     const paint = () => {
       const lim = MARKET_PRICE[cur], cn = MARKET_CURRENCY_NAME[cur];
       const have = cur === "obols" ? snap.obols : snap.iron;
-      const bad = !(Number.isInteger(price) && price >= lim.min && price <= lim.max) || qty < 1 || qty > max;
+      const minP = Math.max(lim.min, minListingPrice(id, qty, cur));
+      const low = Number.isInteger(price) && price < minP;
+      const bad = !(Number.isInteger(price) && price >= minP && price <= lim.max) || qty < 1 || qty > max;
       const fee = bad ? 0 : listingFee(price);
-      sum.replaceChildren(document.createTextNode(bad ? `Preço de ${lim.min} a ${num(lim.max)} ${cn}.` : `Taxa de listagem: `), ...(bad ? [] : [Object.assign(el("b"), { textContent: `${num(fee)} ${cn}` }), document.createTextNode(` · você recebe `), Object.assign(el("b"), { textContent: `${num(price)}` }), document.createTextNode(` (o preço inteiro) quando vender.${cur === "iron" ? ` Valor médio: ${num(itemValue(id) * qty)}.` : ""}`)]));
+      sum.replaceChildren(document.createTextNode(bad ? (low ? `Preço mínimo para este item: ${num(minP)} ${cn}.` : `Preço de ${num(minP)} a ${num(lim.max)} ${cn}.`) : `Taxa de listagem: `), ...(bad ? [] : [Object.assign(el("b"), { textContent: `${num(fee)} ${cn}` }), document.createTextNode(` · você recebe `), Object.assign(el("b"), { textContent: `${num(price)}` }), document.createTextNode(` (o preço inteiro) quando vender.${cur === "iron" ? ` Valor médio: ${num(itemValue(id) * qty)}.` : ""}`)]));
       go.disabled = bad || have < fee || busy;
       if (!bad && have < fee) sum.append(document.createTextNode(` ${cn} insuficientes para a taxa.`));
     };

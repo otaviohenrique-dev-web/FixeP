@@ -12,14 +12,19 @@ export const MARKET_FEE_PCT = 4; // % do preço, cobrado ao listar e nunca devol
 export const MARKET_DAYS = 7; // duração de uma listagem
 export const MARKET_MAX_ACTIVE = 20; // listagens ativas por jogador
 export const MARKET_MAX_OPEN = 40; // ativas + vendas ainda não recolhidas por jogador
-export const MARKET_MIN_PRICE = 5; // preço total mínimo (tostões)
+export const MARKET_MIN_PRICE = 25; // piso absoluto (nas duas moedas): com 4% a taxa é exatamente 1, então a % cobrada é fiel
 export const MARKET_MAX_PRICE = 99_999_999; // preço total máximo (tostões)
 export type MarketCurrency = "iron" | "obols";
 /** Qualquer item pode ser vendido em Tostões ou em Óbolos de Sangue (a moeda rara: ideal para itens míticos e lendários). Limites de preço total por moeda. */
-export const MARKET_PRICE: Record<MarketCurrency, { min: number; max: number }> = { iron: { min: MARKET_MIN_PRICE, max: MARKET_MAX_PRICE }, obols: { min: 1, max: 99_999 } };
+export const MARKET_PRICE: Record<MarketCurrency, { min: number; max: number }> = { iron: { min: MARKET_MIN_PRICE, max: MARKET_MAX_PRICE }, obols: { min: MARKET_MIN_PRICE, max: 99_999 } };
+/** Preço mínimo de um item = metade do valor médio de mercado (x quantidade), nunca abaixo do piso: vender mais barato que isso nem cobriria a taxa e o comerciante já paga ~35%. */
+export const MARKET_MIN_RATIO = 0.5;
+export const minListingPrice = (id: string, qty: number, cur: MarketCurrency = "iron") =>
+  cur === "obols" ? MARKET_PRICE.obols.min : Math.max(MARKET_PRICE.iron.min, Math.ceil(itemValue(id) * Math.max(1, qty) * MARKET_MIN_RATIO));
 export const MARKET_CURRENCY_NAME: Record<MarketCurrency, string> = { iron: "Tostões", obols: "Óbolos" };
 export const MARKET_PAGE = 8; // listagens por página
-export const listingFee = (price: number) => Math.max(1, Math.ceil((price * MARKET_FEE_PCT) / 100));
+/** Taxa = MARKET_FEE_PCT % do preço, arredondada para o tostão (o piso de preço garante que nunca fica abaixo de 1 distorcendo a %). */
+export const listingFee = (price: number) => Math.max(1, Math.round((price * MARKET_FEE_PCT) / 100));
 
 export type MarketSort = "price_asc" | "price_desc" | "newest" | "rarity";
 export const MARKET_SORTS: readonly MarketSort[] = ["price_asc", "price_desc", "newest", "rarity"];
@@ -74,4 +79,4 @@ export function filterItemIds(f: ReturnType<typeof cleanFilter>): string[] {
 }
 
 /** Preço de referência (valor médio x quantidade) que a UI sugere ao listar. */
-export const suggestedPrice = (id: string, qty: number) => Math.max(MARKET_MIN_PRICE, itemValue(id) * qty);
+export const suggestedPrice = (id: string, qty: number) => Math.max(minListingPrice(id, qty), itemValue(id) * qty);

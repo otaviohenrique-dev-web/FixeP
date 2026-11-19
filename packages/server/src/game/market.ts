@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
-  ITEMS, MAX_COINS, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PRICE, MARKET_CURRENCY_NAME, MARKET_DAYS, MARKET_PAGE, listingFee,
+  ITEMS, MAX_COINS, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_DAYS, MARKET_PAGE, listingFee,
   cleanFilter, filterItemIds, type MarketPage, type MyListing, type MarketCurrency,
 } from "@frixep/shared";
 import { addItem, canFit, validSlot, type Inventory } from "./inventory.js";
@@ -67,6 +67,8 @@ export class Market {
     if (!st0 || !ITEMS[st0.id]) return { ok: false, error: "Espaço vazio." };
     if (typeof qty !== "number" || !Number.isInteger(qty) || qty < 1 || qty > st0.qty) return { ok: false, error: "Quantidade inválida." };
     if (typeof price !== "number" || !Number.isInteger(price) || price < lim.min || price > lim.max) return { ok: false, error: `O preço vai de ${lim.min} a ${lim.max.toLocaleString("pt-BR")} ${cn}.` };
+    const minP = minListingPrice(st0.id, qty, cur);
+    if (price < minP) return { ok: false, error: `Preço mínimo para este item: ${minP.toLocaleString("pt-BR")} ${cn}.` };
     const fee = listingFee(price);
     if (a.inv[cur] < fee) return { ok: false, error: `${cn} insuficientes para a taxa de listagem (${fee}).` };
     const id = randomUUID();
