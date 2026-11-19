@@ -1,4 +1,5 @@
 import { isTypingTarget } from "./keys";
+import { cycleHudScale, hudScaleLabel } from "./mobile";
 /** Menu simples dentro do jogo: continuar ou desconectar (volta para a tela de login). */
 
 export interface GameMenuOptions {
@@ -67,7 +68,13 @@ export function mountGameMenu(opts: GameMenuOptions) {
   logout.className = "gm-item gm-danger";
   logout.textContent = "Desconectar";
 
-  card.append(title, who, resume, logout);
+  const hs = document.createElement("button"); // tamanho da HUD (só aparece no celular)
+  hs.type = "button";
+  hs.className = "gm-item gm-hs";
+  hs.textContent = `HUD: ${hudScaleLabel()}`;
+  hs.onclick = () => { hs.textContent = `HUD: ${cycleHudScale()}`; };
+
+  card.append(title, who, resume, hs, logout);
   back.append(card);
   document.body.append(btn, back);
 

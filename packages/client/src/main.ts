@@ -15,6 +15,7 @@ import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
 import { mountStats } from "./stats";
 import { mountJoystick } from "./touch";
+import { setMobileUi } from "./mobile";
 import { drawPlate, type PlateKind } from "./plate";
 import { mountChat } from "./chat";
 import { GroundLayer } from "./ground";
@@ -49,6 +50,8 @@ const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number
   crypt: { bg: "#07050b", a: 0x221b2c, b: 0x2a2236, line: 0x3a2f4a, fleck: 0x54446e, border: 0x6a4a9a, portal: 0xb07aff },
 };
 const tileHash = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
+/** densidade de pixels do canvas: nítido em telas retina, mas limitado (3) para não pesar em celular fraco */
+const DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
@@ -95,6 +98,10 @@ class WorldScene extends Phaser.Scene {
   private me(): any { return this.state?.players?.get(this.room.sessionId); }
 
   async create() {
+    // textos do Phaser são rasterizados na densidade da tela (senão ficam borrados em retina)
+    this.sys.events.on("addedtoscene", (o: Phaser.GameObjects.GameObject) => {
+      if (o instanceof Phaser.GameObjects.Text && DPR > 1) o.setResolution(DPR);
+    });
     this.zoneId = (this.sys.settings.data as { zone?: number }).zone ?? 1;
     const zone = ZONES[this.zoneId] ?? ZONES[1];
     this.drawZoneMap(zone);
@@ -423,8 +430,11 @@ class WorldScene extends Phaser.Scene {
     this.party?.setTouch(this.touchMode);
     // celular: câmera mais afastada para enxergar mais ao redor (os textos ganham contra-escala para continuarem legíveis)
     const zoom = this.touchMode ? TOUCH_ZOOM : 1;
-    this.cameras.main.setZoom(zoom);
+    // zoom em múltiplos de 0,5 pixel de tela por pixel de arte (em DPR 3 o celular cai em 2,0 exato): sem escala fracionária que borre
+    this.cameras.main.setZoom(Math.max(0.5, Math.round(zoom * DPR * 2) / 2));
+    this.cameras.main.roundPixels = true;
     this.uiScale = Math.min(1.25, 1 / zoom);
+    setMobileUi(this.touchMode);
     if (!this.touchMode) this.lockKey = "";
   }
 
@@ -1074,10 +1084,16 @@ new Phaser.Game({
   type: Phaser.AUTO,
   parent: "game",
   backgroundColor: "#0b0b10",
-  scale: { mode: Phaser.Scale.RESIZE, width: "100%", height: "100%" },
+  // canvas em resolução nativa: tamanho em pixels de dispositivo, exibido em CSS por 1/DPR (sem borrão); sprites sem suavização e posições arredondadas
+  scale: { mode: Phaser.Scale.NONE, width: Math.round(innerWidth * DPR), height: Math.round(innerHeight * DPR), zoom: 1 / DPR },
+  render: { roundPixels: true, powerPreference: "high-performance" },
   scene: [],
   callbacks: {
     postBoot: (game) => {
+      const fit = () => game.scale.resize(Math.round(innerWidth * DPR), Math.round(innerHeight * DPR));
+      window.addEventListener("resize", fit);
+      window.addEventListener("orientationchange", () => setTimeout(fit, 200));
+      window.visualViewport?.addEventListener("resize", fit);
       game.scene.add("world", WorldScene, true, { token, zone: character.zone ?? 1 });
     },
   },
