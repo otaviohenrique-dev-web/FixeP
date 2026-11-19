@@ -34,9 +34,23 @@ const kinds = (r) => { const c = {}; enemies(r).forEach((e) => (c[e.kind] = (c[e
 const waitFor = async (fn, ms) => { for (let t = 0; t < ms; t += 100) { if (fn()) return true; await sleep(100); } return false; };
 const near = (p, x, y, d = 2) => Math.hypot(p.x - x, p.y - y) <= d;
 
+console.log("\n== Cidade segura (zona 4) ==");
+check("personagem novo começa na cidade (API)", (await zoneApi()) === 4);
+let H = await join("zone4");
+check("nasce na cidade, no ponto de nascimento", H.r.state.zoneId === 4 && near(H.me(), 24, 30, 0.5), `(${H.me().x}, ${H.me().y})`);
+check("a cidade não tem inimigos nem chefe", enemies(H.r).length === 0 && bossOf(H.r) === null);
+H.r.send("travel", { to: 1 });
+await sleep(400);
+check("pedir o portal da cidade de longe é recusado", H.ev.travel.length === 0 && H.ev.notice.some((t) => t.includes("portal")));
+H.r.send("move_to", { x: 44, y: 24 });
+check("pisar no portal leste leva às Cinzas (zona 1)", (await waitFor(() => H.ev.travel.length > 0, 12000)) && H.ev.travel[0].zone === 1, JSON.stringify(H.ev.travel));
+check("o servidor já gravou a zona 1 (API)", (await zoneApi()) === 1);
+await H.r.leave(true);
+await sleep(300);
+
 console.log("\n== Zona 1 (Cinzas) ==");
 let A = await join("zone");
-check("nasce na zona 1, no ponto de nascimento", A.r.state.zoneId === 1 && near(A.me(), 20, 20, 0.5), `zona ${A.r.state.zoneId} em (${A.me().x}, ${A.me().y})`);
+check("chega às Cinzas junto do portal da cidade (fora do raio dele)", A.r.state.zoneId === 1 && near(A.me(), 7, 20, 0.5), `zona ${A.r.state.zoneId} em (${A.me().x}, ${A.me().y})`);
 check("cada zona tem o seu chefe (Rei Ossudo, Lobo Alfa, Soberano das Catacumbas)", bossOf(A.r) === "bone_king", bossOf(A.r));
 check("inimigos da zona 1: 5 esqueletos, níveis 1,1,1,2,3", levels(A.r) === "1,1,1,2,3" && kinds(A.r) === '{"skeleton":5}', `${levels(A.r)} ${kinds(A.r)}`);
 check("API informa a zona do personagem (1)", (await zoneApi()) === 1);
@@ -51,7 +65,7 @@ await sleep(200);
 check("pedidos inválidos de travessia são ignorados", A.ev.travel.length === 0 && A.ev.left === null);
 
 A.r.send("move_to", { x: 36, y: 36 });
-const crossed = await waitFor(() => A.ev.travel.length > 0, 9000);
+const crossed = await waitFor(() => A.ev.travel.length > 0, 16000);
 check("pisar no portal (sem apertar nada) aprova a travessia para a zona 2", crossed && A.ev.travel[0].zone === 2, JSON.stringify(A.ev.travel));
 check("o servidor já gravou a zona 2 (API)", (await zoneApi()) === 2);
 const frozenAt = { x: A.me()?.x, y: A.me()?.y };

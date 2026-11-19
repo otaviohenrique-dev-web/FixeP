@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { PLAYABLE_CLASSES, type CharClass } from "@frixep/shared";
+import { PLAYABLE_CLASSES, START_ZONE, type CharClass } from "@frixep/shared";
 import { verifySession, type AuthUser } from "./auth.js";
 import { Repo, validateName } from "./db/repo.js";
 
@@ -37,7 +37,7 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 const shape = (c: { name: string; class: string; level: number; xp: number; zone?: number } | null) =>
-  c ? { name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? 1 } : null;
+  c ? { name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? START_ZONE } : null;
 
 export function apiRouter(repo: Repo): Router {
   const r = Router();

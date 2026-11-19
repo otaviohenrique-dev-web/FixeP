@@ -25,8 +25,8 @@ const peakDps = (cls: CharClass, level: number) => {
 };
 const potion = ITEMS.pocao_de_vida;
 
-for (const zid of ZONE_IDS) {
-  const b = ZONES[zid].boss, K = enemyKind(b.kind), B = K.boss!;
+for (const zid of ZONE_IDS.filter((z) => !ZONES[z].safe)) {
+  const b = ZONES[zid].boss!, K = enemyKind(b.kind), B = K.boss!;
   const hp = enemyHp(b.level, b.kind);
   console.log(`\n== Chefe da zona ${zid}: ${K.name} (nível ${b.level}, vida ${hp}) ==`);
   const soloBest = Math.max(...PLAYABLE_CLASSES.map((c) => peakDps(c, b.level)));

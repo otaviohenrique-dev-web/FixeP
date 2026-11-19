@@ -2,9 +2,9 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
+  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef,
+  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type VaultSnapshot,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -21,6 +21,8 @@ import { mountChat } from "./chat";
 import { GroundLayer } from "./ground";
 import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
+import { mountVault, type VaultUi } from "./vault";
+import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
 import { mountParty, type PartyUi } from "./party";
 
@@ -48,6 +50,7 @@ const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number
   ash: { bg: "#0b0b10", a: 0x25242b, b: 0x2c2b33, line: 0x3a3945, fleck: 0x4a4852, border: 0x6b5a45, portal: 0xc9a86a },
   frost: { bg: "#08111a", a: 0x2b3e52, b: 0x334a60, line: 0x4a6a84, fleck: 0xe3f0fa, border: 0x8fc4e8, portal: 0x7fd0ff },
   crypt: { bg: "#07050b", a: 0x221b2c, b: 0x2a2236, line: 0x3a2f4a, fleck: 0x54446e, border: 0x6a4a9a, portal: 0xb07aff },
+  town: { bg: "#1d1620", a: 0x8a7f6a, b: 0x93886f, line: 0x6f6453, fleck: 0xb4a98f, border: 0x8a6a45, portal: 0xffc873 },
 };
 const tileHash = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
 /** densidade de pixels do canvas: nítido em telas retina, mas limitado (3) para não pesar em celular fraco */
@@ -86,6 +89,9 @@ class WorldScene extends Phaser.Scene {
   private portalG!: Phaser.GameObjects.Graphics;
   private ground!: GroundLayer;
   private npcs!: NpcLayer;
+  private town: TownLayer | null = null;
+  private vault!: VaultUi;
+  private pendingVault = false; // clicou no baú longe: abre quando chegar perto
   private econ!: EconomyUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private portalDefs: { x: number; y: number; r: number; color: number }[] = [];
@@ -102,8 +108,8 @@ class WorldScene extends Phaser.Scene {
     this.sys.events.on("addedtoscene", (o: Phaser.GameObjects.GameObject) => {
       if (o instanceof Phaser.GameObjects.Text && DPR > 1) o.setResolution(DPR);
     });
-    this.zoneId = (this.sys.settings.data as { zone?: number }).zone ?? 1;
-    const zone = ZONES[this.zoneId] ?? ZONES[1];
+    this.zoneId = (this.sys.settings.data as { zone?: number }).zone ?? START_ZONE;
+    const zone = ZONES[this.zoneId] ?? ZONES[START_ZONE];
     this.drawZoneMap(zone);
 
     await this.loadArt(); // atlas de sprites (se existirem); sem eles os personagens são círculos
@@ -220,12 +226,15 @@ class WorldScene extends Phaser.Scene {
       if (m.obols) { this.floatText(m.x, m.y - 1.3, `+${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color, 18, true); this.inv.toast(`+ ${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color); }
       sfx.pickup();
     });
+    this.vault = mountVault({ send: (t, p) => this.room.send(t, p) });
+    this.room.onMessage(Evt.Vault, (m: VaultSnapshot) => this.vault.setVault(m));
     this.room.onMessage(Evt.Trade, (m: TradeEvent) => this.econ.setTrade(m));
     this.room.onMessage(Evt.TradeInvite, (m: { from: string }) => this.econ.showTradeInvite(String(m.from)));
     this.room.onMessage(Evt.TradeInviteEnd, () => this.econ.endTradeInvite());
     this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => {
       this.inv.setSnapshot(s);
       this.econ.setSnapshot(s);
+      this.vault.setInventory(s);
       let n = 0;
       for (const st of s.inv) if (st && ITEMS[st.id]?.kind === "potion") n += st.qty;
       this.hud.setPotion(n); // slot da poção na HUD: estoque e recarga
@@ -291,7 +300,14 @@ class WorldScene extends Phaser.Scene {
         else if (me) { this.pendingNpc = npc; this.room.send(Msg.MoveTo, { x: npc.x, y: npc.y + 1.8 }); this.moveMarker(npc.x, npc.y + 1.8); }
         return;
       }
+      if (this.town?.chestHit(ptr.worldX, ptr.worldY)) { // clicar no baú: abre se estiver perto; senão, anda até ele
+        const me = this.me();
+        if (me && this.town.nearChest(me.x, me.y)) this.vault.open();
+        else if (me) { this.pendingVault = true; const v = this.town.chestPos; this.room.send(Msg.MoveTo, { x: v.x, y: v.y + 1.8 }); this.moveMarker(v.x, v.y + 1.8); }
+        return;
+      }
       this.pendingNpc = null;
+      this.pendingVault = false;
       const other = this.playerAt(ptr.worldX, ptr.worldY); // clicar em outro jogador só o seleciona (círculo verde + opções ao lado do seu retrato)
       if (other) {
         const p = other.p;
@@ -346,6 +362,17 @@ class WorldScene extends Phaser.Scene {
   private drawZoneMap(zone: (typeof ZONES)[number]) {
     const th = THEMES[zone.theme];
     this.cameras.main.setBackgroundColor(th.bg);
+    if (zone.theme === "town") this.town = drawTown(this, zone, toScreen, TILE_W, TILE_H); // a cidade tem arte própria (praça, casas, luzes)
+    else this.drawGround(zone, th);
+    this.portalG = this.add.graphics().setDepth(0.5);
+    this.portalDefs = zone.portals.map((p) => ({ x: p.x, y: p.y, r: p.r, color: THEMES[ZONES[p.to].theme].portal }));
+    zone.portals.forEach((p) => {
+      const at = toScreen(p.x, p.y);
+      this.add.text(at.sx, at.sy - p.r * TILE_H - 18, `➜ ${ZONES[p.to].name}`, { fontFamily: "Cinzel, Georgia, serif", fontSize: "13px", color: "#f4ecd2", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5);
+    });
+  }
+
+  private drawGround(zone: (typeof ZONES)[number], th: (typeof THEMES)[ZoneTheme]) {
     const g = this.add.graphics().setDepth(-10);
     const V = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
     for (let x = 0; x < zone.w; x++) {
@@ -360,13 +387,6 @@ class WorldScene extends Phaser.Scene {
     }
     const c = (x: number, y: number) => { const p = toScreen(x, y); return V(p.sx, p.sy); };
     g.lineStyle(3, th.border, 0.9).strokePoints([c(-0.5, -0.5), c(zone.w - 0.5, -0.5), c(zone.w - 0.5, zone.h - 0.5), c(-0.5, zone.h - 0.5)], true);
-    // portais: anel pulsante (desenhado a cada quadro) e nome do destino
-    this.portalG = this.add.graphics().setDepth(0.5);
-    this.portalDefs = zone.portals.map((p) => ({ x: p.x, y: p.y, r: p.r, color: THEMES[ZONES[p.to].theme].portal }));
-    zone.portals.forEach((p) => {
-      const at = toScreen(p.x, p.y);
-      this.add.text(at.sx, at.sy - p.r * TILE_H - 18, `➜ ${ZONES[p.to].name}`, { fontFamily: "Cinzel, Georgia, serif", fontSize: "13px", color: "#f4ecd2", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5);
-    });
   }
 
   private drawPortals(time: number) {
@@ -1122,6 +1142,12 @@ class WorldScene extends Phaser.Scene {
       if (this.pendingNpc && near?.id === this.pendingNpc.id) { this.econ.openNpc(this.pendingNpc); this.pendingNpc = null; }
       if (this.econ.isNpcOpen() && !near) this.econ.closeNpc();
     }
+    if (meNow && this.town) { // baú da cidade: anel, botão "Abrir o baú" e animações do cenário
+      this.town.update(time, this.cameras.main, meNow);
+      const nearV = this.town.nearChest(meNow.x, meNow.y);
+      this.vault.setNear(nearV);
+      if (this.pendingVault && nearV) { this.pendingVault = false; this.vault.open(); }
+    }
     this.checkLock();
     this.drawMarks(time);
     if (this.portalG) this.drawPortals(time);
@@ -1254,7 +1280,7 @@ new Phaser.Game({
       window.addEventListener("resize", fit);
       window.addEventListener("orientationchange", () => setTimeout(fit, 200));
       window.visualViewport?.addEventListener("resize", fit);
-      game.scene.add("world", WorldScene, true, { token, zone: character.zone ?? 1 });
+      game.scene.add("world", WorldScene, true, { token, zone: character.zone ?? START_ZONE });
     },
   },
 });

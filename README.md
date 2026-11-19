@@ -94,19 +94,37 @@ Teste: `SERVER=http://localhost:2999 npm run test:mana -w @frixep/server` (17 ve
 
 ## Zonas e travessia
 
-Três zonas, cada uma é uma sala própria no servidor (dados em `packages/shared/src/zones.ts`; salas `zone`, `zone2`, `zone3`):
+Quatro zonas: a **Cidade segura** (onde todos nascem) e três de combate. Cada uma é uma sala própria no servidor (dados em `packages/shared/src/zones.ts`; salas `zone4`, `zone`, `zone2`, `zone3`):
 
 | Zona | Tema | Inimigos (nível) | Recursos |
 |---|---|---|---|
+| 4. Cidade de Brasalume (segura) | pedras claras, lanternas e fogueiras | nenhum (sem dano, sem PvP, sem chefe) | comerciante, ferreira, baú pessoal, portais para as 3 zonas |
 | 1. Cinzas | ruínas escuras | Esqueletos 1 a 3; chefe **Rei Ossudo** (nv 6) | itens até **incomum** |
 | 2. Floresta Gélida | neve e gelo | Lobos Gélidos e Esqueletos 6 a 10; chefe **Lobo Alfa** (nv 11) | itens até **raro** (baú até épico) |
 | 3. Catacumbas | pedra roxa | Espectros e Esqueletos 12 a 20; chefe **Soberano das Catacumbas** (nv 21) | itens até **épico** (baú até mítico) |
 
 - **Sem faixa de nível**: qualquer jogador pode ir quando quiser. As zonas mais fundas são muito punitivas, mas soltam mais itens e raridades melhores (`drops` e `boss` em `zones.ts`).
 - **Travessia como no Albion**: basta andar até o anel brilhante do portal (sem apertar nada). O servidor valida a posição, grava a zona do personagem (coluna `characters.zone`, migração `004_zone.sql`) e manda o cliente entrar na sala nova. Quem pede a sala de outra zona é recusado (403).
-- Ao reconectar, o personagem volta para a zona em que estava; ao morrer, renasce no início da mesma zona. Uma sessão por conta vale em todas as zonas.
+- Ao reconectar, o personagem volta para a zona em que estava; **ao morrer numa zona de combate, renasce na cidade** (o servidor grava a zona 4 e manda o cliente entrar na sala dela). Uma sessão por conta vale em todas as zonas.
+- **Personagem novo nasce na cidade** (a migração `008_cidade_bau.sql` troca o padrão da coluna `characters.zone` para 4; contas e personagens que já existem ficam onde estão).
 - O mapa de cada zona é desenhado por código (cores provisórias por tema); o Lobo Gélido tem kit de sprites próprio (`python tools/gen_wolf.py` recria `assets/placeholder/wolf.*`; arte final em `assets/monsters/wolf.*` tem prioridade) e o Espectro das Catacumbas também (`python tools/gen_wraith.py`, `assets/placeholder/wraith.*`).
-- Teste: `SERVER=http://localhost:2999 npm run test:zones -w @frixep/server` (22 verificações).
+- Teste: `SERVER=http://localhost:2999 npm run test:zones -w @frixep/server`. Fora disso, os testes de combate precisam de personagens que nasçam numa zona com inimigos: suba o servidor de teste com `TEST_START_ZONE=1` (só fora de produção) nessas suítes; `zones.mjs` e `cidade.mjs` rodam **sem** essa variável.
+
+### Cidade segura (Brasalume, zona 4)
+
+Praça central com fonte, casas e árvores, lanternas e fogueiras de luz quente, vaga-lumes e três portais (leste: Cinzas; norte: Floresta Gélida; oeste: Catacumbas), tudo desenhado por código (`packages/client/src/town.ts`, tema `town`). É o único lugar com o **comerciante Garrick**, a **ferreira Brasa** (e o futuro leiloeiro) e o **baú de armazenamento**; as zonas de combate não têm mais NPCs, só um portal de volta à cidade (as Cinzas, a Floresta e as Catacumbas).
+
+- **Segura de verdade, no servidor** (`zone.safe`): sem inimigos nem chefe; o PvP não liga (aviso "a cidade é um lugar de paz"); `damagePlayer` ignora qualquer dano na zona, então habilidades de área, projéteis e armadilhas também não ferem. Chat local, grupo, troca e lojas funcionam normalmente.
+- A forja da cidade funde até a maior raridade do mundo (a cidade não tem drops próprios).
+
+### Baú de armazenamento
+
+Um baú grande fixo na praça (`vault` em `zones.ts`), **180 espaços em 6 páginas de 30**, mais tostões e óbolos. O conteúdo é **por personagem** (os equipamentos são de classe, a conta tem 1 personagem e a troca e o mercado também são por personagem; migrar para por conta depois é só mudar a chave da tabela).
+
+- Persistência: tabela `vault_items (character_id, slot, item_id, qty)` e colunas `characters.vault_iron/vault_obols` (migração `008_cidade_bau.sql`). A bolsa e o baú são gravados **na mesma transação** (`saveInventoryAndVault`), pela fila de salvamento do jogador: o item está num lugar ou no outro, nunca nos dois nem em nenhum.
+- Só abre perto (`VAULT_REACH` = 3,5 tiles) e o servidor reconfere a distância a **cada pedido** (depositar, retirar, mover, moedas). O baú é carregado do banco na primeira abertura; uma operação por vez por jogador (rajadas do mesmo espaço não duplicam nada). Valida espaço, quantidade (inteiro positivo), saldo e tetos; sem espaço, nada muda.
+- Interface (`packages/client/src/vault.ts`, tema madeira/dourado): clique no baú (ou tecla **G** / botão "Abrir o baú" ao chegar perto). Toque seleciona, "Guardar"/"Levar" move (com quantidade); duplo toque move a pilha; arrastar entre bolsa e baú escolhe o espaço; tocar em outro espaço do baú reorganiza. Usável no celular (colunas empilhadas).
+- Testes: `npx tsx test/vault.unit.ts` (21 verificações: limites, conservação, moedas, persistência atômica) e `SERVER=http://localhost:2999 node test/cidade.mjs` com o servidor em `ECON_TEST=1` (29 verificações: segurança da cidade, baú, rajadas, pedidos inválidos, persistência, isolamento e renascer na cidade).
 
 ### Chat da zona
 
@@ -241,9 +259,9 @@ Tema Submundo & Morte. Código compartilhado em `packages/shared/src/economy.ts`
 
 **Preço médio** (`itemValue`): base por raridade (12 / 45 / 170 / 650 / 2.800 / 13.000) x tipo (arma 1,4; armadura 1,2; mão secundária e elmo 0,8; botas e capa 0,7) x (1 + 1,5% por nível exigido). Poção = 10. O comerciante **vende a 140%** do preço médio e **compra a 35%**; **quebrar** rende 12%. Nunca dá lucro comprar e revender.
 
-**NPCs** (`ZONE_NPCS`, um **comerciante (Garrick)** e uma **ferreira (Brasa)** em cada zona, perto do ponto de nascimento e longe dos inimigos): com placa de nome. Clique no NPC (longe: o personagem anda até ele e abre ao chegar) ou, ao chegar perto (`NPC_REACH` = 3,5 tiles), o botão "Falar com ..." (tecla **G**). A janela fecha se você se afasta.
+**NPCs** (`ZONE_NPCS`, um **comerciante (Garrick)** e uma **ferreira (Brasa)**, só na **cidade segura**, na praça): com placa de nome. Clique no NPC (longe: o personagem anda até ele e abre ao chegar) ou, ao chegar perto (`NPC_REACH` = 3,5 tiles), o botão "Falar com ..." (tecla **G**). A janela fecha se você se afasta.
 - **Comerciante**: *Comprar* lista poção e o equipamento **da sua classe** até raridade rara (o resto vem de chefes e da forja); *Vender* aceita qualquer item da mochila (equipado, não). Venda de item raro ou melhor pede um segundo clique.
-- **Ferreira (fusão)**: **3 equipamentos do mesmo tipo, raridade e classe** + tostões viram **1 de raridade superior** (da mesma classe e tipo; a família sai entre as dos itens usados). Chance de sucesso por raridade de origem: comum 100%, incomum 85%, raro 65%, épico 45%, lendário 25%. Custo = 30% do valor-base do resultado. **Falhou**: perde a taxa e **1 dos 3 itens** (sorteado); os outros 2 voltam. **Teto da zona**: a forja nunca passa da maior raridade que a zona deixa existir (a da tabela do baú do chefe): zona 1 só até incomum, zona 2 até épico, zona 3 até mítico.
+- **Ferreira (fusão)**: **3 equipamentos do mesmo tipo, raridade e classe** + tostões viram **1 de raridade superior** (da mesma classe e tipo; a família sai entre as dos itens usados). Chance de sucesso por raridade de origem: comum 100%, incomum 85%, raro 65%, épico 45%, lendário 25%. Custo = 30% do valor-base do resultado. **Falhou**: perde a taxa e **1 dos 3 itens** (sorteado); os outros 2 voltam. **Teto**: a forja fica na cidade e vai até a maior raridade que o mundo deixa existir (mítico).
 
 **Soltar e quebrar**: *Soltar* agora põe o item **no chão** (qualquer um pode pegar; quem soltou só o pega sozinho depois de 4 s, mas pode pedir). *Quebrar* destrói o equipamento e rende uma pequena quantia (só equipamento; poção se vende). Confirmação: comum e incomum, diálogo simples; **raro** exige esperar ~1 s e o servidor recusa sem `confirm: true`; **épico em diante** exige também **digitar QUEBRAR**.
 

@@ -1,5 +1,6 @@
 // Teste de ponta a ponta do GRUPO (party): convite, pedido para entrar, aceite/recusa/expiração, limite, líder, expulsão,
 // XP com bônus, imunidade em PvP, grupo entre zonas, chat do grupo e mensagens inválidas.
+// (servidor com TEST_START_ZONE=1: personagens de teste nascem nas Cinzas, onde há inimigos e PvP; a cidade é testada em cidade.mjs)
 // Uso: PARTY_TEST=1 nos DOIS lados (servidor e teste; encurta convite para 2 s e tolerância de ausência para 3 s):
 //   servidor: PARTY_TEST=1 PGLITE_DIR=memory API_RATE_MULT=50 PORT=2999 ... npx tsx src/index.ts   (sem carregar o .env)
 //   teste:    PARTY_TEST=1 SERVER=http://localhost:2999 node test/party.mjs

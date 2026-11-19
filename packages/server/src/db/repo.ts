@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, type CharClass, type EquipSlot } from "@frixep/shared";
+import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
+import { emptyVault, type Vault } from "../game/vault.js";
 import type { Db, Tx } from "./index.js";
+
+/** Zona de nascimento dos personagens novos: a cidade. Só os testes (nunca em produção) podem trocar, para as suítes antigas seguirem lutando na zona 1. */
+export const startZone = () => { const z = Number(process.env.TEST_START_ZONE); return process.env.NODE_ENV !== "production" && Number.isInteger(z) && z > 0 ? z : START_ZONE; };
+export interface VaultRows { items: { slot: number; id: string; qty: number }[]; iron: number; obols: number }
 
 export interface InvRows { items: { slot: number; id: string; qty: number }[]; eq: { slot: string; id: string }[]; iron: number; obols: number }
 
@@ -71,8 +76,9 @@ export class Repo {
         const n =(await q<{ n: string }>("select count(*)::text as n from characters where account_id = $1", [accountId])).rows[0].n;
         if (Number(n) > 0) return { ok: false as const, error: "has_character" as const };
         const id = randomUUID();
-        await q("insert into characters (id, account_id, name, name_key, class) values ($1, $2, $3, $4, $5)", [id, accountId, name, nameKey(name), cls]);
-        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone: 1 } };
+        const zone = startZone();
+        await q("insert into characters (id, account_id, name, name_key, class, zone) values ($1, $2, $3, $4, $5, $6)", [id, accountId, name, nameKey(name), cls, zone]);
+        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone } };
       });
     } catch (e: any) {
       if (e?.code === "23505") return { ok: false, error: "name_taken" }; // violação da unicidade de name_key
@@ -138,6 +144,39 @@ export class Repo {
       const ph = r.eq.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(",");
       await q(`insert into equipment (character_id, slot, item_id) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id])]);
     }
+  }
+
+  async loadVault(charId: string): Promise<Vault> {
+    const v = emptyVault();
+    const items = await this.db.query<{ slot: number; item_id: string; qty: number }>("select slot, item_id, qty from vault_items where character_id = $1", [charId]);
+    for (const r of items.rows) {
+      const def = ITEMS[r.item_id];
+      if (!def || r.slot < 0 || r.slot >= VAULT_SLOTS || v.slots[r.slot]) continue; // item removido do jogo é ignorado
+      v.slots[r.slot] = { id: r.item_id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
+    }
+    const w = await this.db.query<{ vault_iron: number; vault_obols: number }>("select vault_iron, vault_obols from characters where id = $1", [charId]);
+    v.iron = Math.max(0, Number(w.rows[0]?.vault_iron) || 0);
+    v.obols = Math.max(0, Number(w.rows[0]?.vault_obols) || 0);
+    return v;
+  }
+
+  vaultRows(v: Vault): VaultRows {
+    return { items: v.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty }] : [])), iron: v.iron, obols: v.obols };
+  }
+
+  private async writeVault(q: Tx["query"], charId: string, r: VaultRows) {
+    await q("delete from vault_items where character_id = $1", [charId]);
+    await q("update characters set vault_iron = $2, vault_obols = $3 where id = $1", [charId, r.iron, r.obols]);
+    if (r.items.length) {
+      const ph = r.items.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
+      await q(`insert into vault_items (character_id, slot, item_id, qty) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty])]);
+    }
+  }
+
+  /** Grava bolsa E baú do mesmo personagem na MESMA transação: o item está num lugar ou no outro, nunca nos dois nem em nenhum. */
+  async saveInventoryAndVault(charId: string, inv: Inventory, v: Vault): Promise<void> {
+    const ir = this.inventoryRows(inv), vr = this.vaultRows(v);
+    await this.db.tx(async ({ query: q }) => { await this.writeInventory(q, charId, ir); await this.writeVault(q, charId, vr); });
   }
 
   /** Troca o inventário (e o saldo) salvo pelo estado atual, numa transação. A fotografia é copiada ANTES de qualquer espera. */

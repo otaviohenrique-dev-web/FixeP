@@ -15,6 +15,7 @@ const rollMobLoot: typeof rollMobLootAll = (...a) => rollMobLootAll(...a).filter
 const rollChestLoot: typeof rollChestLootAll = (...a) => rollChestLootAll(...a).filter((d) => ITEMS[d.id]);
 import { openDb } from "../src/db/index.js";
 import { Repo } from "../src/db/repo.js";
+const COMBAT_ZONES = ZONE_IDS.filter((z) => !ZONES[z].safe);
 
 const results: boolean[] = [];
 const check = (name: string, ok: boolean, detail = "") => {
@@ -183,7 +184,7 @@ console.log("\n== Drops: raridade, teto por zona, taxas ==");
 {
   const N = 60000;
   const idx = (id: string) => rarityIndex(ITEMS[id].rarity);
-  for (const zid of ZONE_IDS) {
+  for (const zid of COMBAT_ZONES) {
     const z = ZONES[zid];
     const cap = Math.max(...Object.keys(z.drops.weights).map((r) => rarityIndex(r as Rarity)));
     let gear = 0, potion = 0, top = 0, rareUp = 0;
@@ -202,7 +203,7 @@ console.log("\n== Drops: raridade, teto por zona, taxas ==");
   }
   check("zona 1: impossível épico ou melhor", Array.from({ length: 80000 }, () => rollMobLoot(ZONES[1])).flat().every((d) => idx(d.id) <= 1));
   check("zona 2: impossível épico ou melhor em inimigos comuns", Array.from({ length: 80000 }, () => rollMobLoot(ZONES[2])).flat().every((d) => idx(d.id) <= 2));
-  check("lendário e mítico NUNCA saem de inimigos comuns de nenhuma zona", ZONE_IDS.every((z) => Array.from({ length: 50000 }, () => rollMobLoot(ZONES[z])).flat().every((d) => idx(d.id) <= 3)));
+  check("lendário e mítico NUNCA saem de inimigos comuns de nenhuma zona", COMBAT_ZONES.every((z) => Array.from({ length: 50000 }, () => rollMobLoot(ZONES[z])).flat().every((d) => idx(d.id) <= 3)));
   check("todo drop sorteado existe no catálogo", Array.from({ length: 4000 }, () => rollMobLoot(ZONES[3])).flat().every((d) => ITEMS[d.id] && d.qty >= 1));
   // rng fixo: deterministico
   check("rng no zero dá equipamento comum; rng alto não dá nada", rollMobLoot(ZONES[1], () => 0).some((d) => ITEMS[d.id].rarity === "common" && ITEMS[d.id].kind !== "potion") && rollMobLoot(ZONES[1], () => 0.999).length === 0);
@@ -213,14 +214,14 @@ console.log("\n== Baús de chefe ==");
 {
   const idx = (id: string) => rarityIndex(ITEMS[id].rarity);
   const gearOf = (z: number) => Array.from({ length: 4000 }, () => rollChestLoot(ZONES[z])).map((c) => c.filter((d) => ITEMS[d.id].kind !== "potion"));
-  check("zona 1: o baú tem no máximo incomuns (e pelo menos 1 incomum)", gearOf(1).every((c) => c.length === ZONES[1].boss.chest.count && c.every((d) => idx(d.id) <= 1) && idx(c[0].id) >= 1));
+  check("zona 1: o baú tem no máximo incomuns (e pelo menos 1 incomum)", gearOf(1).every((c) => c.length === ZONES[1].boss!.chest.count && c.every((d) => idx(d.id) <= 1) && idx(c[0].id) >= 1));
   check("zona 2: o baú nunca passa de épico e sempre tem raro ou melhor", gearOf(2).every((c) => c.every((d) => idx(d.id) <= 3) && idx(c[0].id) >= 2));
   const z3 = gearOf(3);
   check("zona 3: o baú sempre tem épico ou melhor", z3.every((c) => idx(c[0].id) >= 3));
   const flat = z3.flat();
   check("zona 3: lendário aparece (~18%) e mítico é raríssimo (~2%)", flat.filter((d) => idx(d.id) === 4).length > 0 && flat.filter((d) => idx(d.id) === 5).length / flat.length < 0.05 && flat.filter((d) => idx(d.id) === 5).length > 0, `${flat.filter((d) => idx(d.id) === 4).length} lendários, ${flat.filter((d) => idx(d.id) === 5).length} míticos em ${flat.length}`);
-  check("só os baús dão lendário/mítico: o teto dos inimigos comuns é menor que o dos baús", Object.keys(ZONES[3].drops.weights).every((r) => rarityIndex(r as Rarity) <= 3) && ZONE_IDS.every((z) => ZONES[z].boss.level > Math.max(...ZONES[z].enemies.map((e) => e.level)) - 1));
-  check("cada zona tem um chefe", ZONE_IDS.every((z) => ZONES[z].boss.kind && ZONES[z].boss.respawnS >= 120));
+  check("só os baús dão lendário/mítico: o teto dos inimigos comuns é menor que o dos baús", Object.keys(ZONES[3].drops.weights).every((r) => rarityIndex(r as Rarity) <= 3) && COMBAT_ZONES.every((z) => ZONES[z].boss!.level > Math.max(...ZONES[z].enemies.map((e) => e.level)) - 1));
+  check("cada zona tem um chefe", COMBAT_ZONES.every((z) => ZONES[z].boss!.kind && ZONES[z].boss!.respawnS >= 120));
 }
 
 console.log("\n== Organizar a mochila ==");

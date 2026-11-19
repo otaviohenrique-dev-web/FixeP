@@ -53,6 +53,7 @@ export function rollMobLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharClas
 
 /** Baú do chefe: `count` equipamentos; o primeiro é no mínimo da raridade `min`. Só aqui saem as raridades mais altas da zona. */
 export function rollChestLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharClass = "warrior"): Drop[] {
+  if (!zone.boss) return []; // a cidade segura não tem chefe
   const c = zone.boss.chest;
   if (testMode()) return [{ id: `${cls}_helmet_${c.min}`, qty: 1 }, { id: "pocao_de_vida", qty: 2 }, ...(econTest() ? [{ id: COIN_OBOL.id, qty: 1 }] : [])];
   const out: Drop[] = [{ id: COIN_IRON.id, qty: Math.round(bossIron(zone.boss.level, rng) * (1.5 + rng())) }]; // sacola grande do chefe

@@ -8,7 +8,7 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  TRADE_INVITE_S, TRADE_RANGE, TRADE_READY_DELAY_S, type NpcKind, type TradeEvent, type TradeOfferSide,
+  START_ZONE, HUB_ZONE, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, TRADE_READY_DELAY_S, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
@@ -17,6 +17,7 @@ import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuse
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
+import { deposit, withdraw, moveInVault, moveCoins, vaultSnapshot, type Vault } from "../game/vault.js";
 
 interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string> }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
@@ -78,16 +79,18 @@ export class ZoneRoom extends Room<ZoneState> {
       this.state.enemies.set(`e${i + 1}`, e);
     });
 
-    const b = this.zone.boss; // o chefe da zona (um só): volta sozinho depois de respawnS
-    const boss = new Enemy();
-    boss.kind = b.kind; boss.x = boss.sx = b.x; boss.y = boss.sy = b.y; boss.level = b.level;
-    boss.maxHp = boss.hp = enemyHp(b.level, b.kind);
-    boss.nextSlam = 6;
-    if (process.env.BOSS_TEST === "1" && process.env.NODE_ENV !== "production") { // só nos testes: chefe de 1 de vida, num canto livre da zona 1
-      boss.x = boss.sx = this.zone.w - 4; boss.y = boss.sy = 4;
-      boss.maxHp = boss.hp = 1;
+    const b = this.zone.boss; // o chefe da zona (um só): volta sozinho depois de respawnS; a cidade segura não tem
+    if (b) {
+      const boss = new Enemy();
+      boss.kind = b.kind; boss.x = boss.sx = b.x; boss.y = boss.sy = b.y; boss.level = b.level;
+      boss.maxHp = boss.hp = enemyHp(b.level, b.kind);
+      boss.nextSlam = 6;
+      if (process.env.BOSS_TEST === "1" && process.env.NODE_ENV !== "production") { // só nos testes: chefe de 1 de vida, num canto livre da zona 1
+        boss.x = boss.sx = this.zone.w - 4; boss.y = boss.sy = 4;
+        boss.maxHp = boss.hp = 1;
+      }
+      this.state.enemies.set("boss", boss);
     }
-    this.state.enemies.set("boss", boss);
 
     // Cliente envia INTENÇÃO (alvo / ação), nunca posição nem dano. Servidor valida e simula.
     this.onMessage(Msg.MoveTo, (client, p: MoveToPayload) => {
@@ -225,12 +228,49 @@ export class ZoneRoom extends Room<ZoneState> {
     });
     this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(pl, p?.slot)));
 
+    // Baú da cidade: o servidor confere a distância a CADA pedido, valida os espaços e grava bolsa+baú numa transação só
+    this.onMessage(Msg.VaultOpen, (client) => void this.vaultOp(client, () => ({ ok: true })));
+    this.onMessage(Msg.VaultDeposit, (client, p: { slot?: unknown; qty?: unknown; to?: unknown }) => void this.vaultOp(client, (pl, v) => deposit(pl.inv, v, p?.slot, p?.qty, p?.to ?? undefined)));
+    this.onMessage(Msg.VaultWithdraw, (client, p: { slot?: unknown; qty?: unknown; to?: unknown }) => void this.vaultOp(client, (pl, v) => withdraw(pl.inv, v, p?.slot, p?.qty, p?.to ?? undefined)));
+    this.onMessage(Msg.VaultMove, (client, p: { from?: unknown; to?: unknown }) => void this.vaultOp(client, (_pl, v) => moveInVault(v, p?.from, p?.to)));
+    this.onMessage(Msg.VaultCoins, (client, p: { coin?: unknown; amount?: unknown; dir?: unknown }) => void this.vaultOp(client, (pl, v) => moveCoins(pl.inv, v, p?.coin, p?.amount, p?.dir)));
+
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_RATE);
   }
 
   // ------------------------------------------------------------------ travessia entre zonas
   /** Aprova a travessia: congela o jogador, grava progresso E a nova zona no banco e só então avisa o cliente (que entra na sala nova). */
-  private async travel(id: string, p: Player, portal: PortalDef) {
+  // ------------------------------------------------------------------ baú da cidade
+  /** Operação no baú pessoal: abre/lê do banco na 1ª vez, valida distância e estado, aplica, grava (bolsa+baú juntos) e devolve as fotografias. */
+  private async vaultOp(client: Client, op: (p: Player, v: Vault) => { ok: true } | { ok: false; error: string }) {
+    if (!this.allow(client)) return;
+    const p = this.state.players.get(client.sessionId);
+    const at = this.zone.vault;
+    if (!p || p.dead || p.traveling || p.vaultBusy) return;
+    if (!at || dist(p.x, p.y, at.x, at.y) > VAULT_REACH) return this.notify(client.sessionId, "Chegue mais perto do baú.");
+    if (p.trading) return this.notify(client.sessionId, "Termine ou cancele a troca primeiro.");
+    p.vaultBusy = true; // uma operação por vez por jogador (a carga do banco é assíncrona)
+    try {
+      if (!p.vault) p.vault = await this.repo.loadVault(p.charId);
+      if (!this.state.players.has(client.sessionId) || p.dead || p.traveling) return;
+      const r = op(p, p.vault);
+      if (!r.ok) this.notify(client.sessionId, r.error);
+      else {
+        p.invDirty = p.vaultDirty = true;
+        this.refreshStats(p);
+        void this.save(p); // grava bolsa e baú na mesma transação (na fila do jogador)
+        this.sendInv(client.sessionId, p);
+      }
+      client.send(Evt.Vault, vaultSnapshot(p.vault));
+    } catch (e) {
+      console.error("[baú] falha:", (e as Error).message);
+      this.notify(client.sessionId, "O baú não respondeu. Tente de novo.");
+    } finally {
+      p.vaultBusy = false;
+    }
+  }
+
+  private async travel(id: string, p: Player, portal: Pick<PortalDef, "to">, fromDeath = false) {
     if (p.traveling || !ZONES[portal.to]) return;
     p.traveling = true;
     p.tx = p.x;
@@ -246,7 +286,7 @@ export class ZoneRoom extends Room<ZoneState> {
       p.invulnUntil = 0;
       return this.notify(id, "A passagem falhou. Tente de novo.");
     }
-    arrivals.set(p.charId, this.zone.id);
+    arrivals.set(p.charId, fromDeath ? 0 : this.zone.id); // 0 = sem portal de origem: nasce no ponto de nascimento da cidade
     this.clients.getById(id)?.send(Evt.Travel, { zone: portal.to });
     setTimeout(() => this.clients.getById(id)?.leave(4010), 3000); // se o cliente não sair sozinho, o servidor o solta
   }
@@ -263,6 +303,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** liga/desliga o modo. Já estar no estado pedido não faz nada; pedir o contrário no meio da canalização a cancela. */
   private requestPvp(id: string, p: Player, on: boolean) {
+    if (this.zone.safe) return this.notify(id, "A cidade é um lugar de paz: o PvP não existe aqui.");
     if (p.pvpChan !== 0) {
       if ((p.pvpChan === 1) !== on) { p.pvpChan = 0; this.pvpEvt(id, "stop"); } // mudou de ideia: cancela sem aviso de dano
       return;
@@ -294,7 +335,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** dano de jogador em jogador: só se AMBOS estão em PvP (quem não está nunca é alvo) */
   private canPvpHit(by: string, o: Player, oid: string): boolean {
-    if (oid === by || o.dead || !o.pvp || this.t < o.invulnUntil) return false;
+    if (this.zone.safe || oid === by || o.dead || !o.pvp || this.t < o.invulnUntil) return false;
     const a = this.state.players.get(by);
     if (!a || a.dead || !a.pvp) return false;
     return !(a.party && a.party === o.party); // membros do mesmo grupo nunca se ferem
@@ -632,7 +673,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (!character) throw new ServerError(403, "crie um personagem antes de entrar");
     const inventory = await this.repo.loadInventory(character.id, character.class);
     // o personagem só entra na sala da zona em que está (a zona é gravada pelo servidor): ninguém "teletransporta" pedindo outra sala
-    if ((character.zone ?? 1) !== this.zone.id) throw new ServerError(403, "zona errada");
+    if ((character.zone ?? START_ZONE) !== this.zone.id) throw new ServerError(403, "zona errada");
     // uma sessão por conta (em qualquer zona): derruba a anterior, exceto quem já está saindo por um portal
     const old = active.get(user.id);
     if (old) {
@@ -732,15 +773,17 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private async doSave(p: Player) {
-    if (!p.charId || (!p.dirty && !p.invDirty)) return;
-    const progress = p.dirty, inv = p.invDirty;
-    p.dirty = p.invDirty = false;
+    if (!p.charId || (!p.dirty && !p.invDirty && !p.vaultDirty)) return;
+    const progress = p.dirty, inv = p.invDirty, vault = p.vaultDirty && !!p.vault;
+    p.dirty = p.invDirty = p.vaultDirty = false;
     try {
       if (progress) await this.repo.saveProgress(p.charId, p.level, p.xp);
-      if (inv) await this.repo.saveInventory(p.charId, p.inv);
+      if (vault) await this.repo.saveInventoryAndVault(p.charId, p.inv, p.vault!); // bolsa e baú na MESMA transação
+      else if (inv) await this.repo.saveInventory(p.charId, p.inv);
     } catch (e) {
       p.dirty ||= progress; // tenta de novo no próximo ciclo
       p.invDirty ||= inv;
+      p.vaultDirty ||= vault;
       console.error("[db] falha ao salvar personagem:", (e as Error).message);
     }
   }
@@ -777,7 +820,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private tick(dt: number) {
     this.t += dt;
     this.state.players.forEach((p, id) => {
-      this.updatePlayer(p, dt);
+      this.updatePlayer(id, p, dt);
       this.updatePvp(id, p);
       if (!p.dead && !p.traveling) { // pisou num portal: atravessa (sem apertar nada)
         const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= q.r);
@@ -798,17 +841,18 @@ export class ZoneRoom extends Room<ZoneState> {
     this.state.enemies.forEach((e, id) => this.updateEnemy(id, e, dt));
   }
 
-  private updatePlayer(p: Player, dt: number) {
+  private updatePlayer(id: string, p: Player, dt: number) {
     if (p.dead) {
       if (this.t >= p.deadUntil) {
         p.dead = false;
         p.hp = p.maxHp;
         p.manaF = p.maxMana;
         p.mana = p.maxMana;
-        p.x = p.tx = this.zone.spawn.x; // renasce na zona onde caiu
+        p.x = p.tx = this.zone.spawn.x;
         p.y = p.ty = this.zone.spawn.y;
         p.combatAt = -1e9;
         p.invulnUntil = this.t + 2; // um respiro ao renascer (evita ser abatido de novo no ponto de início)
+        if (!this.zone.safe) void this.travel(id, p, { to: HUB_ZONE }, true); // morreu numa zona de combate: renasce na cidade
       }
       return;
     }
@@ -1405,6 +1449,7 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false, src?: { id: string; e: Enemy }) {
+    if (this.zone.safe) return; // cidade segura: NINGUÉM leva dano, venha de onde vier (área, armadilha, projétil)
     p.combatAt = this.t; // em combate: a regeneração de vida recomeça só depois de um tempo
     p.regenAcc = 0;
     if (by) { const a = this.state.players.get(by); if (a) a.combatAt = this.t; }

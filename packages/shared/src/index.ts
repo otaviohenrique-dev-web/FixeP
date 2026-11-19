@@ -42,6 +42,11 @@ export const Msg = {
   TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols }: define a minha oferta (reinicia as confirmações dos dois lados)
   TradeReady: "trade_ready", // { ready: boolean }: confirma (ou retira a confirmação); com os dois confirmados o servidor executa
   TradeCancel: "trade_cancel", // {}: cancela a troca
+  VaultOpen: "vault_open", // {}: abre o baú da cidade (o servidor valida a distância e envia Evt.Vault)
+  VaultDeposit: "vault_deposit", // { slot, qty?, to? }: bolsa -> baú (to = espaço do baú, opcional)
+  VaultWithdraw: "vault_withdraw", // { slot, qty?, to? }: baú -> bolsa (to = espaço da bolsa, opcional)
+  VaultMove: "vault_move", // { from, to }: dentro do baú (troca de lugar ou junta pilhas)
+  VaultCoins: "vault_coins", // { coin: "iron" | "obols", amount, dir: "in" | "out" }: deposita ou retira moedas
   QMode: "q_mode", // { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
 } as const;
 
@@ -73,6 +78,7 @@ export const Evt = {
   Trade: "trade", // TradeEvent: estado da janela de troca (aberta, ofertas, confirmações) ou fechamento
   TradeInvite: "trade_invite", // { from }: convite de troca recebido (expira em TRADE_INVITE_S)
   TradeInviteEnd: "trade_invite_end", // {}: o convite acabou
+  Vault: "vault", // VaultSnapshot: o conteúdo do baú pessoal (só para o dono, depois de abrir ou de qualquer operação)
 } as const;
 
 // ------------------------------------------------------------ troca entre jogadores
@@ -403,3 +409,4 @@ export * from "./items";
 export * from "./balance";
 export * from "./economy";
 export * from "./zones";
+export * from "./vault";
