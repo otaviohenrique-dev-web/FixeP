@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+<defs>
+<radialGradient id="bg" cx=".5" cy=".42" r=".7"><stop offset="0" stop-color="#0d1420"/><stop offset="1" stop-color="#05080d"/></radialGradient>
+<linearGradient id="gd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3d98c"/><stop offset=".5" stop-color="#d9b25a"/><stop offset="1" stop-color="#7a5a22"/></linearGradient>
+<radialGradient id="gl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#8fd3ff" stop-opacity=".55"/><stop offset="1" stop-color="#8fd3ff" stop-opacity="0"/></radialGradient>
+<linearGradient id="fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd48a"/><stop offset="1" stop-color="#ff9a3d"/></linearGradient>
+</defs>
+<circle cx="50" cy="50" r="48" fill="url(#bg)" stroke="url(#gd)" stroke-width="3"/><circle cx="50" cy="50" r="43" fill="none" stroke="#d9b25a" stroke-opacity=".35" stroke-width=".8"/>
+<g>
+<circle cx="50" cy="48" r="34" fill="url(#gl)"/>
+<g fill="url(#gd)" stroke="#2a1d08" stroke-width="1.2" stroke-linejoin="round">
+<polygon points="38,22 50,17 62,22 62,70 50,84 38,70"/><polygon points="38,22 50,17 78,17 84,26 62,26 62,34 38,34"/><polygon points="62,44 76,44 80,51 62,51"/><polygon points="30,38 70,38 66,43 34,43"/></g>
+<path d="M50 20 L50 78" stroke="#fff3cf" stroke-opacity=".55" stroke-width="1.2"/>
+<polygon points="50,2.5 55,10 53,13 50,9.5 47,13 45,10" fill="url(#fl)" stroke="#8a3d08" stroke-width=".8" stroke-linejoin="round"/>
+</g></svg>

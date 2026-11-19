@@ -372,3 +372,10 @@ python tools/gen_debug_atlas.py          # precisa de Python e Pillow
 ```
 
 Testes da lógica do carregador: `npm run test:sprites -w @frixep/client` (40 verificações).
+
+## Instalar como app (PWA), ícones e tela do celular
+
+- O jogo é um PWA: `packages/client/public/manifest.webmanifest` (tela cheia/standalone, paisagem, cores escuras) e `sw.js` (service worker mínimo: guarda só o shell e a arte estática; **nunca** API, WebSocket nem `assets/_manifest.json`; o jogo continua exigindo rede). Para invalidar o cache de todos, aumente `VERSION` em `sw.js`. O `render.yaml` dá cache curto a `sw.js` e ao manifest.
+- No Android/Chrome/Brave aparece "Instalar app" no menu do jogo (botão ☰) quando o navegador permite; no iPhone, o mesmo botão mostra a dica "Compartilhar > Adicionar à Tela de Início". Instalado (tela cheia), o botão some.
+- Ícones: `python tools/gen_icons.py` (Pillow) regenera `favicon.svg`, `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` e `icon-maskable-512.png` em `packages/client/public/`.
+- Tela do celular: `packages/client/src/viewport.ts` mede a altura realmente visível (`visualViewport`) e publica `--vh`; todos os painéis modais (baú, bolsa, mercado, ferreiro, troca, menu) usam essa altura, com cabeçalho fixo e rolagem interna. O canvas acompanha `resize`/`orientationchange`/`visualViewport.resize`; puxar-para-recarregar e zoom por duplo toque estão bloqueados.
