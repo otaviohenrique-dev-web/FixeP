@@ -81,7 +81,9 @@ const CSS = `
 .ec-chip{position:relative;width:44px;height:44px;border-radius:5px;background:rgba(6,12,20,.8);border:1px solid rgba(160,200,240,.25);display:grid;place-items:center;padding:0}
 .ec-chip img{width:36px;height:36px;image-rendering:pixelated}
 .ec-chip i{position:absolute;right:2px;bottom:1px;font:700 10px/1 "Cinzel",Georgia,serif;font-style:normal;text-shadow:0 1px 3px #000}
-.ec-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.ec-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.ec-bagwrap{padding:0 14px 8px;overflow:auto}
+.ec-offer .ec-chip{cursor:pointer;color:inherit}
 .ec-grid .ec-chip{width:auto;height:auto;aspect-ratio:1;cursor:pointer;color:inherit}
 .ec-grid .ec-chip[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 10px rgba(255,170,80,.4)}
 .ec-coinrow{display:flex;align-items:center;gap:6px;font:700 11px/1 "Cinzel",Georgia,serif}
@@ -334,28 +336,36 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   tback.append(tcard);
   document.body.append(tback);
   let tradeOpen = false;
-  let mineSlots = new Map<number, number>(); // espaço -> quantidade oferecida
+  let mineSlots = new Map<number, number>(); // espaço -> quantidade oferecida (a minha oferta LOCAL: é a verdade enquanto há pedido pendente)
   let mineIron = 0, mineObols = 0;
+  let seq = 0, acked = 0; // seq: pedidos de oferta que enviei; acked: o último que o servidor confirmou (mine.seq)
   let last: TradeEvent | null = null;
   let sendTimer: ReturnType<typeof setTimeout> | undefined;
-  let readyTimer: ReturnType<typeof setTimeout> | undefined;
-  const pushOffer = () => {
+  const sendOffer = () => {
     clearTimeout(sendTimer);
-    sendTimer = setTimeout(() => opts.send(Msg.TradeOffer, { items: [...mineSlots].map(([slot, qty]) => ({ slot, qty })), iron: mineIron, obols: mineObols }), 150);
+    opts.send(Msg.TradeOffer, { items: [...mineSlots].map(([slot, qty]) => ({ slot, qty })), iron: mineIron, obols: mineObols, seq });
+  };
+  /** qualquer edição: sobe o contador e envia (pequena espera para juntar a digitação de moedas) */
+  const pushOffer = (now = false) => {
+    seq++;
+    clearTimeout(sendTimer);
+    if (now) sendOffer(); else sendTimer = setTimeout(sendOffer, 200);
   };
   const cancelTrade = () => { opts.send(Msg.TradeCancel, {}); closeTradeUi(); };
-  function closeTradeUi() { tradeOpen = false; tback.classList.remove("open"); clearTimeout(sendTimer); clearTimeout(readyTimer); last = null; }
+  function closeTradeUi() { tradeOpen = false; tback.classList.remove("open"); clearTimeout(sendTimer); last = null; }
 
-  function chips(side: TradeOfferSide): HTMLElement {
+  function chips(side: TradeOfferSide, onTake?: (slot: number) => void): HTMLElement {
     const box = el("div", "ec-offer");
     for (const it of side.items) {
       const d = ITEMS[it.id];
       if (!d) continue;
-      const c = el("div", "ec-chip");
+      const c = el(onTake ? "button" : "div", "ec-chip");
+      if (c instanceof HTMLButtonElement) c.type = "button";
       c.title = `${d.name}${it.qty > 1 ? ` ×${it.qty}` : ""} — ${brief(d)}`;
-      c.style.borderColor = RARITY_COLOR[d.rarity] + "99";
+      c.style.borderColor = RARITY_COLOR[d.rarity] + "cc";
       c.append(itemImg(it.id, ""));
       if (it.qty > 1) { const q = el("i", "", String(it.qty)); c.append(q); }
+      if (onTake && it.slot !== undefined) { const slot = it.slot; c.onclick = () => onTake(slot); c.setAttribute("aria-label", `Tirar ${d.name} da oferta`); }
       box.append(c);
     }
     if (side.iron) { const c = el("div", "ec-chip"); c.title = coinName(COIN_IRON.id, side.iron); c.append(itemImg(COIN_IRON.id, ""), el("i", "", num(side.iron))); box.append(c); }
@@ -364,50 +374,38 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     return box;
   }
 
+  /** a oferta que MOSTRO como minha: a local (otimista), que é a verdade enquanto há pedido pendente */
+  const localSide = (): TradeOfferSide => ({
+    items: [...mineSlots].filter(([s]) => snap.inv[s]).map(([slot, qty]) => ({ slot, qty, id: snap.inv[slot]!.id })),
+    iron: mineIron, obols: mineObols, ready: !!last?.mine?.ready,
+  });
+
   function renderTrade(ev: TradeEvent) {
     last = ev;
     const mine = ev.mine!, theirs = ev.theirs!;
+    // preserva o foco do campo de moedas (o painel é refeito a cada evento)
+    const ae = document.activeElement as HTMLInputElement | null;
+    const refocus = ae && tcard.contains(ae) && ae.dataset.kind ? { kind: ae.dataset.kind, at: ae.selectionStart } : null;
     tcard.replaceChildren();
-    tcard.append(head(`Troca com ${ev.with}`, "Os dois lados precisam aceitar. Qualquer mudança na oferta desfaz o aceite.", cancelTrade));
+    tcard.append(head(`Troca com ${ev.with}`, "Os dois aceitam a mesma oferta. Qualquer mudança desfaz os aceites.", cancelTrade));
     const cols = el("div", "ec-cols");
-    // minha oferta: escolho da mochila + moedas
     const m = el("div", "ec-col" + (mine.ready ? " ok" : ""));
     const mh = el("h3", "", "Sua oferta");
     if (mine.ready) mh.append(el("em", "", "aceitou ✓"));
-    m.append(mh);
-    const grid = el("div", "ec-grid");
-    grid.setAttribute("role", "group");
-    grid.setAttribute("aria-label", "Sua mochila: toque para oferecer");
-    snap.inv.forEach((st, i) => {
-      const c = el("button", "ec-chip");
-      c.type = "button";
-      const d = st ? ITEMS[st.id] : null;
-      const on = mineSlots.has(i);
-      c.setAttribute("aria-pressed", String(on));
-      if (d && st) {
-        c.title = `${d.name}${st.qty > 1 ? ` ×${st.qty}` : ""} — ${brief(d)}`;
-        c.style.borderColor = RARITY_COLOR[d.rarity] + "88";
-        c.append(itemImg(st.id, ""));
-        if (st.qty > 1) c.append(el("i", "", String(st.qty)));
-        c.onclick = () => {
-          if (on) mineSlots.delete(i); else if (mineSlots.size < TRADE_MAX_ITEMS) mineSlots.set(i, st.qty);
-          renderTrade(last!);
-          pushOffer();
-        };
-      } else c.disabled = true;
-      grid.append(c);
-    });
-    m.append(grid);
+    m.append(mh, chips(localSide(), (slot) => { mineSlots.delete(slot); pushOffer(true); renderTrade(last!); }));
     for (const [kind, label, get, set] of [["iron", COIN_IRON.short, () => mineIron, (v: number) => { mineIron = v; }], ["obols", COIN_OBOL.short, () => mineObols, (v: number) => { mineObols = v; }]] as const) {
       const r = el("label", "ec-coinrow");
       r.append(coinImg(kind));
       const inp = el("input");
       inp.type = "number"; inp.min = "0"; inp.max = String(Math.min(MAX_COINS, kind === "iron" ? snap.iron : snap.obols)); inp.step = "1"; inp.value = String(get());
+      inp.dataset.kind = kind;
       inp.setAttribute("aria-label", `${label} a oferecer`);
       inp.oninput = () => {
         const v = Math.max(0, Math.min(Math.floor(Number(inp.value) || 0), kind === "iron" ? snap.iron : snap.obols));
+        if (v === get()) return;
         set(v);
         pushOffer();
+        paint();
       };
       inp.onblur = () => { inp.value = String(get()); };
       r.append(inp, document.createTextNode(`/ ${num(kind === "iron" ? snap.iron : snap.obols)}`));
@@ -419,23 +417,60 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     t.append(th, chips(theirs));
     cols.append(m, t);
     tcard.append(cols);
+    // minha mochila: toque para colocar na oferta
+    const bag = el("div", "ec-col");
+    bag.append(el("h3", "", "Sua mochila · toque para oferecer"));
+    const grid = el("div", "ec-grid");
+    grid.setAttribute("role", "group");
+    snap.inv.forEach((st, i) => {
+      const c = el("button", "ec-chip");
+      c.type = "button";
+      const d = st ? ITEMS[st.id] : null;
+      const on = mineSlots.has(i);
+      c.setAttribute("aria-pressed", String(on));
+      if (d && st) {
+        c.title = `${d.name}${st.qty > 1 ? ` ×${st.qty}` : ""} — ${brief(d)}`;
+        c.style.borderColor = RARITY_COLOR[d.rarity] + (on ? "ff" : "66");
+        c.append(itemImg(st.id, ""));
+        if (st.qty > 1) c.append(el("i", "", String(st.qty)));
+        c.onclick = () => {
+          if (on) mineSlots.delete(i);
+          else if (mineSlots.size < TRADE_MAX_ITEMS) mineSlots.set(i, st.qty);
+          else return opts.toast(`No máximo ${TRADE_MAX_ITEMS} itens por troca.`, "#ffb3a6");
+          pushOffer(true);
+          renderTrade(last!);
+        };
+      } else c.disabled = true;
+      grid.append(c);
+    });
+    bag.append(grid);
+    const bagWrap = el("div", "ec-bagwrap");
+    bagWrap.append(bag);
+    tcard.append(bagWrap);
     const foot = el("div", "ec-foot");
-    const note = el("p", "ec-note", mine.ready ? "Você aceitou. Esperando o outro jogador…" : "Confira a oferta do outro jogador antes de aceitar.");
-    const ok = el("button", "ec-btn go", mine.ready ? "Retirar aceite" : "Aceitar");
+    const note = el("p", "ec-note");
+    const ok = el("button", "ec-btn go");
     ok.type = "button";
-    const wait = ev.readyIn ?? 0;
-    if (!mine.ready && wait > 0) { // o servidor só aceita depois de um instante; o botão espera junto
-      ok.disabled = true;
-      clearTimeout(readyTimer);
-      readyTimer = setTimeout(() => { if (last === ev) renderTrade(ev); }, wait * 1000 + 50);
-      ev.readyIn = 0;
-    }
-    ok.onclick = () => opts.send(Msg.TradeReady, { ready: !mine.ready });
     const cancel = el("button", "ec-btn danger", "Cancelar");
     cancel.type = "button";
     cancel.onclick = cancelTrade;
+    const hasAny = (s: TradeOfferSide) => s.items.length > 0 || s.iron > 0 || s.obols > 0;
+    function paint() {
+      const pend = seq > acked;
+      const something = hasAny(localSide()) || hasAny(theirs);
+      ok.textContent = mine.ready ? "Retirar aceite" : "Aceitar";
+      ok.disabled = mine.ready ? false : pend || !something;
+      note.textContent = mine.ready ? (theirs.ready ? "Concluindo…" : "Você aceitou. Esperando o outro jogador…")
+        : pend ? "Atualizando a oferta…" : !something ? "Coloque itens ou moedas na oferta." : theirs.ready ? `${ev.with} já aceitou. Confira e aceite.` : "Confira a oferta do outro jogador antes de aceitar.";
+    }
+    paint();
+    ok.onclick = () => { if (!ok.disabled) opts.send(Msg.TradeReady, { ready: !mine.ready, rev: ev.rev }); };
     foot.append(note, ok, cancel);
     tcard.append(foot);
+    if (refocus) {
+      const inp = tcard.querySelector<HTMLInputElement>(`input[data-kind="${refocus.kind}"]`);
+      if (inp) { inp.focus(); try { inp.setSelectionRange(refocus.at, refocus.at); } catch { /* type=number não aceita seleção */ } }
+    }
   }
 
   // convite de troca
@@ -464,15 +499,16 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     if (!tradeOpen) { // abriu: fecha o que estiver aberto e zera a minha oferta
       closeNpc();
       tradeOpen = true;
-      mineSlots = new Map(); mineIron = 0; mineObols = 0;
+      mineSlots = new Map(); mineIron = 0; mineObols = 0; seq = 0; acked = 0;
       tback.classList.add("open");
     }
-    // a oferta do servidor é a verdade (ex.: um pedido recusado): reflete no que está marcado
-    const slotsNow = new Map<number, number>();
-    for (const it of ev.mine!.items) {
-      for (const [s, q] of mineSlots) if (snap.inv[s]?.id === it.id && q === it.qty && !slotsNow.has(s)) { slotsNow.set(s, q); break; }
+    // o servidor confirma até onde processou meus pedidos (mine.seq). Só adoto a oferta dele quando NADA meu está pendente:
+    // um eco antigo (de uma mudança do outro lado, por ex.) nunca apaga o que acabei de colocar.
+    acked = Math.max(acked, ev.mine!.seq ?? 0);
+    if (acked >= seq) {
+      mineSlots = new Map(ev.mine!.items.filter((it) => it.slot !== undefined).map((it) => [it.slot!, it.qty]));
+      mineIron = ev.mine!.iron; mineObols = ev.mine!.obols;
     }
-    if (ev.mine!.items.length === slotsNow.size) mineSlots = slotsNow;
     renderTrade(ev);
   }
 
