@@ -146,14 +146,12 @@ export class NpcLayer {
   /** anel dourado no chão do NPC enquanto o jogador está ao alcance (convite para falar) */
   update(time: number, gx: number, gy: number) {
     for (const v of this.views.values()) {
-      if (v.sprite) { // vira-se para o jogador quando ele está por perto; de tempos em tempos faz o seu ofício
-        const dx = gx - v.def.x, dy = gy - v.def.y;
-        if (Math.hypot(dx, dy) < 9) {
-          const d = gridAngleToDir(Math.atan2(dy, dx));
-          const diag: Dir = d === "e" || d === "s" || d === "se" ? "se" : d === "n" || d === "ne" ? "ne" : d === "w" || d === "sw" ? "sw" : "nw";
-          if (diag !== v.dir) { v.dir = diag; if (!v.busyUntil) { v.cur = ""; this.play(v, "idle"); } }
+      if (v.sprite) {
+        // NPCs mantêm-se virados de frente ("se"); de tempos em tempos executam seu ofício
+        if (!v.busyUntil && time > v.nextAct) {
+          this.play(v, ACT[v.def.kind] ?? "idle", true);
+          v.nextAct = time + 7000 + Math.random() * 6000;
         }
-        if (!v.busyUntil && time > v.nextAct) { this.play(v, ACT[v.def.kind] ?? "idle", true); v.nextAct = time + 7000 + Math.random() * 6000; }
       }
       v.ring.clear();
       if (Math.hypot(v.def.x - gx, v.def.y - gy) <= NPC_REACH) {

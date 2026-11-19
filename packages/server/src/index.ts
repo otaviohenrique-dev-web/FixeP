@@ -16,9 +16,33 @@ const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
 const db = await openDb();
 const repo = new Repo(db);
 
+const isAllowedOrigin = (origin: string | undefined): boolean => {
+  if (!origin) return true;
+  try {
+    const u = new URL(origin);
+    const h = u.hostname;
+    if (h === "localhost" || h === "127.0.0.1") return true;
+    if (h === "frixep.com" || h.endsWith(".frixep.com")) return true;
+    if (h.endsWith(".onrender.com")) return true;
+    if (clientUrl && origin === clientUrl) return true;
+  } catch {}
+  return false;
+};
+
 const app = express();
 app.set("trust proxy", 1); // atrás do proxy (Render): IP real nos limites de taxa
-app.use(cors({ origin: clientUrl }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origem não permitida por CORS: ${origin}`));
+      }
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: "10kb" }));
 app.use("/auth", authRouter(repo));
 app.use("/api", apiRouter(repo));
