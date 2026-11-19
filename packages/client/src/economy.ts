@@ -1,8 +1,9 @@
 import { isTypingTarget } from "./keys";
+import { mountMarket } from "./market";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide,
+  type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent,
 } from "@frixep/shared";
 
 /**
@@ -22,6 +23,9 @@ export interface EconomyUi {
   isTrading(): boolean;
   /** abre o diálogo de confirmação de quebrar o item do espaço `slot` */
   confirmBreak(slot: number): void;
+  setMarketPage(p: MarketPage): void;
+  setMarketMine(m: MarketMineEvent): void;
+  setMarketDone(d: MarketDoneEvent): void;
 }
 
 const CSS = `
@@ -175,9 +179,12 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   const picked = new Set<number>(); // ferreira: espaços escolhidos
   const confirmSell = new Set<number>(); // venda de item raro: pede um segundo clique
 
-  const closeNpc = () => { back.classList.remove("open"); npc = null; picked.clear(); confirmSell.clear(); };
+  const market = mountMarket({ send: opts.send, toast: opts.toast, getClass: opts.getClass });
+  const closeNpc = () => { back.classList.remove("open"); market.close(); npc = null; picked.clear(); confirmSell.clear(); };
   function openNpc(n: NpcDef) {
     if (tradeOpen) return;
+    if (n.kind === "auctioneer") { closeNpc(); market.open(n); return; }
+    market.close();
     npc = n; tab = "buy"; picked.clear(); confirmSell.clear();
     back.classList.add("open");
     renderNpc();
@@ -584,16 +591,17 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     setSnapshot(s) {
       snap = s;
       paintWallet();
+      market.setSnapshot(s);
       for (const i of [...picked]) if (!snap.inv[i]) picked.delete(i);
       if (npc && back.classList.contains("open")) renderNpc();
       if (tradeOpen && last) renderTrade(last);
     },
     openNpc,
     closeNpc,
-    isNpcOpen: () => back.classList.contains("open"),
+    isNpcOpen: () => back.classList.contains("open") || market.isOpen(),
     setNearNpc(n) {
       nearNpc = n;
-      near.classList.toggle("show", !!n && !tradeOpen && !back.classList.contains("open"));
+      near.classList.toggle("show", !!n && !tradeOpen && !back.classList.contains("open") && !market.isOpen());
       if (n) { near.replaceChildren(el("kbd", "", "G"), document.createTextNode(`Falar com ${n.name} (${n.title})`)); }
     },
     setTrade,
@@ -601,5 +609,8 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     endTradeInvite,
     isTrading: () => tradeOpen,
     confirmBreak,
+    setMarketPage: (p) => market.setPage(p),
+    setMarketMine: (m) => market.setMine(m),
+    setMarketDone: (d) => market.setDone(d),
   };
 }

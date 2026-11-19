@@ -24,6 +24,8 @@
     "test:combate": "node test/combate.mjs",
     "test:econ:unit": "tsx test/economy.unit.ts",
     "test:econ": "node test/economy.mjs",
+    "test:market:unit": "tsx test/market.unit.ts",
+    "test:market": "node test/market.mjs",
     "test:guerreiro": "node test/guerreiro.mjs",
     "test:curandeiro": "node test/curandeiro.mjs",
     "test:balance:unit": "tsx test/balance.unit.ts"

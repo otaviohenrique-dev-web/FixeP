@@ -48,6 +48,7 @@ export class Player extends Schema {
   reflectPct = 0; // fração do dano dos inimigos que volta a eles
   hurtAt = -1e9; // último dano RECEBIDO (o PvP só canaliza depois de PVP_NO_DAMAGE_S sem apanhar)
   deadUntil = 0;
+  marketBusy = false; // uma operação do mercado está gravando: a mochila não muda por outros caminhos até acabar
   trading = false; // numa troca: a mochila fica travada (nada se move) até fechar a janela
   dropAt = 0; // último item solto no chão (limite de frequência)
   traveling = false; // travessia aprovada: o jogador não age nem é alvo até sair da sala

@@ -51,19 +51,20 @@ export const ZONE_COINS: Record<number, { bag: number; obol: number; bossObol: n
 export const coinZone = (zoneId: number) => ZONE_COINS[zoneId] ?? ZONE_COINS[1];
 
 // ------------------------------------------------------------ NPCs
-export type NpcKind = "merchant" | "smith";
+export type NpcKind = "merchant" | "smith" | "auctioneer";
 export interface NpcDef { id: string; kind: NpcKind; name: string; title: string; x: number; y: number }
 /** Distância (tiles) até o NPC para conversar, comprar, vender e fundir. O servidor valida a cada pedido. */
 export const NPC_REACH = 3.5;
-const npcPair = (mx: number, my: number, sx: number, sy: number): NpcDef[] => [
+const npcPair = (mx: number, my: number, sx: number, sy: number, ax: number, ay: number): NpcDef[] => [
   { id: "merchant", kind: "merchant", name: "Garrick", title: "Comerciante", x: mx, y: my },
   { id: "smith", kind: "smith", name: "Brasa", title: "Ferreira", x: sx, y: sy },
+  { id: "auctioneer", kind: "auctioneer", name: "Ossian", title: "Leiloeiro", x: ax, y: ay },
 ];
 /** Por enquanto os dois ficam perto do ponto de nascimento de cada zona (longe dos inimigos). */
 export const ZONE_NPCS: Record<number, NpcDef[]> = {
-  1: npcPair(20, 15, 17, 19),
-  2: npcPair(11, 6, 6, 11),
-  3: npcPair(11, 6, 6, 11),
+  1: npcPair(20, 15, 17, 19, 18, 24),
+  2: npcPair(11, 6, 6, 11, 11, 11),
+  3: npcPair(11, 6, 6, 11, 11, 11),
 };
 export const zoneNpcs = (zoneId: number): NpcDef[] => ZONE_NPCS[zoneId] ?? [];
 
