@@ -5,7 +5,7 @@
 import type { Rarity } from "./items";
 
 export type EnemyKind = "skeleton" | "wolf" | "wraith" | "bone_king" | "frost_alpha" | "crypt_lord";
-export type ZoneTheme = "ash" | "frost" | "crypt";
+export type ZoneTheme = "ash" | "frost" | "crypt" | "town";
 
 export interface PortalDef { x: number; y: number; r: number; to: number }
 export interface ZoneDef {
@@ -20,7 +20,9 @@ export interface ZoneDef {
   enemies: readonly { kind: EnemyKind; x: number; y: number; level: number }[];
   lootMult: number; // dificuldade relativa da zona (informativo; os números reais ficam em `drops` e `boss`)
   drops: ZoneDrops; // o que os inimigos comuns soltam
-  boss: ZoneBoss; // o chefe da zona (um por zona) e o baú que ele solta
+  boss?: ZoneBoss; // o chefe da zona (um por zona) e o baú que ele solta; a cidade não tem
+  safe?: boolean; // zona segura (cidade): sem inimigos, sem dano e sem PvP, nem por habilidade de área ou armadilha
+  vault?: { x: number; y: number }; // baú de armazenamento fixo (só na cidade)
 }
 
 /** Drops de inimigos comuns: chance de equipamento/poção por abate e pesos das raridades. Raridade que não está na tabela NUNCA cai aqui (teto da zona). */
@@ -33,12 +35,15 @@ export interface ZoneBoss {
 
 export const PORTAL_RADIUS = 1.6;
 
+/** A cidade segura: onde todo personagem novo nasce, onde se renasce depois de morrer e onde ficam os NPCs de ofício e o baú. */
+export const HUB_ZONE = 4;
+
 export const ZONES: Record<number, ZoneDef> = {
   1: {
     id: 1, name: "Cinzas", theme: "ash", w: 40, h: 40,
     spawn: { x: 20, y: 20 },
-    arrive: { 2: { x: 32, y: 32.5 } },
-    portals: [{ x: 36, y: 36, r: PORTAL_RADIUS, to: 2 }],
+    arrive: { 2: { x: 32, y: 32.5 }, 4: { x: 7, y: 20 } },
+    portals: [{ x: 36, y: 36, r: PORTAL_RADIUS, to: 2 }, { x: 4, y: 20, r: PORTAL_RADIUS, to: 4 }],
     enemies: [
       // todos a mais de 10 tiles do spawn do jogador (aggro = 7): o jogador nasce em segurança.
       // Quanto mais longe do início, mais forte (e mais XP): o nível de cada ponto fica aqui.
@@ -55,9 +60,10 @@ export const ZONES: Record<number, ZoneDef> = {
   2: {
     id: 2, name: "Floresta Gélida", theme: "frost", w: 44, h: 44,
     spawn: { x: 8, y: 8 },
-    arrive: { 1: { x: 8, y: 8 }, 3: { x: 36, y: 36 } },
+    arrive: { 1: { x: 8, y: 8 }, 3: { x: 36, y: 36 }, 4: { x: 7, y: 14 } },
     portals: [
       { x: 4, y: 4, r: PORTAL_RADIUS, to: 1 },
+      { x: 4, y: 14, r: PORTAL_RADIUS, to: 4 },
       { x: 40, y: 40, r: PORTAL_RADIUS, to: 3 },
     ],
     enemies: [
@@ -77,8 +83,8 @@ export const ZONES: Record<number, ZoneDef> = {
   3: {
     id: 3, name: "Catacumbas", theme: "crypt", w: 44, h: 44,
     spawn: { x: 8, y: 8 },
-    arrive: { 2: { x: 8, y: 8 } },
-    portals: [{ x: 4, y: 4, r: PORTAL_RADIUS, to: 2 }],
+    arrive: { 2: { x: 8, y: 8 }, 4: { x: 7, y: 14 } },
+    portals: [{ x: 4, y: 4, r: PORTAL_RADIUS, to: 2 }, { x: 4, y: 14, r: PORTAL_RADIUS, to: 4 }],
     enemies: [
       { kind: "skeleton", x: 20, y: 12, level: 12 },
       { kind: "wraith", x: 14, y: 22, level: 13 },
@@ -93,10 +99,28 @@ export const ZONES: Record<number, ZoneDef> = {
     drops: { gear: 0.11, potion: 0.12, weights: { common: 50, uncommon: 35, rare: 13, epic: 2 } },
     boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "epic", weights: { rare: 25, epic: 55, legendary: 18, mythic: 2 } } },
   },
+  4: {
+    id: 4, name: "Cidade de Brasalume", theme: "town", w: 48, h: 48,
+    spawn: { x: 24, y: 30 },
+    // chegando de cada zona de combate: ao lado do portal de volta (fora do raio dele)
+    arrive: { 1: { x: 41, y: 24 }, 2: { x: 24, y: 7 }, 3: { x: 7, y: 24 } },
+    portals: [
+      { x: 44, y: 24, r: PORTAL_RADIUS, to: 1 }, // leste: Cinzas (a Cripta)
+      { x: 24, y: 4, r: PORTAL_RADIUS, to: 2 }, // norte: Floresta Gélida
+      { x: 4, y: 24, r: PORTAL_RADIUS, to: 3 }, // oeste: Catacumbas
+    ],
+    enemies: [],
+    lootMult: 0,
+    drops: { gear: 0, potion: 0, weights: {} },
+    safe: true,
+    vault: { x: 31, y: 30 },
+  },
 };
 
 export const ZONE_IDS: readonly number[] = Object.keys(ZONES).map(Number);
+/** Sala antiga "zone" (zona 1). A zona inicial dos personagens novos é HUB_ZONE. */
 export const DEFAULT_ZONE = 1;
+export const START_ZONE = HUB_ZONE;
 export const isZoneId = (z: unknown): z is number => typeof z === "number" && Number.isInteger(z) && z in ZONES;
 /** Nome da sala do Colyseus de cada zona (a zona 1 mantém o nome antigo "zone"). */
 export const zoneRoomName = (id: number) => (id === DEFAULT_ZONE ? "zone" : `zone${id}`);

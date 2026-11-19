@@ -5,7 +5,7 @@ process.env.NODE_ENV = "test";
 
 import { randomUUID } from "node:crypto";
 import {
-  ITEMS, ZONES, RARITIES, MAX_COINS, MERGE_COUNT, itemValue, buyPrice, sellPrice, breakValue, shopStock, zoneRarityCap, checkMerge, mergeChance,
+  ITEMS, ZONES, HUB_ZONE, RARITIES, MAX_COINS, MERGE_COUNT, itemValue, buyPrice, sellPrice, breakValue, shopStock, zoneRarityCap, checkMerge, mergeChance,
   enemyKind, mobIron, bossIron, rarityIndex, zoneNpcs, NPC_REACH, PLAYABLE_CLASSES, INV_SLOTS,
 } from "@frixep/shared";
 import { emptyInventory, addItem, snapshot, type Inventory } from "../src/game/inventory.js";
@@ -208,10 +208,11 @@ console.log("\n== Drops de moeda ==");
 
 console.log("\n== NPCs ==");
 {
-  check("cada zona tem comerciante e ferreira, longe dos inimigos", Object.values(ZONES).every((z) => {
-    const n = zoneNpcs(z.id);
-    return n.some((x) => x.kind === "merchant") && n.some((x) => x.kind === "smith") && n.every((x) => z.enemies.every((e) => Math.hypot(e.x - x.x, e.y - x.y) > enemyKind(e.kind).aggro + 1) && x.x >= 0 && x.y >= 0 && x.x < z.w && x.y < z.h);
-  }));
+  const hub = ZONES[HUB_ZONE];
+  const inHub = zoneNpcs(HUB_ZONE);
+  check("a cidade tem comerciante e ferreira, dentro do mapa", inHub.some((x) => x.kind === "merchant") && inHub.some((x) => x.kind === "smith") && inHub.every((x) => x.x >= 0 && x.y >= 0 && x.x < hub.w && x.y < hub.h));
+  check("NENHUMA outra zona tem NPC de ofício (só a cidade)", Object.values(ZONES).filter((z) => z.id !== HUB_ZONE).every((z) => zoneNpcs(z.id).length === 0));
+  check("a ferreira da cidade funde até o teto do mundo (a cidade não tem drops próprios)", zoneRarityCap(HUB_ZONE) === zoneRarityCap(3));
   check("o alcance de conversa é de alguns tiles", NPC_REACH >= 2 && NPC_REACH <= 6);
 }
 

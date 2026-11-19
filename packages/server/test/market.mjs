@@ -17,7 +17,7 @@ async function account(prefix) {
   return { token, name };
 }
 async function enter(acc) {
-  const room = await new Client(WS).joinOrCreate("zone", { token: acc.token });
+  const room = await new Client(WS).joinOrCreate("zone4", { token: acc.token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
   const st = { snap: null, notices: [], page: null, mine: null, done: [] };
   room.onMessage("inv", (s) => (st.snap = s));
@@ -39,7 +39,7 @@ async function goto(c, x, y, tol = 0.6) {
   while (Math.hypot(c.me().x - x, c.me().y - y) > tol && Date.now() - t < 9000) await sleep(100);
 }
 const NPC = "auctioneer";
-const AX = 18, AY = 25.5;
+const AX = 24, AY = 20;
 
 const accA = await account("MkA");
 let A = await enter(accA);

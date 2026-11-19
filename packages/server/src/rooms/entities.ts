@@ -1,6 +1,7 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
 import { SPAWN, CLASS_DEFS, SKELETON, emptyBonuses, type GearBonuses } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
+import type { Vault } from "../game/vault.js";
 
 export class Player extends Schema {
   @type("number") x = SPAWN.x;
@@ -27,6 +28,9 @@ export class Player extends Schema {
   charId = ""; // linha em `characters`
   dirty = false; // progresso ainda não salvo
   invDirty = false; // inventário ainda não salvo
+  vault: Vault | null = null; // baú pessoal (carregado do banco na primeira abertura)
+  vaultDirty = false; // baú ainda não salvo
+  vaultBusy = false; // operação do baú em andamento
   inv: Inventory = emptyInventory();
   potionCdUntil = 0;
   gear: GearBonuses = emptyBonuses(); // bônus e kit do equipamento (recalculado ao equipar, subir de nível etc.)

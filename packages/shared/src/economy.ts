@@ -60,11 +60,9 @@ const npcPair = (mx: number, my: number, sx: number, sy: number, ax: number, ay:
   { id: "smith", kind: "smith", name: "Brasa", title: "Ferreira", x: sx, y: sy },
   { id: "auctioneer", kind: "auctioneer", name: "Ossian", title: "Leiloeiro", x: ax, y: ay },
 ];
-/** Por enquanto os dois ficam perto do ponto de nascimento de cada zona (longe dos inimigos). */
+/** Os NPCs de ofício ficam só na cidade segura (zona 4), na praça: comerciante à esquerda da fonte, ferreira à direita. */
 export const ZONE_NPCS: Record<number, NpcDef[]> = {
-  1: npcPair(20, 15, 17, 19, 18, 24),
-  2: npcPair(11, 6, 6, 11, 11, 11),
-  3: npcPair(11, 6, 6, 11, 11, 11),
+  4: npcPair(19, 24, 29, 24, 24, 18.5),
 };
 export const zoneNpcs = (zoneId: number): NpcDef[] => ZONE_NPCS[zoneId] ?? [];
 
@@ -90,9 +88,10 @@ export const itemFamily = (id: string) => (ITEMS[id] ? id.slice(0, id.length - I
 export const nextRarity = (r: Rarity): Rarity | null => RARITIES[rarityIndex(r) + 1] ?? null;
 /** Raridade máxima que a zona deixa existir (a maior da tabela do baú do chefe): é o teto da fusão na forja daquela zona. */
 export function zoneRarityCap(zoneId: number): Rarity {
-  const z = ZONES[zoneId];
+  // a forja agora fica na cidade segura (sem drops próprios): lá o teto é o do mundo inteiro
+  const zs = ZONES[zoneId]?.safe ? Object.values(ZONES) : ZONES[zoneId] ? [ZONES[zoneId]] : [];
   let max = 0;
-  if (z) for (const w of [z.drops.weights, z.boss.chest.weights]) for (const r of Object.keys(w) as Rarity[]) max = Math.max(max, rarityIndex(r));
+  for (const z of zs) for (const w of [z.drops.weights, ...(z.boss ? [z.boss.chest.weights] : [])]) for (const r of Object.keys(w) as Rarity[]) max = Math.max(max, rarityIndex(r));
   return RARITIES[max];
 }
 /** Custo em tostões da fusão que produz um item de raridade `to` do tipo `kind`. */

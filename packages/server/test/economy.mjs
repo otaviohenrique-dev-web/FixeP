@@ -5,6 +5,7 @@ import { Client } from "colyseus.js";
 
 const HTTP = process.env.SERVER ?? "http://localhost:2999";
 const WS = HTTP.replace(/^http/, "ws");
+let ROOM = "zone4"; // as lojas ficam na cidade; a seção do abate vai às Cinzas (zona 1)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -20,11 +21,12 @@ async function account(prefix) {
   return { token, name };
 }
 async function enter(acc) {
-  const room = await new Client(WS).joinOrCreate("zone", { token: acc.token });
+  const room = await new Client(WS).joinOrCreate(ROOM, { token: acc.token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
-  const st = { snap: null, notices: [], oks: [], coins: [], trade: null, trades: [], invite: null, loot: [], left: null };
+  const st = { travel: [], snap: null, notices: [], oks: [], coins: [], trade: null, trades: [], invite: null, loot: [], left: null };
   room.onMessage("inv", (s) => (st.snap = s));
   room.onMessage("notice", (m) => (m.ok ? st.oks : st.notices).push(m.text));
+  room.onMessage("travel", (m) => st.travel.push(m));
   room.onMessage("coins", (m) => st.coins.push(m));
   room.onMessage("trade", (m) => { st.trade = m; st.trades.push(m); });
   room.onMessage("trade_invite", (m) => (st.invite = m));
@@ -58,7 +60,7 @@ console.log("\n== 2. Comerciante (distância, saldo, espaço) ==");
   A.room.send("shop_buy", { npc: NPC, id: "pocao_de_vida", qty: 1 }); // longe: nasce a 5 tiles dele
   await sleep(300);
   check("longe do comerciante não compra", A.st.snap.iron === 50000 && /perto/i.test(lastNotice(A.st)), lastNotice(A.st));
-  await goto(A, 20, 16.5);
+  await goto(A, 19, 25.5);
   A.room.send("shop_buy", { npc: NPC, id: "pocao_de_vida", qty: 3 });
   await sleep(300);
   check("perto: compra 3 poções pelo preço (14 cada)", A.st.snap.iron === 50000 - 42 && count(A.st.snap, "pocao_de_vida") === 8, `iron ${A.st.snap.iron}`);
@@ -83,7 +85,7 @@ console.log("\n== 2. Comerciante (distância, saldo, espaço) ==");
   const poor = await account("Pobre");
   const P = await enter(poor);
   P.room.send("shop_sell", { npc: NPC, slot: 0, qty: 1 });
-  await goto(P, 20, 16.5);
+  await goto(P, 19, 25.5);
   for (let i = 0; i < 9; i++) { const s = slotOf(P.st.snap, "warrior_armor_rare"); if (s >= 0) P.room.send("shop_sell", { npc: NPC, slot: s, qty: 1 }); }
   // esvazia o saldo vendendo e comprando não é possível; usa troca: manda tudo para A
   await P.room.leave();
@@ -114,16 +116,16 @@ console.log("\n== 3. Quebrar (confirmação) ==");
 
 console.log("\n== 4. Ferreira (fusão) ==");
 {
-  await goto(A, 18.2, 18.2); // a ferreira está em (17, 19)
+  await goto(A, 29, 25.5); // a ferreira está em (29, 24)
   const base = count(A.st.snap, "warrior_armor_common");
   A.room.send("smith_merge", { npc: "merchant", slots: [0, 1, 2] }); // NPC errado
   await sleep(250);
   check("NPC errado não funde", count(A.st.snap, "warrior_armor_common") === base);
   // as armaduras comuns estão nos espaços 4..; acha 3 iguais (restam 2 depois de quebrar 1: compra mais uma)
-  await goto(A, 20, 16.5);
+  await goto(A, 19, 25.5);
   A.room.send("shop_buy", { npc: "merchant", id: "warrior_armor_common", qty: 1 });
   await sleep(300);
-  await goto(A, 18.2, 18.2);
+  await goto(A, 29, 25.5);
   const slots = A.st.snap.inv.flatMap((s, i) => (s?.id === "warrior_armor_common" ? [i] : [])).slice(0, 3);
   const ironB = A.st.snap.iron, tot = totalItems(A.st.snap);
   A.room.send("smith_merge", { npc: "smith", slots });
@@ -137,7 +139,7 @@ console.log("\n== 4. Ferreira (fusão) ==");
   await sleep(300);
   check("espaços repetidos ou inválidos são recusados", totalItems(A.st.snap) === tot - 2);
   // longe da ferreira
-  await goto(A, 26, 22);
+  await goto(A, 24, 34);
   const s2 = A.st.snap.inv.flatMap((s, i) => (s?.id === "warrior_armor_uncommon" ? [i] : [])).slice(0, 3);
   A.room.send("smith_merge", { npc: "smith", slots: s2 });
   await sleep(300);
@@ -262,6 +264,13 @@ console.log("\n== 6. Troca entre jogadores ==");
 
 console.log("\n== 7. Abate: tostões garantidos, sacola e Óbolo no chão ==");
 {
+  // vai às Cinzas pelo portal leste da cidade (A anda até lá e o servidor aprova a travessia)
+  A.room.send("move_to", { x: 44, y: 24 });
+  for (let t = 0; t < 150 && !A.st.travel?.length; t++) await sleep(100);
+  await A.room.leave();
+  await sleep(500);
+  ROOM = "zone";
+  A = await enter(accA);
   const e1 = A.room.state.enemies.get("e1");
   const ironAntes = A.st.snap.iron, obolAntes = A.st.snap.obols;
   A.st.coins.length = 0;
