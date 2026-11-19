@@ -11,8 +11,10 @@ export class Player extends Schema {
   @type("number") maxHp = CLASS_DEFS.warrior.maxHp;
   @type("boolean") dead = false;
   @type("string") cls = "warrior";
-  @type("boolean") buff = false; // Grito de guerra ativo
+  @type("boolean") buff = false; // Escudo Refletor ativo (mitigação)
   @type("boolean") ember = false; // Brasa do Clérigo ativa
+  @type("boolean") reflect = false; // Escudo Refletor do Guerreiro ativo
+  @type("number") qMode = 0; // Clérigo: 0 = Q cura em área, 1 = Q cura focada
   @type("number") mana = 0; // recurso da classe (inteiro, para a HUD)
   @type("number") maxMana = 0;
   @type("number") level = 1;
@@ -41,6 +43,10 @@ export class Player extends Schema {
   dashLeft = 0;
   invulnUntil = 0;
   buffUntil = 0;
+  buffRed = 0; // redução de dano do buff ativo (Escudo Refletor)
+  reflectUntil = 0;
+  reflectPct = 0; // fração do dano dos inimigos que volta a eles
+  hurtAt = -1e9; // último dano RECEBIDO (o PvP só canaliza depois de PVP_NO_DAMAGE_S sem apanhar)
   deadUntil = 0;
   marketBusy = false; // uma operação do mercado está gravando: a mochila não muda por outros caminhos até acabar
   trading = false; // numa troca: a mochila fica travada (nada se move) até fechar a janela
@@ -62,8 +68,12 @@ export class Enemy extends Schema {
   @type("number") maxHp = SKELETON.maxHp;
   @type("string") st: EnemyState = "idle";
   @type("number") level = 1;
+  @type("boolean") stunned = false; // atordoado: não age (o cliente mostra estrelas)
+  @type("boolean") rooted = false; // enraizado: não anda (o cliente mostra raízes/correntes)
 
   // --- só no servidor ---
+  stunUntil = 0;
+  rootUntil = 0;
   sx = 0; // ponto de origem (spawn)
   sy = 0;
   targetId = "";

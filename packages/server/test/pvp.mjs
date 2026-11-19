@@ -1,4 +1,4 @@
-// Teste de ponta a ponta do modo PvP: canalização, cancelamento por dano, regras de quem pode ser alvo e saída do modo.
+// Teste de ponta a ponta do modo PvP: canalização (só parado e sem dano recente), cancelamento por mover/agir/dano, regras de quem pode ser alvo e saída do modo.
 // Uso: SERVER=http://localhost:2999 node test/pvp.mjs   (servidor de teste sem carregar o .env)
 import { Client } from "colyseus.js";
 
@@ -18,8 +18,8 @@ async function spawn(cls) {
   if (!cr.ok) throw new Error(`criar ${cls}: ${cr.status}`);
   const room = await new Client(WS).joinOrCreate("zone", { token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
-  const ev = { swing: [], notice: [], pvp: [], hits: [], left: null };
-  room.onMessage("pvp", (m) => ev.pvp.push(m.s));
+  const ev = { swing: [], notice: [], pvp: [], why: [], hits: [], left: null };
+  room.onMessage("pvp", (m) => { ev.pvp.push(m.s); if (m.why) ev.why.push(m.why); });
   room.onMessage("hit", (m) => ev.hits.push(m));
   room.onMessage("swing", (m) => ev.swing.push(m));
   room.onMessage("notice", (m) => ev.notice.push(String(m.text)));
@@ -63,17 +63,57 @@ console.log("\n== Entrar no modo: canalização sem dano conclui ==");
   A.room.leave();
 }
 
-console.log("\n== Dano de inimigo cancela a canalização ==");
+console.log("\n== Só canaliza PARADO: mover-se ou agir cancela; pedir andando é recusado ==");
 {
   const A = await spawn("warrior");
+  A.room.send("move_to", { x: 26, y: 26 });
+  await sleep(300);
+  A.ev.notice.length = 0;
   A.room.send("pvp", { on: true });
-  A.room.send("move_to", { x: 27, y: 16 }); // perto do esqueleto de (30,16): ele ataca em poucos segundos
-  const canceled = await until(() => A.ev.pvp.includes("cancel"), 5000);
-  check("o golpe do esqueleto cancela na hora (evento cancel)", canceled);
-  await until(() => A.me().pvpChan === 0, 1000); // o estado sincroniza um tick depois do evento
-  check("sem entrar no PvP e sem canalização", A.me().pvpChan === 0 && !A.me().pvp, `chan=${A.me().pvpChan} pvp=${A.me().pvp}`);
+  await sleep(300);
+  check("pedir PvP andando é recusado, com o motivo (parado)", A.me().pvpChan === 0 && A.ev.notice.some((t) => /parado/i.test(t)), JSON.stringify(A.ev.notice));
+  A.room.send("move_to", { x: A.me().x, y: A.me().y }); // para
+  await sleep(500);
+  A.room.send("pvp", { on: true });
+  await sleep(500);
+  check("parado, a canalização começa", A.me().pvpChan === 1);
+  A.room.send("move_to", { x: A.me().x + 2, y: A.me().y });
+  check("mover-se cancela (evento cancel, motivo 'move')", await until(() => A.ev.pvp.includes("cancel") && A.ev.why.includes("move"), 1500));
+  await until(() => A.me().pvpChan === 0, 800);
+  check("sem entrar no PvP e sem canalização", A.me().pvpChan === 0 && !A.me().pvp);
+  await sleep(1500); // chega ao destino
+  A.room.send("pvp", { on: true }); await sleep(600);
+  check("parado de novo: canaliza", A.me().pvpChan === 1);
+  A.ev.why.length = 0;
+  A.act("attack", A.me().x + 3, A.me().y);
+  check("agir (atacar) cancela (motivo 'act')", await until(() => A.ev.why.includes("act"), 1500));
+  await until(() => A.me().pvpChan === 0, 800);
   await sleep(CH);
-  check("continua fora do PvP depois de passar o tempo", !A.me().pvp);
+  check("continua fora do PvP depois de passar o tempo", !A.me().pvp && A.me().pvpChan === 0);
+  A.room.leave();
+}
+
+console.log("\n== Dano de inimigo: cancela e bloqueia um novo pedido por alguns segundos ==");
+{
+  const A = await spawn("warrior");
+  A.room.send("move_to", { x: 27, y: 16 }); // perto do esqueleto de (30,16): ele ataca em poucos segundos
+  const hurt = await until(() => A.ev.hits.some((h) => h.k === "p" && h.id === A.room.sessionId), 9000);
+  check("o esqueleto acerta o jogador", hurt);
+  A.room.send("move_to", { x: A.me().x, y: A.me().y }); // fica parado
+  await sleep(300);
+  A.ev.notice.length = 0;
+  A.room.send("pvp", { on: true });
+  await sleep(400);
+  check("logo depois de tomar dano o pedido é recusado, com o motivo (dano recente)", A.me().pvpChan === 0 && A.ev.notice.some((t) => /dano/i.test(t)), JSON.stringify(A.ev.notice));
+  check("e não entra no PvP", !A.me().pvp);
+  A.room.leave();
+}
+
+console.log("\n== Depois de 5 s sem dano o pedido é aceito (parado) ==");
+{
+  const A = await spawn("warrior");
+  A.room.send("pvp", { on: true }); await sleep(500);
+  check("sem dano recente e parado: canaliza", A.me().pvpChan === 1);
   A.room.leave();
 }
 
@@ -87,9 +127,9 @@ console.log("\n== Dois em PvP se machucam; habilidade de outro jogador cancela a
   // C canaliza para entrar; A e B (em PvP) o atacam: C não é alvo, nada cancela
   C.room.send("pvp", { on: true }); await sleep(400);
   const cHp = C.me().hp;
-  A.act("skill1", C.me().x, C.me().y); await sleep(300); // Giro (área)
+  A.act("skill2", C.me().x, C.me().y); await sleep(800); // Correntes (área)
   aimAt(A, C); await sleep(700);
-  check("jogador fora do PvP não recebe dano de quem está em PvP (Giro e Golpe)", C.me().hp === cHp, `hp ${cHp} -> ${C.me().hp}`);
+  check("jogador fora do PvP não recebe dano de quem está em PvP (Correntes e Golpe)", C.me().hp === cHp, `hp ${cHp} -> ${C.me().hp}`);
   check("e a canalização dele NÃO é cancelada por isso", C.me().pvpChan === 1 && !C.ev.pvp.includes("cancel"));
   check("nenhum evento de dano com alvo C", !C.ev.hits.some((h) => h.k === "p" && h.id === C.room.sessionId));
 
@@ -103,11 +143,13 @@ console.log("\n== Dois em PvP se machucam; habilidade de outro jogador cancela a
   check("o evento de dano traz quem causou", A.ev.hits.some((h) => h.k === "p" && h.id === B.room.sessionId && h.by === A.room.sessionId));
 
   // B começa a sair; A o atinge: cancela
-  await sleep(2100); // espera a recarga do Golpe (0,55 s) e o fim das ações
+  B.room.send("pvp", { on: false }); await sleep(600);
+  check("B tomou dano há pouco: o pedido de saída é recusado (aguarde sem apanhar)", B.me().pvpChan === 0 && B.me().pvp && B.ev.notice.some((t) => /dano/i.test(t)), JSON.stringify(B.ev.notice));
+  await sleep(5300); // 5 s sem dano e parado
   B.room.send("pvp", { on: false }); await sleep(600);
   check("B saindo: canalizando", B.me().pvpChan === 2);
   aimAt(A, B);
-  check("habilidade de outro jogador em PvP cancela a canalização de saída", await until(() => B.ev.pvp.includes("cancel"), 1500) && B.me().pvpChan === 0);
+  check("habilidade de outro jogador em PvP cancela a canalização de saída (motivo 'damage')", await until(() => B.ev.pvp.includes("cancel") && B.ev.why.includes("damage"), 1500) && B.me().pvpChan === 0);
   await sleep(CH);
   check("B continua em PvP (a saída foi interrompida)", B.me().pvp);
 
