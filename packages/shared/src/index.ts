@@ -44,7 +44,7 @@ export const Msg = {
   TradeCancel: "trade_cancel", // {}: cancela a troca
   MarketBrowse: "market_browse", // { npc, filter }: pede uma página de listagens (Evt.MarketPage)
   MarketMy: "market_my", // { npc }: pede as minhas listagens e vendas a recolher (Evt.MarketMine)
-  MarketList: "market_list", // { npc, slot, qty, price }: põe um item da mochila à venda (cobra a taxa de listagem)
+  MarketList: "market_list", // { npc, slot, qty, price, currency: "iron" | "obols" }: põe um item da mochila à venda (cobra a taxa de listagem)
   MarketBuy: "market_buy", // { npc, id }: compra uma listagem
   MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo

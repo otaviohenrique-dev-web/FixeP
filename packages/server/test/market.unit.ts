@@ -4,7 +4,7 @@ process.env.PGLITE_DIR = "memory";
 process.env.NODE_ENV = "test";
 
 import { randomUUID } from "node:crypto";
-import { MARKET_FEE_PCT, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PAGE, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MAX_COINS, listingFee, ITEMS } from "@frixep/shared";
+import { MARKET_FEE_PCT, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PAGE, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MAX_COINS, listingFee, minListingPrice, ITEMS } from "@frixep/shared";
 import { emptyInventory, addItem, type Inventory } from "../src/game/inventory.js";
 import { Market, type MarketActor } from "../src/game/market.js";
 import { openDb } from "../src/db/index.js";
@@ -41,21 +41,24 @@ console.log("\n== Listar: custódia e taxa ==");
 const seller = await mk(1000, [["warrior_armor_rare", 1], ["pocao_de_vida", 5], ["warrior_helmet_epic", 1]]);
 {
   const slot = slotOf(seller.inv, "warrior_armor_rare");
-  check("a taxa é uma porcentagem pequena do preço, no mínimo 1", listingFee(1000) === Math.ceil(1000 * MARKET_FEE_PCT / 100) && listingFee(5) === 1 && MARKET_FEE_PCT <= 8);
-  const bad = [await market.list(seller, slot, 1, MARKET_MIN_PRICE - 1), await market.list(seller, slot, 1, MARKET_MAX_PRICE + 1), await market.list(seller, slot, 1, 10.5), await market.list(seller, slot, 2, 100), await market.list(seller, slot, 0, 100), await market.list(seller, 99, 1, 100), await market.list(seller, slot, 1, "100" as any), await market.list(seller, slot, 1.5, 100)];
+  check("a taxa é uma porcentagem pequena do preço, no mínimo 1", listingFee(1000) === 40 && listingFee(25) === 1 && [25, 100, 777, 5000, 123456].every((p) => Math.abs(listingFee(p) / p - MARKET_FEE_PCT / 100) < 0.017) && MARKET_FEE_PCT <= 8, `fee(25)=${listingFee(25)}`);
+  check("o preço mínimo do item é metade do valor médio (x quantidade) e nunca abaixo do piso de 25", minListingPrice("warrior_armor_rare", 1) > 100 && minListingPrice("pocao_de_vida", 1) === MARKET_MIN_PRICE && minListingPrice("pocao_de_vida", 99) > MARKET_MIN_PRICE && minListingPrice("warrior_armor_epic", 1) > minListingPrice("warrior_armor_rare", 1));
+  const bad = [await market.list(seller, slot, 1, MARKET_MIN_PRICE - 1), await market.list(seller, slot, 1, MARKET_MAX_PRICE + 1), await market.list(seller, slot, 1, 1000.5), await market.list(seller, slot, 2, 1000), await market.list(seller, slot, 0, 1000), await market.list(seller, 99, 1, 1000), await market.list(seller, slot, 1, "1000" as any), await market.list(seller, slot, 1.5, 1000)];
   check("preço fora dos limites, quantidade inválida ou espaço errado são recusados", bad.every((r) => !r.ok) && count(seller.inv, "warrior_armor_rare") === 1 && seller.inv.iron === 1000);
-  const r = await market.list(seller, slot, 1, 400);
-  check("listar tira o item da mochila e cobra a taxa", r.ok && count(seller.inv, "warrior_armor_rare") === 0 && seller.inv.iron === 1000 - listingFee(400), JSON.stringify(r));
+  const tooLow = await market.list(seller, slot, 1, minListingPrice("warrior_armor_rare", 1) - 1);
+  check("abaixo do preço mínimo do item é recusado com a mensagem do mínimo (nada muda)", !tooLow.ok && /mínimo/i.test((tooLow as any).error) && count(seller.inv, "warrior_armor_rare") === 1 && seller.inv.iron === 1000);
+  const r = await market.list(seller, slot, 1, 1000);
+  check("listar tira o item da mochila e cobra a taxa", r.ok && count(seller.inv, "warrior_armor_rare") === 0 && seller.inv.iron === 1000 - listingFee(1000), JSON.stringify(r));
   const p = await browse({}, "");
-  check("a listagem aparece para os outros jogadores", p.total === 1 && p.items[0].itemId === "warrior_armor_rare" && p.items[0].price === 400 && p.items[0].seller === seller.name);
+  check("a listagem aparece para os outros jogadores", p.total === 1 && p.items[0].itemId === "warrior_armor_rare" && p.items[0].price === 1000 && p.items[0].seller === seller.name);
   // custódia persistida: recarregar o vendedor NÃO devolve o item (sem duplicar)
   const re = await repo.loadInventory(seller.charId);
   check("a mochila gravada já está sem o item e sem a taxa (nada de duplicar ao recarregar)", count(re, "warrior_armor_rare") === 0 && re.iron === seller.inv.iron);
   const poor = await mk(0, [["warrior_armor_common", 1]]);
-  check("sem tostões para a taxa não lista", !(await market.list(poor, slotOf(poor.inv, "warrior_armor_common"), 1, 100)).ok && count(poor.inv, "warrior_armor_common") === 1);
+  check("sem tostões para a taxa não lista", !(await market.list(poor, slotOf(poor.inv, "warrior_armor_common"), 1, 1000)).ok && count(poor.inv, "warrior_armor_common") === 1);
   const pot = await market.list(seller, slotOf(seller.inv, "pocao_de_vida"), 3, 90);
   check("lista parte de uma pilha (3 de 5 poções)", pot.ok && count(seller.inv, "pocao_de_vida") === 2);
-  check("o equipado não está na mochila, então não dá para listá-lo (só espaços da mochila)", !(await market.list(seller, "weapon" as any, 1, 100)).ok);
+  check("o equipado não está na mochila, então não dá para listá-lo (só espaços da mochila)", !(await market.list(seller, "weapon" as any, 1, 1000)).ok);
 }
 
 console.log("\n== Comprar: preço cheio ao vendedor, sem duplicar ==");
@@ -73,22 +76,22 @@ const buyer = await mk(5000);
   const rf = await market.buy(full, id);
   check("mochila cheia não compra, desfaz a reivindicação e o dinheiro não sai", !rf.ok && /cheia/i.test((rf as any).error) && full.inv.iron === 5000 && (await browse({ kind: "armor" })).total === 1);
   const rb = await market.buy(buyer, id);
-  check("comprar cobra o preço e entrega o item", rb.ok && buyer.inv.iron === 4600 && count(buyer.inv, "warrior_armor_rare") === 1, JSON.stringify(rb));
+  check("comprar cobra o preço e entrega o item", rb.ok && buyer.inv.iron === 4000 && count(buyer.inv, "warrior_armor_rare") === 1, JSON.stringify(rb));
   check("depois de vendida a listagem sai do mercado", (await browse({ kind: "armor" })).total === 0 && !(await market.buy(buyer, id)).ok);
   const lb = await repo.loadInventory(buyer.charId);
-  check("o comprador recarregado tem o item e o saldo (gravado na mesma transação)", count(lb, "warrior_armor_rare") === 1 && lb.iron === 4600);
+  check("o comprador recarregado tem o item e o saldo (gravado na mesma transação)", count(lb, "warrior_armor_rare") === 1 && lb.iron === 4000);
   const mine = await market.mine(seller.charId);
   const sold = mine.find((m) => m.id === id);
-  check("o vendedor vê a venda pendente de recolher, com o nome do comprador", sold?.status === "sold" && sold.buyer === buyer.name && sold.price === 400);
+  check("o vendedor vê a venda pendente de recolher, com o nome do comprador", sold?.status === "sold" && sold.buyer === buyer.name && sold.price === 1000);
   const before = seller.inv.iron;
   const c1 = await market.claim(seller, id);
-  check("recolher paga o preço INTEIRO (sem taxa de venda)", c1.ok && seller.inv.iron === before + 400);
-  check("não dá para recolher duas vezes (sem duplicar tostões)", !(await market.claim(seller, id)).ok && seller.inv.iron === before + 400);
+  check("recolher paga o preço INTEIRO (sem taxa de venda)", c1.ok && seller.inv.iron === before + 1000);
+  check("não dá para recolher duas vezes (sem duplicar tostões)", !(await market.claim(seller, id)).ok && seller.inv.iron === before + 1000);
   check("quem não é o vendedor não recolhe", !(await market.claim(buyer, id)).ok);
   const lsel = await repo.loadInventory(seller.charId);
-  check("o saldo recolhido foi gravado", lsel.iron === before + 400);
+  check("o saldo recolhido foi gravado", lsel.iron === before + 1000);
   // conservação: tostões do vendedor + comprador mudam só pela taxa de listagem (a de 400 e a da pilha de poções)
-  check("os tostões se conservam: só a taxa de listagem some do jogo", seller.inv.iron + buyer.inv.iron === 1000 + 5000 - listingFee(400) - listingFee(90), `${seller.inv.iron + buyer.inv.iron}`);
+  check("os tostões se conservam: só a taxa de listagem some do jogo", seller.inv.iron + buyer.inv.iron === 1000 + 5000 - listingFee(1000) - listingFee(90), `${seller.inv.iron + buyer.inv.iron}`);
 }
 
 console.log("\n== Concorrência: duas compras do mesmo item ==");
@@ -154,7 +157,7 @@ console.log("\n== Limites ==");
   let ok = 0;
   for (let i = 0; i < MARKET_MAX_ACTIVE + 3; i++) {
     if (!s5.inv.slots[0]) s5.inv.slots[0] = { id: "pocao_de_vida", qty: 99 };
-    if ((await market.list(s5, 0, 1, 20)).ok) ok++;
+    if ((await market.list(s5, 0, 1, 25)).ok) ok++;
   }
   check(`no máximo ${MARKET_MAX_ACTIVE} listagens ativas por jogador`, ok === MARKET_MAX_ACTIVE, `${ok}`);
   check("há também um teto de listagens + vendas não recolhidas", MARKET_MAX_OPEN > MARKET_MAX_ACTIVE);
@@ -172,24 +175,24 @@ console.log("\n== Falha de gravação desfaz tudo ==");
   const s6 = await mk(500, [["warrior_armor_epic", 1]]);
   const orig = repo.writeInventoryTx.bind(repo);
   (repo as any).writeInventoryTx = async () => { throw new Error("falha simulada"); };
-  const r = await market.list(s6, 0, 1, 100);
+  const r = await market.list(s6, 0, 1, 2100);
   (repo as any).writeInventoryTx = orig;
   const n = (await db.query<{ n: string }>("select count(*)::text as n from market_listings where seller_id = $1", [s6.charId])).rows[0].n;
   check("se a gravação da mochila falha, a listagem não é criada e o item/taxa voltam", !r.ok && n === "0" && count(s6.inv, "warrior_armor_epic") === 1 && s6.inv.iron === 500, JSON.stringify(r));
-  await market.list(s6, 0, 1, 100);
+  await market.list(s6, 0, 1, 2100);
   const id = (await market.mine(s6.charId))[0].id;
-  const b = await mk(1000);
+  const b = await mk(5000);
   (repo as any).writeInventoryTx = async () => { throw new Error("falha simulada"); };
   const rb = await market.buy(b, id);
   (repo as any).writeInventoryTx = orig;
   const st = (await db.query<{ status: string }>("select status from market_listings where id = $1", [id])).rows[0].status;
-  check("se a gravação da compra falha, a listagem volta a ficar à venda e o comprador não paga", !rb.ok && st === "active" && b.inv.iron === 1000 && count(b.inv, "warrior_armor_epic") === 0);
+  check("se a gravação da compra falha, a listagem volta a ficar à venda e o comprador não paga", !rb.ok && st === "active" && b.inv.iron === 5000 && count(b.inv, "warrior_armor_epic") === 0);
 }
 
 console.log("\n== Busca, filtros, ordenação e páginas ==");
 {
   const s7 = await mk(10_000_000);
-  const setup: [string, number][] = [["warrior_armor_common", 30], ["warrior_armor_rare", 900], ["mage_armor_rare", 800], ["archer_helmet_epic", 5000], ["pocao_de_vida", 15]];
+  const setup: [string, number][] = [["warrior_armor_common", 30], ["warrior_armor_rare", 900], ["mage_armor_rare", 800], ["archer_helmet_epic", 5000], ["pocao_de_vida", 25]];
   for (const [id, price] of setup) { s7.inv.slots[0] = { id, qty: 1 }; await market.list(s7, 0, 1, price); }
   const all = await browse({ sort: "price_asc" });
   const prices = all.items.map((i) => i.price);
@@ -204,16 +207,37 @@ console.log("\n== Busca, filtros, ordenação e páginas ==");
   check("ordena por raridade (mais raros primeiro)", ITEMS[(await browse({ sort: "rarity" })).items[0].itemId].rarity === "epic");
   check("filtro malicioso é ignorado (valores desconhecidos viram padrão)", (await browse({ cls: "'; drop table x;--", sort: "zzz", page: -5, minPrice: "a" })).page === 0);
   // páginas
-  for (let i = 0; i < MARKET_PAGE + 3; i++) { s7.inv.slots[0] = { id: "pocao_de_vida", qty: 1 }; await market.list(s7, 0, 1, 10 + i); }
+  for (let i = 0; i < MARKET_PAGE + 3; i++) { s7.inv.slots[0] = { id: "pocao_de_vida", qty: 1 }; await market.list(s7, 0, 1, 25 + i); }
   const p0 = await browse({ kind: "potion", sort: "price_asc", page: 0 }), p1 = await browse({ kind: "potion", sort: "price_asc", page: 1 });
   check("pagina os resultados", p0.items.length === MARKET_PAGE && p1.items.length === Math.min(MARKET_PAGE, p0.total - MARKET_PAGE) && p0.pages === Math.ceil(p0.total / MARKET_PAGE), `${p0.total} itens, ${p0.pages} páginas`);
   check("uma página além do fim volta para a última", (await browse({ kind: "potion", page: 99 })).page === p0.pages - 1);
 }
 
+console.log("\n== Óbolos de Sangue: qualquer item pode ser vendido na moeda rara ==");
+{
+  const so = await mk(10, [["warrior_armor_epic", 1]]);
+  so.inv.obols = 5;
+  so.inv.slots[0] = { id: "warrior_armor_epic", qty: 1 };
+  const buyerO = await mk(1000); buyerO.inv.obols = 50;
+  const poorO = await mk(1000);
+  check("moeda inválida é recusada", !(await market.list(so, 0, 1, 10, "ouro" as any)).ok);
+  check("preço em óbolos tem limite próprio (máx. 99.999)", !(await market.list(so, 0, 1, 100_000, "obols")).ok && !(await market.list(so, 0, 1, 24, "obols")).ok);
+  check("a taxa em óbolos é cobrada em óbolos (mínimo 1) e não mexe nos tostões", (await market.list(so, 0, 1, 30, "obols")).ok && so.inv.obols === 5 - listingFee(30) && so.inv.iron === 10 && count(so.inv, "warrior_armor_epic") === 0, `${so.inv.obols}`);
+  const f = await browse({ currency: "obols" }), g = await browse({ currency: "iron", kind: "armor", rarity: "epic" });
+  check("o filtro de moeda separa as listagens", f.items.some((i) => i.itemId === "warrior_armor_epic" && i.currency === "obols") && g.items.every((i) => i.currency === "iron"));
+  const id = f.items.find((i) => i.itemId === "warrior_armor_epic")!.id;
+  check("sem óbolos suficientes não compra (tostões não valem)", !(await market.buy(poorO, id)).ok && poorO.inv.iron === 1000);
+  check("comprar cobra óbolos, não tostões", (await market.buy(buyerO, id)).ok && buyerO.inv.obols === 20 && buyerO.inv.iron === 1000 && count(buyerO.inv, "warrior_armor_epic") === 1);
+  const ob0 = so.inv.obols;
+  check("o vendedor recolhe os óbolos inteiros", (await market.claim(so, id)).ok && so.inv.obols === ob0 + 30 && so.inv.iron === 10);
+  const rl = await repo.loadInventory(so.charId);
+  check("os óbolos recolhidos foram gravados", rl.obols === so.inv.obols);
+}
+
 console.log("\n== Limpeza ==");
 {
   const s8 = await mk(100, [["warrior_armor_common", 1]]);
-  await market.list(s8, 0, 1, 20);
+  await market.list(s8, 0, 1, 25);
   const id = (await market.mine(s8.charId))[0].id;
   await market.cancel(s8, id);
   clock += 4 * 86_400_000;

@@ -91,7 +91,7 @@ await sleep(400);
 check("recolher de novo não paga outra vez", A.st.snap.iron === ironA + 1000);
 
 console.log("\n== Concorrência: B e C compram o mesmo item ao mesmo tempo ==");
-A.room.send("market_list", { npc: NPC, slot: slotOf(A.st.snap, "warrior_helmet_epic"), qty: 1, price: 800 });
+A.room.send("market_list", { npc: NPC, slot: slotOf(A.st.snap, "warrior_helmet_epic"), qty: 1, price: 1500 });
 await sleep(600);
 B.room.send("market_browse", { npc: NPC, filter: { kind: "helmet" } });
 await sleep(400);
@@ -103,7 +103,7 @@ C.room.send("market_buy", { npc: NPC, id: h.id });
 await sleep(900);
 const gotB = count(B.st.snap, "warrior_helmet_epic") - hB, gotC = count(C.st.snap, "warrior_helmet_epic") - hC;
 check("só um dos dois leva o elmo (sem duplicar)", gotB + gotC === 1, `B+${gotB} C+${gotC}`);
-check("só quem levou o elmo pagou (800); o outro mantém os tostões", (gotB ? ib - B.st.snap.iron === 800 && C.st.snap.iron === ic : ic - C.st.snap.iron === 800 && B.st.snap.iron === ib));
+check("só quem levou o elmo pagou (1500); o outro mantém os tostões", (gotB ? ib - B.st.snap.iron === 1500 && C.st.snap.iron === ic : ic - C.st.snap.iron === 1500 && B.st.snap.iron === ib));
 
 console.log("\n== Vencer e devolver ==");
 A.room.send("market_list", { npc: NPC, slot: slotOf(A.st.snap, "warrior_armor_common"), qty: 1, price: 50 });
