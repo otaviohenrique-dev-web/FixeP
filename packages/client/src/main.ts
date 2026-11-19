@@ -20,7 +20,8 @@ import { mountStats } from "./stats";
 import { mountJoystick } from "./touch";
 import { setMobileUi } from "./mobile";
 import { drawPlate, type PlateKind } from "./plate";
-import { mountChat } from "./chat";
+import { mountChat, type ChatUi } from "./chat";
+import { mountLoading, type LoadingScreen } from "./loading";
 import { GroundLayer } from "./ground";
 import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
@@ -57,12 +58,27 @@ const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number
 };
 const tileHash = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
 /** densidade de pixels do canvas: nítido em telas retina, mas limitado (3) para não pesar em celular fraco */
-const DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+const DPR = Math.max(1, Math.min(COARSE ? 2 : 3, window.devicePixelRatio || 1)); // celular: no máximo 2x (menos pixels = mais FPS)
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
 /** qual animação do personagem corresponde a cada ação (as 3 habilidades usam a mesma, "skill") */
 const animFor = (a: ActionId): ActionAnim => (a === "attack" ? "attack" : a === "dodge" ? "dodge" : "skill");
+
+/** cronômetro das etapas da entrada/travessia: no modo dev imprime o tempo de cada etapa no console */
+function timeline(label: string) {
+  const t = {
+    t0: performance.now(), last: 0, steps: [] as [string, number][],
+    mark(name: string) { const now = performance.now(); t.steps.push([name, Math.round(now - (t.last || t.t0))]); t.last = now; },
+    log() {
+      const total = Math.round(performance.now() - t.t0);
+      (window as any).__frixepTravel = { label, total, steps: t.steps };
+      if (import.meta.env.DEV) console.log(`[travessia] ${label}: ${total} ms`, Object.fromEntries(t.steps));
+    },
+  };
+  return t;
+}
 
 class WorldScene extends Phaser.Scene {
   private room!: Room;
@@ -106,200 +122,184 @@ class WorldScene extends Phaser.Scene {
   private get state(): any { return this.room?.state; }
   private me(): any { return this.state?.players?.get(this.room.sessionId); }
 
+  private artReady: Promise<void> | null = null;
+  private uiMounted = false;
+  private loader!: LoadingScreen;
+  private busy = true; // entrada/travessia em curso: o jogador não age até a zona estar pronta
+  private leaving = false; // saída voluntária (menu/sair): não tenta reconectar
+  private stats!: ReturnType<typeof mountStats>;
+  private chatUi!: ChatUi;
+  private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1 };
+  private travelWatch = 0;
+  private enterSeq = 0;
+  private entering = false;
+  private travelT0 = 0;
+  private floatFree = new Map<string, Phaser.GameObjects.Text[]>(); // balões de dano/XP reaproveitados (criar Text a cada golpe é caro)
+  private floatUsed = 0;
+
+  /** tela de load na hora (ao pisar no portal, antes mesmo de o servidor responder) e bloqueio de entradas */
+  private beginTravel(zoneId: number, verb = "Viajando para") {
+    window.clearTimeout(this.travelWatch);
+    if (this.busy && this.loader.visible) return;
+    const z = ZONES[zoneId] ?? ZONES[START_ZONE];
+    this.busy = true;
+    this.travelT0 = performance.now();
+    this.loader.progress(0.05);
+    this.loader.show({ zone: z.name, theme: z.theme, verb });
+  }
+
+  /** travessia aprovada pelo servidor: sai da sala antiga e entra na da nova zona em paralelo ao fade (mesmo token, sem recarregar) */
+  private travelTo(zoneId: number, from: Room) {
+    if (this.leaving || from !== this.room || this.entering) return;
+    this.beginTravel(zoneId);
+    from.removeAllListeners();
+    from.leave(true).catch(() => { /* já desconectado */ });
+    void this.enterZone(zoneId, "travel");
+  }
+
+  private async enterZone(zoneId: number, why: "boot" | "travel" | "reconnect") {
+    this.entering = true;
+    try { await this.enterZoneInner(zoneId, why); } finally { this.entering = false; }
+  }
+
   async create() {
     // textos do Phaser são rasterizados na densidade da tela (senão ficam borrados em retina)
     this.sys.events.on("addedtoscene", (o: Phaser.GameObjects.GameObject) => {
       if (o instanceof Phaser.GameObjects.Text && DPR > 1) o.setResolution(DPR);
     });
-    this.zoneId = (this.sys.settings.data as { zone?: number }).zone ?? START_ZONE;
-    const zone = ZONES[this.zoneId] ?? ZONES[START_ZONE];
-    this.drawZoneMap(zone);
+    this.loader = (this.sys.settings.data as { loader: LoadingScreen }).loader;
+    await this.enterZone((this.sys.settings.data as { zone?: number }).zone ?? START_ZONE, "boot");
+  }
 
-    await this.loadArt(); // atlas de sprites (se existirem); sem eles os personagens são círculos
-
+  /**
+   * Entra numa zona SEM recarregar a página: descarta o mundo anterior, desenha o mapa, carrega a arte (uma vez só) e entra
+   * na sala em paralelo, posiciona a câmera sobre o personagem e só então revela a tela. A interface (HUD, mochila, chat...)
+   * é montada na primeira entrada e reaproveitada.
+   */
+  private async enterZoneInner(zoneId: number, why: "boot" | "travel" | "reconnect") {
+    const seq = ++this.enterSeq;
+    this.busy = true;
+    const zone = ZONES[zoneId] ?? ZONES[START_ZONE];
+    this.zoneId = zone.id;
+    this.loader.show({ zone: zone.name, theme: zone.theme, verb: why === "boot" ? "Entrando em" : why === "reconnect" ? "Reconectando em" : "Viajando para" });
+    const T = timeline(`${why} → ${zone.name}`);
+    if (why === "travel" && this.travelT0) T.t0 = this.travelT0; // na viagem o cronômetro já começou no portal
     const token = (this.sys.settings.data as { token: string }).token;
-    try {
-      this.room = await new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token });
-    } catch {
-      logout(); // token inválido/recusado: volta ao login
+    const gone = this.room; // sala anterior (já saindo)
+    // 1) começa a entrar na sala JÁ: roda junto do desenho do mapa e da arte
+    const joinP: Promise<Room | null> = new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token }).then((r) => r, () => null);
+    if (gone) this.room = undefined as unknown as Room; // as mensagens da sala antiga são ignoradas
+    // 2) mundo anterior fora, mapa novo
+    this.resetWorld();
+    T.mark("limpeza");
+    this.loader.progress(0.15);
+    this.drawZoneMap(zone);
+    T.mark("mapa");
+    this.loader.progress(0.35);
+    this.artReady ??= this.loadArt();
+    await this.artReady; // atlas de sprites (uma vez por sessão); sem eles os personagens são círculos
+    T.mark("arte");
+    this.loader.progress(0.6);
+    const room = await joinP;
+    T.mark("sala");
+    if (seq !== this.enterSeq) { void room?.leave(true); return; }
+    if (!room) {
+      if (why === "boot") { logout(); return; } // token inválido/recusado: volta ao login
+      location.reload(); // não conseguiu reentrar (servidor caiu): recarrega mantendo o token
       return;
     }
     // o primeiro estado chega logo depois do join: espera antes de ler as coleções
-    if (!this.state?.players) await new Promise<void>((resolve) => this.room.onStateChange.once(() => resolve()));
-
+    if (!room.state?.players) await new Promise<void>((resolve) => room.onStateChange.once(() => resolve()));
+    T.mark("estado");
+    this.room = room;
+    this.loader.progress(0.8);
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
     this.selG = this.add.graphics().setDepth(0.35);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
+    if (!this.uiMounted) { this.mountUi(); this.uiMounted = true; }
+    else { this.econ.closeNpc(); this.vault.close(); this.econ.setTrade({ open: false }); this.party.closeMenu(); this.selId = ""; this.lockKey = ""; this.pendingNpc = null; this.pendingVault = false; }
+    this.bindRoom(room, zone);
+    T.mark("mundo");
+    // 3) câmera exatamente sobre o personagem (sem deslizar), no zoom certo, antes de revelar
+    this.centerCameraOnMe();
+    this.hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1 };
+    await new Promise<void>((r) => { requestAnimationFrame(() => r()); setTimeout(r, 120); }); // 1 quadro já desenhado com a câmera no lugar (o timeout cobre aba em segundo plano)
+    this.cameras.main.setLerp(0.1, 0.1); // a partir daqui o seguimento volta a ser suave
+    this.zoneBanner(zone.name);
+    this.busy = false;
+    this.leaving = false;
+    window.clearTimeout(this.travelWatch);
+    await this.loader.hide(why === "boot" ? 250 : 450);
+    T.mark("pronto");
+    T.log();
+  }
 
-    // colyseus.js 0.16: callbacks de coleção passam por getStateCallbacks
-    const $ = getStateCallbacks(this.room);
-    const st = $(this.state);
+  /** a câmera nasce centrada no personagem: scroll inicial, seguimento com lerp 1 no primeiro quadro, sem animação de deslize */
+  private centerCameraOnMe() {
+    const cam = this.cameras.main;
+    const mine = this.sprites.get(`p:${this.room.sessionId}`);
+    cam.stopFollow();
+    this.applyTouch(); // zoom correto (e pixels arredondados) para esta câmera
+    if (mine) {
+      cam.startFollow(mine.obj, true, 1, 1);
+      cam.centerOn(mine.obj.x, mine.obj.y);
+    }
+  }
 
-    st.players.onAdd((p: any, id: string) => {
-      const me = id === this.room.sessionId;
-      const view = new ActorView(this, this.atlases.get(p.cls as string), { color: CLASS_DEFS[p.cls as CharClass]?.color ?? 0x6fa8dc, radius: 10, mine: me });
-      const at = toScreen(p.x, p.y);
-      view.obj.setPosition(at.sx, at.sy); // nasce na posição certa (sem deslizar desde a origem)
-      this.sprites.set(`p:${id}`, view);
-      this.levelTags.set(`p:${id}`, this.add.text(0, 0, String(Number(p.level) || 1), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: "#fff6dc", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
-      this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "11px", color: "#ddd", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
-      if (me) this.cameras.main.startFollow(view.obj, true, 0.1, 0.1);
-    });
-    st.players.onRemove((_: any, id: string) => this.dropSprite(`p:${id}`));
+  /** descarta tudo o que pertence à zona anterior (objetos, tweens, timers) mantendo texturas/atlas no cache do Phaser */
+  private resetWorld() {
+    this.tweens.killAll();
+    this.time.removeAllEvents();
+    for (const o of [...this.children.list]) o.destroy(); // destroy() de cada um (removeAll(true) deixa as texturas dos textos no cache)
+    this.sprites.clear(); this.labels.clear(); this.levelTags.clear(); this.bubbles.clear(); this.prevSt.clear(); this.pvpTag.clear();
+    this.projs.clear(); this.traps.clear(); this.floatFree.clear(); this.floatUsed = 0;
+    this.town = null;
+    this.portalDefs = [];
+    this.hitstopUntil = 0;
+    this.deadUntil = 0;
+    this.cameras.main.stopFollow();
+    this.cameras.main.resetFX();
+  }
 
-    st.enemies.onAdd((e: any, id: string) => {
-      const kd = enemyKind(String(e.kind));
-      // os monstros têm kit de sprites; os chefes emprestam o corpo de um monstro, maior
-      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
-
-      const at = toScreen(e.x, e.y);
-      view.obj.setPosition(at.sx, at.sy);
-      this.sprites.set(`e:${id}`, view);
-      const lv = Number(e.level) || 1;
-      const mine = Number(this.me()?.level) || 1;
-      // cor pela diferença para o seu nível: cinza = fácil, branco = igual, laranja = difícil, vermelho = perigoso
-      const col = lv >= mine + 3 ? "#ff6a5a" : lv > mine ? "#ffb072" : lv < mine - 2 ? "#9aa3ad" : "#e8e2d0";
-      this.labels.set(`e:${id}`, this.add.text(0, 0, kd.name, { fontSize: "11px", color: "#e8e2d0", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
-      // nível: só o número, à direita da barra de vida, grande e com contorno grosso
-      this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
-    });
-    st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
-    st.items.onAdd((g: any, id: string) => this.ground.add(id, { itemId: String(g.itemId), qty: Number(g.qty) || 1, x: g.x, y: g.y, owner: String(g.owner), party: String(g.party), lockS: Number(g.lockS) || 0 }));
-    st.items.onRemove((_: any, id: string) => this.ground.remove(id));
-
-    // HUD, menu e entrada
+  /** interface do DOM (HUD, mochila, loja, baú, chat, grupo, FPS) e entradas: montada UMA vez; as salas só trocam os receptores */
+  private mountUi() {
     this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m) });
-    if (this.cls === "cleric" && this.savedQMode() === 1) this.room.send(Msg.QMode, { mode: 1 }); // lembra a escolha entre sessões
     this.joy = mountJoystick();
     this.applyTouch();
     this.paintPortrait();
     mountGameMenu({
       playerName: this.me()?.name ?? "Portador",
       onLogout: async () => {
-        leaving = true;
+        this.leaving = true;
         try { await this.room.leave(true); } catch { /* já desconectado */ }
         logout();
       },
     });
-    let leaving = false;
-    // travessia aprovada pelo servidor: sai desta sala e recarrega entrando na sala da nova zona (mesmo token)
-    this.room.onMessage(Evt.Travel, async (m: TravelEvent) => {
-      if (leaving) return;
-      leaving = true;
-      this.showLoading(`Viajando para ${ZONES[m.zone]?.name ?? "outra zona"}…`);
-      try { await this.room.leave(true); } catch { /* já desconectado */ }
-      location.reload();
-    });
-    this.zoneBanner(zone.name);
-    this.room.onLeave((code) => {
-      if (leaving) return;
-      if (code === 4001) logout(); // outra aba assumiu a conta: vai ao login sem disputar a sessão
-      else location.reload(); // queda de rede ou servidor: recarrega mantendo o token
-    });
-
-    this.room.onMessage(Evt.Swing, (m: SwingEvent) => {
-      const actor = this.sprites.get(`p:${m.id}`);
-      if (actor) {
-        actor.setFace(m.dir);
-        if (m.id !== this.room.sessionId) actor.trigger(animFor(m.a), this.time.now); // a própria já tocou em act()
-      }
-      // a própria ação já foi mostrada na hora; as dos outros usam a classe de quem agiu
-      if (m.id !== this.room.sessionId) this.playSwing((this.state.players.get(m.id)?.cls as CharClass) ?? "warrior", m.a, m.x, m.y, m.dir, false, Number(this.state.players.get(m.id)?.qMode) || 0);
-    });
-    this.room.onMessage(Evt.Proj, (m: ProjEvent) => this.onProj(m));
-    this.room.onMessage(Evt.ProjEnd, (m: ProjEndEvent) => this.onProjEnd(m));
-    this.room.onMessage(Evt.Trap, (m: TrapEvent) => this.onTrap(m));
-    this.room.onMessage(Evt.Heal, (m: HealEvent) => this.onHeal(m));
-    this.room.onMessage(Evt.Telegraph, (m: TelegraphEvent) => this.onTelegraph(m));
-    this.room.onMessage(Evt.Hit, (m: HitEvent) => this.onHit(m));
-    this.room.onMessage(Evt.Died, (m: DiedEvent) => this.onDied(m));
-    // XP do abate: mesmo estilo do número de dano, no lugar onde o inimigo caiu
-    this.room.onMessage(Evt.Xp, (m: XpEvent) => this.floatText(m.x, m.y - 0.5, `+${m.amount} XP`, "#ffd45e", 20, true));
-    this.room.onMessage(Evt.LevelUp, (m: LevelUpEvent) => this.onLevelUp(m));
-
-    // mochila: registra os receptores ANTES de pedir a fotografia (evita perder a mensagem inicial)
-    this.inv = mountInventory({ send: (t, p) => this.room.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
-    // economia: saldo na HUD, comerciante, ferreira, troca e confirmação de quebrar
-    this.econ = mountEconomy({ send: (t, p) => this.room.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
-    this.room.onMessage(Evt.Coins, (m: CoinsEvent) => {
-      if (m.iron) this.floatText(m.x, m.y - 0.9, `+${m.iron} Tostões`, "#cfd4dc", 16, false);
-      if (m.obols) { this.floatText(m.x, m.y - 1.3, `+${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color, 18, true); this.inv.toast(`+ ${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color); }
-      sfx.pickup();
-    });
-    this.vault = mountVault({ send: (t, p) => this.room.send(t, p) });
-    this.room.onMessage(Evt.Vault, (m: VaultSnapshot) => this.vault.setVault(m));
-    this.room.onMessage(Evt.Trade, (m: TradeEvent) => this.econ.setTrade(m));
-    this.room.onMessage(Evt.TradeChat, (m: { name: string; text: string }) => this.econ.tradeChat(String(m.name), String(m.text)));
-    this.room.onMessage(Evt.MarketPage, (m: MarketPage) => this.econ.setMarketPage(m));
-    this.room.onMessage(Evt.MarketMine, (m: MarketMineEvent) => this.econ.setMarketMine(m));
-    this.room.onMessage(Evt.MarketDone, (m: MarketDoneEvent) => this.econ.setMarketDone(m));
-    this.room.onMessage(Evt.TradeInvite, (m: { from: string }) => this.econ.showTradeInvite(String(m.from)));
-    this.room.onMessage(Evt.TradeInviteEnd, () => this.econ.endTradeInvite());
-    this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => {
-      this.inv.setSnapshot(s);
-      this.econ.setSnapshot(s);
-      this.vault.setInventory(s);
-      let n = 0;
-      for (const st of s.inv) if (st && ITEMS[st.id]?.kind === "potion") n += st.qty;
-      this.hud.setPotion(n); // slot da poção na HUD: estoque e recarga
-    });
-    this.room.onMessage(Evt.Loot, (m: LootEvent) => {
-      const d = ITEMS[m.id];
-      if (!d) return;
-      this.inv.toast(`+ ${d.name}${m.qty > 1 ? ` x${m.qty}` : ""}`, RARITY_COLOR[d.rarity]);
-      sfx.pickup();
-      if (rarityIndex(d.rarity) >= 2) revealItem(d); // raro ou melhor: animação no centro da tela, proporcional à raridade
-    });
-    this.room.onMessage(Evt.Chest, (m: ChestEvent) => this.onChest(m));
-    this.room.onMessage(Evt.Pvp, (m: PvpEvent) => {
-      const say: Record<string, [string, string]> = {
-        cancel: ["Canalização interrompida", "#ffb3a6"], stop: ["Canalização cancelada", "#e6eef9"],
-        on: ["Modo PvP ativado", "#ffb3a6"], off: ["Você saiu do modo PvP", "#9fe0a8"],
-      };
-      const t = say[m.s];
-      if (!t) return;
-      if (m.s === "cancel") this.hud.alert({ move: "Canalização cancelada: você se moveu", act: "Canalização cancelada: você agiu", damage: "Canalização interrompida: dano recebido" }[m.why ?? "damage"] ?? t[0]);
-      else this.inv.toast(t[0], t[1]);
-    });
-    this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"));
-    this.room.send(Msg.InvSync, {});
-
-    // chat da zona (Enter abre/envia, Esc fecha; o servidor decide nome e texto)
-    // comandos: /pt nome (convida para o grupo) e /g texto (chat do grupo); o resto vai à zona
+    this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
+    this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
+    this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
       send: (text) => {
         const cmd = /^\/(pt|g)(?:\s+([\s\S]*))?$/i.exec(text);
-        if (!cmd) return this.room.send(Msg.Chat, { text });
+        if (!cmd) return this.room?.send(Msg.Chat, { text });
         const arg = (cmd[2] ?? "").trim();
         if (cmd[1].toLowerCase() === "pt") {
-          if (arg) this.room.send(Msg.PartyInvite, { name: arg });
+          if (arg) this.room?.send(Msg.PartyInvite, { name: arg });
           else chat.system("Use /pt nome_do_jogador para convidar para o grupo.");
-        } else if (arg) this.room.send(Msg.PartyChat, { text: arg });
+        } else if (arg) this.room?.send(Msg.PartyChat, { text: arg });
         else chat.system("Use /g mensagem para falar só com o grupo.");
       },
     });
-    this.room.onMessage(Evt.Chat, (m: ChatEvent) => {
-      chat.add(String(m.name), String(m.text), m.id === this.room.sessionId);
-      this.say(String(m.id), String(m.text)); // balão sobre a cabeça de quem falou
-    });
-
-    // grupo: painel, convite e chat de grupo (os receptores ficam prontos ANTES de pedir o estado)
-    this.party = mountParty({ send: (t, p) => this.room.send(t, p), zoneId: this.zoneId, myName: String(this.me()?.name ?? ""), onMenuClose: () => { this.selId = ""; } });
+    this.chatUi = chat;
+    this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? ""), onMenuClose: () => { this.selId = ""; } });
     this.party.setTouch(this.touchMode);
-    this.room.onMessage(Evt.Party, (m: PartyEvent) => this.party.setParty(m));
-    this.room.onMessage(Evt.PartyInvite, (m: PartyInviteEvent) => this.party.showInvite(m));
-    this.room.onMessage(Evt.PartyInviteEnd, () => this.party.endInvite());
-    this.room.onMessage(Evt.PartyChat, (m: PartyChatEvent) => chat.addGroup(String(m.name), String(m.text), String(m.name) === String(this.me()?.name)));
-    this.room.send(Msg.PartySync, {});
-
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
-    const stats = mountStats({ sendPing: (t) => this.room.send(Msg.Ping, { t }) });
-    this.room.onMessage(Evt.Pong, (m: { t: number }) => stats.onPong(m.t));
-
+    this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }) });
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
+      if (this.busy) return;
       const npc = this.npcs.hit(ptr.worldX, ptr.worldY); // clicar num NPC: conversa se estiver perto; senão, anda até ele
       if (npc) {
         const me = this.me();
@@ -350,7 +350,7 @@ class WorldScene extends Phaser.Scene {
       ShiftLeft: "dodge", ShiftRight: "dodge",
     };
     window.addEventListener("keydown", (e) => {
-      if (isTypingTarget()) return; // digitando no chat
+      if (isTypingTarget() || this.busy) return; // digitando no chat
       if (e.code === "Escape" && this.selId) this.deselect();
       if (e.code === "KeyZ" && !e.repeat && !menuOpen() && this.cls === "cleric") { this.hud.toggleQ(); return; } // Z: alterna o Q do Clérigo
       if (e.code === "KeyF" && !e.repeat && !menuOpen()) { // F: bebe a primeira poção
@@ -364,6 +364,125 @@ class WorldScene extends Phaser.Scene {
       this.hud.trigger(a);
     });
   }
+
+  /** receptores da sala atual (cada zona é uma sala): estado, eventos de combate, mochila, grupo e chat */
+  private bindRoom(room: Room, zone: (typeof ZONES)[number]) {
+    // colyseus.js 0.16: callbacks de coleção passam por getStateCallbacks
+    const $ = getStateCallbacks(this.room);
+    const st = $(this.state);
+
+    st.players.onAdd((p: any, id: string) => {
+      const me = id === this.room.sessionId;
+      const view = new ActorView(this, this.atlases.get(p.cls as string), { color: CLASS_DEFS[p.cls as CharClass]?.color ?? 0x6fa8dc, radius: 10, mine: me });
+      const at = toScreen(p.x, p.y);
+      view.obj.setPosition(at.sx, at.sy); // nasce na posição certa (sem deslizar desde a origem)
+      this.sprites.set(`p:${id}`, view);
+      this.levelTags.set(`p:${id}`, this.add.text(0, 0, String(Number(p.level) || 1), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: "#fff6dc", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
+      this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "11px", color: "#ddd", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
+      if (me) this.cameras.main.startFollow(view.obj, true, 0.1, 0.1);
+    });
+    st.players.onRemove((_: any, id: string) => this.dropSprite(`p:${id}`));
+
+    st.enemies.onAdd((e: any, id: string) => {
+      const kd = enemyKind(String(e.kind));
+      // os monstros têm kit de sprites; os chefes emprestam o corpo de um monstro, maior
+      const view = new ActorView(this, this.atlases.get(String(e.kind)), { color: kd.color, radius: e.kind === "skeleton" ? 12 : kd.boss ? 18 : 11, scale: kd.scale });
+
+      const at = toScreen(e.x, e.y);
+      view.obj.setPosition(at.sx, at.sy);
+      this.sprites.set(`e:${id}`, view);
+      const lv = Number(e.level) || 1;
+      const mine = Number(this.me()?.level) || 1;
+      // cor pela diferença para o seu nível: cinza = fácil, branco = igual, laranja = difícil, vermelho = perigoso
+      const col = lv >= mine + 3 ? "#ff6a5a" : lv > mine ? "#ffb072" : lv < mine - 2 ? "#9aa3ad" : "#e8e2d0";
+      this.labels.set(`e:${id}`, this.add.text(0, 0, kd.name, { fontSize: "11px", color: "#e8e2d0", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
+      // nível: só o número, à direita da barra de vida, grande e com contorno grosso
+      this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
+    });
+    st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
+    st.items.onAdd((g: any, id: string) => this.ground.add(id, { itemId: String(g.itemId), qty: Number(g.qty) || 1, x: g.x, y: g.y, owner: String(g.owner), party: String(g.party), lockS: Number(g.lockS) || 0 }));
+    st.items.onRemove((_: any, id: string) => this.ground.remove(id));
+    if (this.cls === "cleric" && this.savedQMode() === 1) room.send(Msg.QMode, { mode: 1 }); // lembra a escolha entre sessões
+    // travessia aprovada pelo servidor: sai desta sala e entra na da nova zona, sem recarregar a página
+    room.onMessage(Evt.Travel, (m: TravelEvent) => this.travelTo(m.zone, room));
+    room.onLeave((code) => {
+      if (this.leaving || room !== this.room) return;
+      if (code === 4001) logout(); // outra aba assumiu a conta: vai ao login sem disputar a sessão
+      else if (!this.entering) { this.beginTravel(this.zoneId, "Reconectando em"); void this.enterZone(this.zoneId, "reconnect"); } // queda de rede ou servidor: reentra mantendo o token
+    });
+    room.onMessage(Evt.Swing, (m: SwingEvent) => {
+      const actor = this.sprites.get(`p:${m.id}`);
+      if (actor) {
+        actor.setFace(m.dir);
+        if (m.id !== this.room.sessionId) actor.trigger(animFor(m.a), this.time.now); // a própria já tocou em act()
+      }
+      // a própria ação já foi mostrada na hora; as dos outros usam a classe de quem agiu
+      if (m.id !== this.room.sessionId) this.playSwing((this.state.players.get(m.id)?.cls as CharClass) ?? "warrior", m.a, m.x, m.y, m.dir, false, Number(this.state.players.get(m.id)?.qMode) || 0);
+    });
+    room.onMessage(Evt.Proj, (m: ProjEvent) => this.onProj(m));
+    room.onMessage(Evt.ProjEnd, (m: ProjEndEvent) => this.onProjEnd(m));
+    room.onMessage(Evt.Trap, (m: TrapEvent) => this.onTrap(m));
+    room.onMessage(Evt.Heal, (m: HealEvent) => this.onHeal(m));
+    room.onMessage(Evt.Telegraph, (m: TelegraphEvent) => this.onTelegraph(m));
+    room.onMessage(Evt.Hit, (m: HitEvent) => this.onHit(m));
+    room.onMessage(Evt.Died, (m: DiedEvent) => this.onDied(m));
+    // XP do abate: mesmo estilo do número de dano, no lugar onde o inimigo caiu
+    room.onMessage(Evt.Xp, (m: XpEvent) => this.floatText(m.x, m.y - 0.5, `+${m.amount} XP`, "#ffd45e", 20, true));
+    room.onMessage(Evt.LevelUp, (m: LevelUpEvent) => this.onLevelUp(m));
+
+    room.onMessage(Evt.Coins, (m: CoinsEvent) => {
+      if (m.iron) this.floatText(m.x, m.y - 0.9, `+${m.iron} Tostões`, "#cfd4dc", 16, false);
+      if (m.obols) { this.floatText(m.x, m.y - 1.3, `+${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color, 18, true); this.inv.toast(`+ ${m.obols} Óbolo${m.obols > 1 ? "s" : ""} de Sangue`, COIN_OBOL.color); }
+      sfx.pickup();
+    });
+    room.onMessage(Evt.Vault, (m: VaultSnapshot) => this.vault.setVault(m));
+    room.onMessage(Evt.Trade, (m: TradeEvent) => this.econ.setTrade(m));
+    room.onMessage(Evt.TradeChat, (m: { name: string; text: string }) => this.econ.tradeChat(String(m.name), String(m.text)));
+    room.onMessage(Evt.MarketPage, (m: MarketPage) => this.econ.setMarketPage(m));
+    room.onMessage(Evt.MarketMine, (m: MarketMineEvent) => this.econ.setMarketMine(m));
+    room.onMessage(Evt.MarketDone, (m: MarketDoneEvent) => this.econ.setMarketDone(m));
+    room.onMessage(Evt.TradeInvite, (m: { from: string }) => this.econ.showTradeInvite(String(m.from)));
+    room.onMessage(Evt.TradeInviteEnd, () => this.econ.endTradeInvite());
+    room.onMessage(Evt.Inv, (s: InventorySnapshot) => {
+      this.inv.setSnapshot(s);
+      this.econ.setSnapshot(s);
+      this.vault.setInventory(s);
+      let n = 0;
+      for (const st of s.inv) if (st && ITEMS[st.id]?.kind === "potion") n += st.qty;
+      this.hud.setPotion(n); // slot da poção na HUD: estoque e recarga
+    });
+    room.onMessage(Evt.Loot, (m: LootEvent) => {
+      const d = ITEMS[m.id];
+      if (!d) return;
+      this.inv.toast(`+ ${d.name}${m.qty > 1 ? ` x${m.qty}` : ""}`, RARITY_COLOR[d.rarity]);
+      sfx.pickup();
+      if (rarityIndex(d.rarity) >= 2) revealItem(d); // raro ou melhor: animação no centro da tela, proporcional à raridade
+    });
+    room.onMessage(Evt.Chest, (m: ChestEvent) => this.onChest(m));
+    room.onMessage(Evt.Pvp, (m: PvpEvent) => {
+      const say: Record<string, [string, string]> = {
+        cancel: ["Canalização interrompida", "#ffb3a6"], stop: ["Canalização cancelada", "#e6eef9"],
+        on: ["Modo PvP ativado", "#ffb3a6"], off: ["Você saiu do modo PvP", "#9fe0a8"],
+      };
+      const t = say[m.s];
+      if (!t) return;
+      if (m.s === "cancel") this.hud.alert({ move: "Canalização cancelada: você se moveu", act: "Canalização cancelada: você agiu", damage: "Canalização interrompida: dano recebido" }[m.why ?? "damage"] ?? t[0]);
+      else this.inv.toast(t[0], t[1]);
+    });
+    room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"));
+    this.room.send(Msg.InvSync, {});
+    room.onMessage(Evt.Chat, (m: ChatEvent) => {
+      this.chatUi.add(String(m.name), String(m.text), m.id === this.room.sessionId);
+      this.say(String(m.id), String(m.text)); // balão sobre a cabeça de quem falou
+    });
+    room.onMessage(Evt.Party, (m: PartyEvent) => this.party.setParty(m));
+    room.onMessage(Evt.PartyInvite, (m: PartyInviteEvent) => this.party.showInvite(m));
+    room.onMessage(Evt.PartyInviteEnd, () => this.party.endInvite());
+    room.onMessage(Evt.PartyChat, (m: PartyChatEvent) => this.chatUi.addGroup(String(m.name), String(m.text), String(m.name) === String(this.me()?.name)));
+    room.send(Msg.PartySync, {});
+    room.onMessage(Evt.Pong, (m: { t: number }) => this.stats.onPong(m.t));
+  }
+
 
   /** chão da zona: losangos 64x32 em xadrez com variação por código, detalhes e borda do mapa */
   private drawZoneMap(zone: (typeof ZONES)[number]) {
@@ -379,21 +498,31 @@ class WorldScene extends Phaser.Scene {
     });
   }
 
+  /** o chão tem milhares de polígonos: é desenhado UMA vez numa textura (em cache por zona) e vira uma única imagem */
   private drawGround(zone: (typeof ZONES)[number], th: (typeof THEMES)[ZoneTheme]) {
-    const g = this.add.graphics().setDepth(-10);
-    const V = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
-    for (let x = 0; x < zone.w; x++) {
-      for (let y = 0; y < zone.h; y++) {
-        const { sx, sy } = toScreen(x, y);
-        const h = tileHash(x, y);
-        const base = (x + y) % 2 ? th.a : th.b;
-        g.fillStyle(base, 1).fillPoints([V(sx, sy - TILE_H / 2), V(sx + TILE_W / 2, sy), V(sx, sy + TILE_H / 2), V(sx - TILE_W / 2, sy)], true);
-        if (h < 0.12) g.fillStyle(th.fleck, zone.theme === "frost" ? 0.5 : 0.28).fillEllipse(sx + (h - 0.06) * 200, sy, 10 + h * 40, 4 + h * 14); // neve, cinza ou lajes soltas
-        g.lineStyle(1, th.line, 0.45).strokePoints([V(sx, sy - TILE_H / 2), V(sx + TILE_W / 2, sy), V(sx, sy + TILE_H / 2), V(sx - TILE_W / 2, sy)], true);
+    const key = `ground_${zone.id}`;
+    const ox = zone.h * (TILE_W / 2) + 8, oy = TILE_H / 2 + 8; // deslocamento para que tudo caiba em coordenadas positivas
+    const tw = Math.ceil((zone.w + zone.h) * (TILE_W / 2) + 16), tH = Math.ceil((zone.w + zone.h) * (TILE_H / 2) + 16);
+    if (!this.textures.exists(key)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const V = (x: number, y: number) => new Phaser.Math.Vector2(x + ox, y + oy);
+      for (let x = 0; x < zone.w; x++) {
+        for (let y = 0; y < zone.h; y++) {
+          const { sx, sy } = toScreen(x, y);
+          const h = tileHash(x, y);
+          const base = (x + y) % 2 ? th.a : th.b;
+          const pts = [V(sx, sy - TILE_H / 2), V(sx + TILE_W / 2, sy), V(sx, sy + TILE_H / 2), V(sx - TILE_W / 2, sy)];
+          g.fillStyle(base, 1).fillPoints(pts, true);
+          if (h < 0.12) g.fillStyle(th.fleck, zone.theme === "frost" ? 0.5 : 0.28).fillEllipse(sx + (h - 0.06) * 200 + ox, sy + oy, 10 + h * 40, 4 + h * 14);
+          g.lineStyle(1, th.line, 0.45).strokePoints(pts, true);
+        }
       }
+      const c = (x: number, y: number) => { const p = toScreen(x, y); return V(p.sx, p.sy); };
+      g.lineStyle(3, th.border, 0.9).strokePoints([c(-0.5, -0.5), c(zone.w - 0.5, -0.5), c(zone.w - 0.5, zone.h - 0.5), c(-0.5, zone.h - 0.5)], true);
+      g.generateTexture(key, tw, tH);
+      g.destroy();
     }
-    const c = (x: number, y: number) => { const p = toScreen(x, y); return V(p.sx, p.sy); };
-    g.lineStyle(3, th.border, 0.9).strokePoints([c(-0.5, -0.5), c(zone.w - 0.5, -0.5), c(zone.w - 0.5, zone.h - 0.5), c(-0.5, zone.h - 0.5)], true);
+    this.add.image(-ox, -oy, key).setOrigin(0, 0).setDepth(-10);
   }
 
   private drawPortals(time: number) {
@@ -406,15 +535,6 @@ class WorldScene extends Phaser.Scene {
       this.portalG.lineStyle(3, p.color, 0.6 + 0.4 * pulse).strokeEllipse(sx, sy, w, h);
       this.portalG.lineStyle(2, p.color, 0.5).strokeEllipse(sx, sy, w * (0.45 + 0.3 * pulse), h * (0.45 + 0.3 * pulse));
     }
-  }
-
-  /** tela escura curta durante a travessia */
-  private showLoading(text: string) {
-    const d = document.createElement("div");
-    d.textContent = text;
-    d.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#05060a;color:#e8dfc4;font:600 22px Cinzel,Georgia,serif;letter-spacing:.06em;opacity:0;transition:opacity .25s";
-    document.body.appendChild(d);
-    requestAnimationFrame(() => (d.style.opacity = "1"));
   }
 
   /** nome da zona ao entrar (some sozinho) */
@@ -445,7 +565,20 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** pisou num portal (posição do servidor): mostra a tela de load na hora, sem esperar a resposta da travessia */
+  private watchPortals() {
+    const me = this.me();
+    if (this.busy || this.entering || !me || me.dead) return;
+    for (const p of ZONES[this.zoneId]?.portals ?? []) {
+      if (Math.hypot(me.x - p.x, me.y - p.y) > p.r) continue;
+      this.beginTravel(p.to);
+      this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, 6000); // o servidor não confirmou: libera
+      break;
+    }
+  }
+
   private drinkPotion() {
+    if (this.busy) return;
     if (!this.hud.potionReady()) return; // em recarga: o slot da HUD já mostra a contagem
     const slot = this.inv.firstPotionSlot();
     if (slot >= 0) this.room.send(Msg.InvUse, { slot });
@@ -571,11 +704,13 @@ class WorldScene extends Phaser.Scene {
   private makeEffects() {
     this.bars = this.add.graphics().setDepth(1e5);
     this.shadows = this.add.graphics().setDepth(0.3); // sombra no chão dos sprites
-    const tex = this.make.graphics({ x: 0, y: 0 }, false);
-    tex.fillStyle(0xffffff, 1);
-    tex.fillCircle(3, 3, 3);
-    tex.generateTexture("spark", 6, 6);
-    tex.destroy();
+    if (!this.textures.exists("spark")) {
+      const tex = this.make.graphics({ x: 0, y: 0 }, false);
+      tex.fillStyle(0xffffff, 1);
+      tex.fillCircle(3, 3, 3);
+      tex.generateTexture("spark", 6, 6);
+      tex.destroy();
+    }
     const mk = (tint: number) =>
       this.add
         .particles(0, 0, "spark", {
@@ -932,12 +1067,24 @@ class WorldScene extends Phaser.Scene {
   }
 
   private floatText(gx: number, gy: number, txt: string, color: string, size: number, pop: boolean) {
+    if (this.floatUsed > 40) return; // teto de números na tela (rajadas de área não travam o quadro)
     const { sx, sy } = toScreen(gx, gy);
-    const t = this.add
-      .text(sx, sy - 26, txt, { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: `${size}px`, color, stroke: "#000", strokeThickness: 4 })
-      .setOrigin(0.5).setDepth(1e6);
-    if (pop) { t.setScale(1.6); this.tweens.add({ targets: t, scale: 1, duration: 120, ease: "Back.easeOut" }); }
-    this.tweens.add({ targets: t, y: t.y - 38, alpha: 0, duration: 750, delay: 120, ease: "Cubic.easeOut", onComplete: () => t.destroy() });
+    const key = `${size}|${color}`;
+    const free = this.floatFree.get(key);
+    let t = free?.pop();
+    if (t) t.setText(txt).setActive(true).setVisible(true);
+    else t = this.add.text(0, 0, txt, { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: `${size}px`, color, stroke: "#000", strokeThickness: 4 }).setOrigin(0.5);
+    t.setPosition(sx, sy - 26).setDepth(1e6).setAlpha(1).setScale(pop ? 1.6 : 1);
+    this.floatUsed++;
+    if (pop) this.tweens.add({ targets: t, scale: 1, duration: 120, ease: "Back.easeOut" });
+    const tx = t;
+    this.tweens.add({ targets: tx, y: tx.y - 38, alpha: 0, duration: 750, delay: 120, ease: "Cubic.easeOut", onComplete: () => {
+      this.floatUsed--;
+      if (!tx.scene) return; // destruído pela troca de zona
+      tx.setVisible(false).setActive(false);
+      const arr = this.floatFree.get(key);
+      if (arr) arr.push(tx); else this.floatFree.set(key, [tx]);
+    } });
   }
 
   private onHit(m: HitEvent) {
@@ -1123,7 +1270,7 @@ class WorldScene extends Phaser.Scene {
 
   private act(a: ActionId) {
     const me = this.me();
-    if (!me || me.dead || !this.room) return;
+    if (!me || me.dead || !this.room || this.busy) return;
     const { x, y } = this.aim(a);
     const payload: ActPayload = { a, ax: x, ay: y };
     this.room.send(Msg.Act, payload);
@@ -1139,7 +1286,8 @@ class WorldScene extends Phaser.Scene {
   update(time: number, delta: number) {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
-    this.driveJoystick(time);
+    if (!this.busy) this.driveJoystick(time);
+    this.watchPortals();
     this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
     const meNow = this.me();
     if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
@@ -1174,6 +1322,7 @@ class WorldScene extends Phaser.Scene {
     }
 
     this.shadows.clear();
+    const wv = this.cameras.main.worldView; // fora da tela: sem placa, sombra nem efeitos (culling)
     const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean; reflect?: boolean; stun?: boolean; root?: boolean }) => {
       const v = this.sprites.get(key);
       if (!v) return;
@@ -1187,10 +1336,14 @@ class WorldScene extends Phaser.Scene {
       if (hidden) return;
       const { sx, sy } = toScreen(x, y);
       if (Math.hypot(sx - s.x, sy - s.y) > 1.5) v.markMoving(time); // ainda chegando na posição do servidor = andando
-      if (!frozen) {
+      if (Math.hypot(sx - s.x, sy - s.y) > 500) { // teleporte (renascer): sem deslizar pelo mapa
+        s.setPosition(sx, sy);
+        if (key === `p:${this.room.sessionId}`) this.cameras.main.centerOn(sx, sy);
+      } else if (!frozen) {
         s.x += (sx - s.x) * 0.35;
         s.y += (sy - s.y) * 0.35;
       }
+      if (s.x < wv.x - 140 || s.x > wv.right + 140 || s.y < wv.y - 160 || s.y > wv.bottom + 160) { this.labels.get(key)?.setVisible(false); this.levelTags.get(key)?.setVisible(false); return; }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
       if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX);
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
@@ -1252,12 +1405,18 @@ class WorldScene extends Phaser.Scene {
 
     const me = this.me();
     if (me) {
-      this.hud.setPvp(!!me.pvp, Number(me.pvpChan) || 0);
-      this.hud.setHp(me.hp, me.maxHp);
-      this.hud.setMana(me.mana, me.maxMana);
-      this.hud.setQMode(Number(me.qMode) === 1 ? 1 : 0);
-      this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Escudo ativo" : "Brasa ativa");
-      this.hud.setProgress(me.level, me.xp, xpToNext(me.level));
+      // a HUD (DOM) só é tocada quando um valor muda
+      const H = this.hudLast;
+      const pv = `${!!me.pvp}|${Number(me.pvpChan) || 0}`;
+      if (H.pvp !== pv) { H.pvp = pv; this.hud.setPvp(!!me.pvp, Number(me.pvpChan) || 0); }
+      const mn = `${me.mana}|${me.maxMana}`;
+      if (H.mana !== mn) { H.mana = mn; this.hud.setMana(me.mana, me.maxMana); }
+      const q = Number(me.qMode) === 1 ? 1 : 0;
+      if (H.q !== q) { H.q = q; this.hud.setQMode(q); }
+      const bf = `${!!me.buff}|${!!me.ember}`;
+      if (H.buff !== bf) { H.buff = bf; this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Escudo ativo" : "Brasa ativa"); }
+      const pg = `${me.level}|${me.xp}`;
+      if (H.prog !== pg) { H.prog = pg; this.hud.setProgress(me.level, me.xp, xpToNext(me.level)); }
       this.updateBubbles(time);
       if (me.dead) {
         if (!this.deadUntil) this.deadUntil = time + RESPAWN_S * 1000;
@@ -1273,13 +1432,15 @@ class WorldScene extends Phaser.Scene {
 // Primeiro o login; o Phaser só inicia depois que há um token válido.
 const token = await ensureLogin();
 const character = await ensureCharacter(token); // sem personagem, mostra a criação antes de entrar no jogo
+const loader = mountLoading();
+loader.show({ zone: ZONES[character.zone ?? START_ZONE]?.name ?? "Brasalume", theme: ZONES[character.zone ?? START_ZONE]?.theme, verb: "Entrando em" });
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: "game",
   backgroundColor: "#0b0b10",
   // canvas em resolução nativa: tamanho em pixels de dispositivo, exibido em CSS por 1/DPR (sem borrão); sprites sem suavização e posições arredondadas
   scale: { mode: Phaser.Scale.NONE, width: Math.round(viewSize().w * DPR), height: Math.round(viewSize().h * DPR), zoom: 1 / DPR },
-  render: { roundPixels: true, powerPreference: "high-performance" },
+  render: { roundPixels: true, powerPreference: "high-performance", antialias: !COARSE },
   scene: [],
   callbacks: {
     postBoot: (game) => {
@@ -1287,7 +1448,7 @@ new Phaser.Game({
       window.addEventListener("resize", fit);
       window.addEventListener("orientationchange", () => setTimeout(fit, 200));
       window.visualViewport?.addEventListener("resize", fit);
-      game.scene.add("world", WorldScene, true, { token, zone: character.zone ?? START_ZONE });
+      game.scene.add("world", WorldScene, true, { token, zone: character.zone ?? START_ZONE, loader });
     },
   },
 });
