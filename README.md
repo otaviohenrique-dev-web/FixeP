@@ -340,6 +340,19 @@ Saem com código 1 se qualquer verificação falhar. Veja também `docs/DEPLOY_S
 
 `render.yaml` descreve os serviços do Render. Veja `docs/DEPLOY_SUPABASE_RENDER.md` (Parte 5).
 
+## Servidor na sua máquina (Cloudflare Tunnel): atualizar e reiniciar
+
+O servidor de jogo roda numa pasta própria, `FrixeP-servidor` (ao lado do projeto), **sempre na versão da `main`**, separada da pasta onde se desenvolve: trocar de branch ou editar código não derruba o jogo. O túnel (`cloudflared`, `api.frixep.com` para a porta 2567) é independente e não é tocado.
+
+```
+atualizar-servidor.cmd            (duplo clique, ou no terminal) baixa a main, instala o que mudou e reinicia
+atualizar-servidor.cmd -Status    mostra se está de pé, a versão e o /health local e público
+atualizar-servidor.cmd -Log -Seguir   acompanha o log (Ctrl+C sai; o servidor continua)
+atualizar-servidor.cmd -Parar     para o servidor
+```
+
+O script (`tools/servidor.ps1`) cria a pasta na primeira vez (git worktree da `main`), faz `git fetch`, roda `npm ci` só quando o `package-lock.json` mudou, para a versão anterior (só o processo que ele mesmo iniciou, nunca o de terceiros), sobe em segundo plano com `NODE_ENV=production` e espera o `/health` responder. O log fica em `FrixeP-servidor\logs\servidor.log`. O `.env` é o da pasta principal do projeto e é passado ao Node sem ser lido nem impresso. Se a porta 2567 estiver ocupada por um servidor antigo aberto à mão, ele avisa e pede para fechá-lo.
+
 ## Painel de FPS e ping (desenvolvimento)
 
 No canto superior direito do jogo aparecem os **FPS** (quadros desenhados por segundo) e o **ping** (ida e volta até o servidor, medido a cada 2 s).
