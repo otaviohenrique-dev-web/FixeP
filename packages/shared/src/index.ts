@@ -39,8 +39,8 @@ export const Msg = {
   TradeInvite: "trade_invite", // { name }: convida um jogador da zona, por perto, para uma troca
   TradeAccept: "trade_accept", // {}: aceita o convite de troca
   TradeDecline: "trade_decline", // {}: recusa o convite
-  TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols }: define a minha oferta (reinicia as confirmações dos dois lados)
-  TradeReady: "trade_ready", // { ready: boolean }: confirma (ou retira a confirmação); com os dois confirmados o servidor executa
+  TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols, seq }: define a minha oferta (reinicia as confirmações dos dois lados); seq = contador do cliente, devolvido em mine.seq
+  TradeReady: "trade_ready", // { ready: boolean, rev }: aceita a versão `rev` da oferta (ou retira o aceite); executa quando os dois aceitaram a MESMA versão
   TradeCancel: "trade_cancel", // {}: cancela a troca
   QMode: "q_mode", // { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
 } as const;
@@ -79,10 +79,10 @@ export const Evt = {
 export const TRADE_INVITE_S = 20; // validade do convite
 export const TRADE_RANGE = 8; // distância máxima (tiles) entre os dois, no convite e na execução
 export const TRADE_MAX_ITEMS = 8; // espaços de item por oferta
-export const TRADE_READY_DELAY_S = 1.5; // depois de qualquer mudança na oferta, só se confirma passado este tempo (anti-golpe do clique rápido)
-export interface TradeOfferSide { items: { id: string; qty: number }[]; iron: number; obols: number; ready: boolean }
+/** `slot` só vem no meu lado (para o cliente reconciliar a seleção); `seq` é o número do último pedido de oferta meu que o servidor processou. */
+export interface TradeOfferSide { items: { id: string; qty: number; slot?: number }[]; iron: number; obols: number; ready: boolean; seq?: number }
 /** Estado da janela de troca. `open: false` = fechou (reason explica). */
-export interface TradeEvent { open: boolean; with?: string; mine?: TradeOfferSide; theirs?: TradeOfferSide; reason?: string; done?: boolean; readyIn?: number }
+export interface TradeEvent { open: boolean; with?: string; mine?: TradeOfferSide; theirs?: TradeOfferSide; reason?: string; done?: boolean; /** versão da oferta (sobe a cada mudança de qualquer lado): o aceite só vale para a versão que o jogador viu */ rev?: number }
 export interface CoinsEvent { iron: number; obols: number; x: number; y: number }
 
 // ------------------------------------------------------------ grupo (party)
