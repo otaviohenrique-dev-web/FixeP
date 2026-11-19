@@ -8,7 +8,7 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  START_ZONE, HUB_ZONE, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
+  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
@@ -73,7 +73,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.saver = setInterval(() => void this.saveAll(), 30_000);
     this.setPatchRate(1000 / TICK_RATE);
 
-    this.zone.enemies.forEach((s, i) => {
+    expandSpawns(this.zone).forEach((s, i) => {
       const e = new Enemy();
       e.kind = s.kind;
       e.x = e.sx = s.x;
@@ -292,6 +292,13 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private async travel(id: string, p: Player, portal: Pick<PortalDef, "to">, fromDeath = false) {
     if (p.traveling || !ZONES[portal.to]) return;
+    if (!fromDeath) { // em combate não se atravessa nem se usa o portão (a morte leva à cidade normalmente)
+      const wait = TRAVEL_COMBAT_LOCK_S - (this.t - p.combatAt);
+      if (wait > 0) {
+        if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Em combate: espere ${Math.ceil(wait)}s para atravessar.`); }
+        return;
+      }
+    }
     p.traveling = true;
     p.tx = p.x;
     p.ty = p.y;
