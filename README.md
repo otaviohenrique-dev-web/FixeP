@@ -272,7 +272,7 @@ Tema Submundo & Morte. Código compartilhado em `packages/shared/src/economy.ts`
 **Preço médio** (`itemValue`): base por raridade (12 / 45 / 170 / 650 / 2.800 / 13.000) x tipo (arma 1,4; armadura 1,2; mão secundária e elmo 0,8; botas e capa 0,7) x (1 + 1,5% por nível exigido). Poção = 10. O comerciante **vende a 140%** do preço médio e **compra a 35%**; **quebrar** rende 12%. Nunca dá lucro comprar e revender.
 
 **NPCs** (`ZONE_NPCS`, um **comerciante (Garrick)** e uma **ferreira (Brasa)**, só na **cidade segura**, na praça): com placa de nome. Clique no NPC (longe: o personagem anda até ele e abre ao chegar) ou, ao chegar perto (`NPC_REACH` = 3,5 tiles), o botão "Falar com ..." (tecla **G**). A janela fecha se você se afasta.
-- **Comerciante**: *Comprar* lista poção e o equipamento **da sua classe** até raridade rara (o resto vem de chefes e da forja); *Vender* aceita qualquer item da mochila (equipado, não). Venda de item raro ou melhor pede um segundo clique.
+- **Comerciante**: *Comprar* lista poção e o equipamento **da sua classe**, só **comum e incomum** (`SHOP_MAX_RARITY`; raro para cima vem de drops, chefes, forja e mercado de jogadores); *Vender* aceita qualquer item da mochila (equipado, não). Venda de item raro ou melhor pede um segundo clique.
 - **Ferreira (fusão)**: **3 equipamentos do mesmo tipo, raridade e classe** + tostões viram **1 de raridade superior** (da mesma classe e tipo; a família sai entre as dos itens usados). Chance de sucesso por raridade de origem: comum 100%, incomum 85%, raro 65%, épico 45%, lendário 25%. Custo = 30% do valor-base do resultado. **Falhou**: perde a taxa e **1 dos 3 itens** (sorteado); os outros 2 voltam. **Teto**: a forja fica na cidade e vai até a maior raridade que o mundo deixa existir (mítico).
 
 **Soltar e quebrar**: *Soltar* agora põe o item **no chão** (qualquer um pode pegar; quem soltou só o pega sozinho depois de 4 s, mas pode pedir). *Quebrar* destrói o equipamento e rende uma pequena quantia (só equipamento; poção se vende). Confirmação: comum e incomum, diálogo simples; **raro** exige esperar ~1 s e o servidor recusa sem `confirm: true`; **épico em diante** exige também **digitar QUEBRAR**.
@@ -359,6 +359,10 @@ atualizar-servidor.cmd -Parar     para o servidor
 ```
 
 O script (`tools/servidor.ps1`) cria a pasta na primeira vez (git worktree da `main`), faz `git fetch`, roda `npm ci` só quando o `package-lock.json` mudou, para a versão anterior (só o processo que ele mesmo iniciou, nunca o de terceiros), sobe em segundo plano com `NODE_ENV=production` e espera o `/health` responder. O log fica em `FrixeP-servidor\logs\servidor.log`. O script também liga o túnel do Cloudflare (`cloudflared tunnel run`) **escondido** quando ele está parado (use `-SemTunel` para não ligar); como não há janela, não dá para derrubar o jogo fechando uma janela por engano. O `-Status` mostra se o túnel está de pé. O `.env` é o da pasta principal do projeto e é passado ao Node sem ser lido nem impresso. Se a porta 2567 estiver ocupada por um servidor antigo aberto à mão, ele avisa e pede para fechá-lo.
+
+## Aviso de renderização por software (sem placa de vídeo)
+
+Uma página não escolhe o backend gráfico do navegador, mas o cliente **detecta** quando o WebGL usa um renderizador por software (`Microsoft Basic Render Driver`, SwiftShader, llvmpipe: `packages/client/src/gpucheck.ts`) e mostra uma faixa dispensável com o que fazer (ligar a aceleração de hardware; no Edge/Chrome, `edge://flags/#use-angle` ou `chrome://flags/#use-angle` em **D3D11**; atualizar o driver). Caso real: com o adaptador virtual do Parsec ativo, o Edge caía em `Microsoft Basic Render Driver` (CPU 67%, GPU 5%, FPS baixo); com **D3D11** o jogo foi a 165 FPS com a CPU em 13%. A faixa pode ser fechada ou silenciada para sempre (`localStorage`).
 
 ## Painel de FPS e ping (desenvolvimento)
 

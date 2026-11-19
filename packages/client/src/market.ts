@@ -206,7 +206,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
       const info = el("div", "mk-info");
       const nm = el("b", "", d.name + (l.qty > 1 ? ` ×${l.qty}` : ""));
       nm.style.color = RARITY_COLOR[d.rarity];
-      info.append(nm, el("small", "", brief(d)), el("small", "", `Vendedor: ${l.seller}${l.mine ? " (você)" : ""} · expira em ${timeLeft(l.expiresAt)}`));
+      info.append(nm, el("small", "", brief(d)), el("small", "", `${l.mine ? "Sua venda · " : ""}expira em ${timeLeft(l.expiresAt)}`));
       const act = el("div", "mk-act");
       const ref = suggestedPrice(l.itemId, l.qty);
       const pr = priceEl(l.price, !l.mine && poor, l.currency);

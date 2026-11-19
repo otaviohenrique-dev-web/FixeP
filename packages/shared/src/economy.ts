@@ -67,8 +67,8 @@ export const ZONE_NPCS: Record<number, NpcDef[]> = {
 export const zoneNpcs = (zoneId: number): NpcDef[] => ZONE_NPCS[zoneId] ?? [];
 
 // ------------------------------------------------------------ comerciante
-/** O que o comerciante vende a uma classe: poção e o equipamento dela até a raridade rara (o resto vem de chefes e da forja). */
-export const SHOP_MAX_RARITY: Rarity = "rare";
+/** O que o comerciante vende a uma classe: poção e o equipamento dela só COMUM e INCOMUM (raro para cima vem de drops, chefes, forja e mercado de jogadores: isso valoriza o drop). */
+export const SHOP_MAX_RARITY: Rarity = "uncommon";
 export function shopStock(cls: CharClass): string[] {
   const out = ["pocao_de_vida"];
   const cap = rarityIndex(SHOP_MAX_RARITY);
