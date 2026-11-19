@@ -355,7 +355,7 @@ atualizar-servidor.cmd -Log -Seguir   acompanha o log (Ctrl+C sai; o servidor co
 atualizar-servidor.cmd -Parar     para o servidor
 ```
 
-O script (`tools/servidor.ps1`) cria a pasta na primeira vez (git worktree da `main`), faz `git fetch`, roda `npm ci` só quando o `package-lock.json` mudou, para a versão anterior (só o processo que ele mesmo iniciou, nunca o de terceiros), sobe em segundo plano com `NODE_ENV=production` e espera o `/health` responder. O log fica em `FrixeP-servidor\logs\servidor.log`. O `.env` é o da pasta principal do projeto e é passado ao Node sem ser lido nem impresso. Se a porta 2567 estiver ocupada por um servidor antigo aberto à mão, ele avisa e pede para fechá-lo.
+O script (`tools/servidor.ps1`) cria a pasta na primeira vez (git worktree da `main`), faz `git fetch`, roda `npm ci` só quando o `package-lock.json` mudou, para a versão anterior (só o processo que ele mesmo iniciou, nunca o de terceiros), sobe em segundo plano com `NODE_ENV=production` e espera o `/health` responder. O log fica em `FrixeP-servidor\logs\servidor.log`. O script também liga o túnel do Cloudflare (`cloudflared tunnel run`) **escondido** quando ele está parado (use `-SemTunel` para não ligar); como não há janela, não dá para derrubar o jogo fechando uma janela por engano. O `-Status` mostra se o túnel está de pé. O `.env` é o da pasta principal do projeto e é passado ao Node sem ser lido nem impresso. Se a porta 2567 estiver ocupada por um servidor antigo aberto à mão, ele avisa e pede para fechá-lo.
 
 ## Painel de FPS e ping (desenvolvimento)
 

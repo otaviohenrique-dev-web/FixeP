@@ -24,6 +24,7 @@
 .PARAMETER Pasta     Onde fica o servidor. Padrão: <pasta do projeto>\..\FrixeP-servidor.
 .PARAMETER EnvFile   Arquivo .env a usar. Padrão: o .env da pasta principal do projeto.
 .PARAMETER Porta     Porta do servidor. Padrão 2567 (a que o túnel aponta).
+.PARAMETER SemTunel  Não liga o túnel (cloudflared). Por padrão o script também liga o túnel, ESCONDIDO, se ele estiver parado.
 .PARAMETER Dev       Sobe em modo de desenvolvimento (NODE_ENV diferente de production: conta de convidado ligada). Só para testes.
 
 .EXAMPLE
@@ -41,7 +42,8 @@ param(
   [string]$Pasta,
   [string]$EnvFile,
   [int]$Porta = 2567,
-  [switch]$Dev
+  [switch]$Dev,
+  [switch]$SemTunel
 )
 
 $ErrorActionPreference = "Continue"   # (o git escreve progresso em stderr; as falhas são checadas pelo código de saída)
@@ -86,6 +88,17 @@ function DonoDaPorta {
   if ($c) { return $c.OwningProcess } else { return $null }
 }
 
+function GarantirTunel {
+  if (Get-Process -Name cloudflared -ErrorAction SilentlyContinue) { Info "túnel (cloudflared) já está rodando."; return }
+  $exe = (Get-Command cloudflared.exe -ErrorAction SilentlyContinue).Source
+  if (-not $exe) { foreach ($c in @("C:\Program Files (x86)\cloudflared\cloudflared.exe", "C:\Program Files\cloudflared\cloudflared.exe")) { if (Test-Path $c) { $exe = $c; break } } }
+  if (-not $exe) { Aviso "não achei o cloudflared.exe: ligue o túnel por fora (sem ele o jogo fica offline)."; return }
+  Info "túnel parado: ligando o cloudflared ESCONDIDO (não há janela para fechar por engano)..."
+  Start-Process -FilePath $exe -ArgumentList "tunnel", "run" -WindowStyle Hidden
+  Start-Sleep -Seconds 8
+  if (Get-Process -Name cloudflared -ErrorAction SilentlyContinue) { Ok "túnel ligado." } else { Aviso "o túnel não ficou de pé; rode 'cloudflared tunnel run' para ver o erro." }
+}
+
 function Saude($url) {
   try { $r = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 8; return $r.StatusCode } catch { return 0 }
 }
@@ -98,6 +111,7 @@ if ($Status) {
   $versao = if (Test-Path (Join-Path $Pasta ".git")) { (& git -C $Pasta log -1 "--format=%h %s" 2>$null) } else { "(pasta do servidor ainda não criada)" }
   if ($p) { Ok "rodando (PID $p) na porta $Porta." } else { Aviso "não está rodando (por este script)." }
   Info "versão: $versao"
+  if (Get-Process -Name cloudflared -ErrorAction SilentlyContinue) { Ok "túnel (cloudflared) rodando." } else { Aviso "túnel (cloudflared) PARADO: o jogo fica offline para os outros jogadores." }
   Info "local  http://localhost:$Porta/health -> $(Saude "http://localhost:$Porta/health")"
   Info "público https://api.frixep.com/health -> $(Saude 'https://api.frixep.com/health')"
   exit 0
@@ -177,6 +191,7 @@ if (-not $ok) {
   Falha "servidor não subiu. Veja o log: $LogFile"
 }
 Ok "servidor no ar: http://localhost:$Porta/health -> 200  (versão $depois)"
+if (-not $SemTunel) { GarantirTunel }
 $pub = Saude "https://api.frixep.com/health"
 if ($Porta -ne 2567) { Info "(porta de teste: o endereço público aponta para a 2567, não conferido)" }
 elseif ($pub -eq 200) { Ok "público:      https://api.frixep.com/health -> 200 (túnel OK)" }
