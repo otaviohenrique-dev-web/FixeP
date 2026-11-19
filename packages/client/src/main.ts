@@ -21,6 +21,9 @@ import { mountStats } from "./stats";
 import { mountJoystick } from "./touch";
 import { setMobileUi } from "./mobile";
 import { drawPlate, type PlateKind } from "./plate";
+import { GateLayer, gateAxis } from "./gate";
+import { drawShieldBubble } from "./shield";
+import { mountLowHp, LOW_HP_RATIO, type LowHp } from "./lowhp";
 import { mountChat, type ChatUi } from "./chat";
 import { mountLoading, type LoadingScreen } from "./loading";
 import { GroundLayer } from "./ground";
@@ -106,7 +109,9 @@ class WorldScene extends Phaser.Scene {
   private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; blast?: number; obj: Phaser.GameObjects.Shape }>();
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
   private zoneId = 1;
-  private portalG!: Phaser.GameObjects.Graphics;
+  private gates: GateLayer | null = null; // portões da zona (estruturas de pedra no lugar dos antigos anéis)
+  private lowHp!: LowHp; // moldura vermelha de vida baixa
+  private shieldEnd = 0; // fim da bolha de chegada (relógio do navegador); 0 = sem contagem (carregando ou sem bolha)
   private ground!: GroundLayer;
   private npcs!: NpcLayer;
   private town: TownLayer | null = null;
@@ -115,7 +120,6 @@ class WorldScene extends Phaser.Scene {
   private pendingVault = false; // clicou no baú longe: abre quando chegar perto
   private econ!: EconomyUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
-  private portalDefs: { x: number; y: number; r: number; color: number }[] = [];
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
   private lockKey = ""; // alvo travado do toque ("e:id" ou "p:id"): as ações mirram nele
@@ -131,8 +135,9 @@ class WorldScene extends Phaser.Scene {
   private leaving = false; // saída voluntária (menu/sair): não tenta reconectar
   private stats!: ReturnType<typeof mountStats>;
   private chatUi!: ChatUi;
-  private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1 };
+  private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "" };
   private travelWatch = 0;
+  private gateBlock = false; // a travessia foi recusada (em combate): não mostra a tela de load de novo enquanto o jogador continuar em cima do portão
   private enterSeq = 0;
   private entering = false;
   private travelT0 = 0;
@@ -189,7 +194,7 @@ class WorldScene extends Phaser.Scene {
     const token = (this.sys.settings.data as { token: string }).token;
     const gone = this.room; // sala anterior (já saindo)
     // 1) começa a entrar na sala JÁ: roda junto do desenho do mapa e da arte
-    const joinP: Promise<Room | null> = new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token }).then((r) => r, () => null);
+    const joinP: Promise<Room | null> = new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token, load: true }).then((r) => r, () => null);
     if (gone) this.room = undefined as unknown as Room; // as mensagens da sala antiga são ignoradas
     // 2) mundo anterior fora, mapa novo
     this.resetWorld();
@@ -227,7 +232,7 @@ class WorldScene extends Phaser.Scene {
     T.mark("mundo");
     // 3) câmera exatamente sobre o personagem (sem deslizar), no zoom certo, antes de revelar
     this.centerCameraOnMe();
-    this.hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1 };
+    this.hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "" };
     await new Promise<void>((r) => { requestAnimationFrame(() => r()); setTimeout(r, 120); }); // 1 quadro já desenhado com a câmera no lugar (o timeout cobre aba em segundo plano)
     this.cameras.main.setLerp(0.1, 0.1); // a partir daqui o seguimento volta a ser suave
     this.zoneBanner(zone.name);
@@ -235,6 +240,7 @@ class WorldScene extends Phaser.Scene {
     this.leaving = false;
     window.clearTimeout(this.travelWatch);
     await this.loader.hide(why === "boot" ? 250 : 450);
+    if (seq === this.enterSeq && this.room === room) room.send(Msg.Ready, {}); // a tela já sumiu e o jogador controla o personagem: começa a contar a bolha de chegada
     T.mark("pronto");
     T.log();
   }
@@ -259,8 +265,9 @@ class WorldScene extends Phaser.Scene {
     this.sprites.clear(); this.labels.clear(); this.levelTags.clear(); this.bubbles.clear(); this.prevSt.clear(); this.pvpTag.clear();
     this.projs.clear(); this.traps.clear(); this.floatFree.clear(); this.floatUsed = 0;
     this.town = null;
+    this.gates = null;
+    this.shieldEnd = 0;
     this.worldMap?.close();
-    this.portalDefs = [];
     this.hitstopUntil = 0;
     this.deadUntil = 0;
     this.cameras.main.stopFollow();
@@ -269,6 +276,7 @@ class WorldScene extends Phaser.Scene {
 
   /** interface do DOM (HUD, mochila, loja, baú, chat, grupo, FPS) e entradas: montada UMA vez; as salas só trocam os receptores */
   private mountUi() {
+    this.lowHp = mountLowHp();
     this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m) });
     this.joy = mountJoystick();
     this.applyTouch();
@@ -410,6 +418,13 @@ class WorldScene extends Phaser.Scene {
     // travessia aprovada pelo servidor: sai desta sala e entra na da nova zona, sem recarregar a página
     room.onMessage(Evt.WorldMap, () => { if (!this.busy && !this.entering) this.worldMap.open(); });
     room.onMessage(Evt.Travel, (m: TravelEvent) => this.travelTo(m.zone, room));
+    room.onMessage(Evt.TravelDenied, () => { // recusado (em combate): tira o load que apareceu ao pisar no portão e devolve o controle na hora
+      if (this.entering) return;
+      this.gateBlock = true;
+      window.clearTimeout(this.travelWatch);
+      if (this.busy && this.loader.visible) { this.busy = false; void this.loader.hide(0); }
+    });
+    room.onMessage(Evt.Shield, (m: { ms: number }) => { this.shieldEnd = performance.now() + (Number(m?.ms) || 0); }); // a bolha começou a contar (a tela de load já acabou)
     room.onLeave((code) => {
       if (this.leaving || room !== this.room) return;
       if (code === 4001) logout(); // outra aba assumiu a conta: vai ao login sem disputar a sessão
@@ -495,14 +510,10 @@ class WorldScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(th.bg);
     if (zone.theme === "town") this.town = drawTown(this, zone, toScreen, TILE_W, TILE_H); // a cidade tem arte própria (praça, casas, luzes)
     else this.drawGround(zone, th);
-    this.portalG = undefined as unknown as Phaser.GameObjects.Graphics;
+    this.gates = null;
     if (zone.theme === "town") return; // o portão da cidade é cenário próprio (town.ts) e abre o mapa-mundo
-    this.portalG = this.add.graphics().setDepth(0.5);
-    this.portalDefs = zone.portals.map((p) => ({ x: p.x, y: p.y, r: p.r, color: THEMES[ZONES[p.to].theme].portal }));
-    zone.portals.forEach((p) => {
-      const at = toScreen(p.x, p.y);
-      this.add.text(at.sx, at.sy - p.r * TILE_H - 18, `➜ ${ZONES[p.to].name}`, { fontFamily: "Cinzel, Georgia, serif", fontSize: "13px", color: "#f4ecd2", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5);
-    });
+    // um portão de pedra em cada saída: pedra e tochas no tema desta zona; véu e runas na cor do destino
+    this.gates = new GateLayer(this, toScreen, zone.portals.map((p) => ({ x: p.x, y: p.y, r: p.r, label: ZONES[p.to].name, axis: gateAxis(zone, p), stone: zone.theme, glow: THEMES[ZONES[p.to].theme].portal })));
   }
 
   /** o chão tem milhares de polígonos: é desenhado UMA vez numa textura (em cache por zona) e vira uma única imagem */
@@ -530,18 +541,6 @@ class WorldScene extends Phaser.Scene {
       g.destroy();
     }
     this.add.image(-ox, -oy, key).setOrigin(0, 0).setDepth(-10);
-  }
-
-  private drawPortals(time: number) {
-    this.portalG.clear();
-    for (const p of this.portalDefs) {
-      const { sx, sy } = toScreen(p.x, p.y);
-      const pulse = 0.5 + 0.5 * Math.sin(time / 350);
-      const w = ELL_W * p.r, h = ELL_H * p.r;
-      this.portalG.fillStyle(p.color, 0.1 + 0.1 * pulse).fillEllipse(sx, sy, w, h);
-      this.portalG.lineStyle(3, p.color, 0.6 + 0.4 * pulse).strokeEllipse(sx, sy, w, h);
-      this.portalG.lineStyle(2, p.color, 0.5).strokeEllipse(sx, sy, w * (0.45 + 0.3 * pulse), h * (0.45 + 0.3 * pulse));
-    }
   }
 
   /** nome da zona ao entrar (some sozinho) */
@@ -576,13 +575,15 @@ class WorldScene extends Phaser.Scene {
   private watchPortals() {
     const me = this.me();
     if (this.busy || this.entering || !me || me.dead) return;
+    let on: (typeof ZONES)[number]["portals"][number] | null = null;
     for (const p of ZONES[this.zoneId]?.portals ?? []) {
       if (p.to === WORLD_GATE) continue; // o portão abre o mapa-mundo (servidor avisa)
-      if (Math.hypot(me.x - p.x, me.y - p.y) > p.r) continue;
-      this.beginTravel(p.to);
-      this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, 6000); // o servidor não confirmou: libera
-      break;
+      if (Math.hypot(me.x - p.x, me.y - p.y) <= p.r) { on = p; break; }
     }
+    if (!on) { this.gateBlock = false; return; }
+    if (this.gateBlock) return;
+    this.beginTravel(on.to);
+    this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, 6000); // o servidor não confirmou: libera
   }
 
   private drinkPotion() {
@@ -1313,7 +1314,7 @@ class WorldScene extends Phaser.Scene {
     }
     this.checkLock();
     this.drawMarks(time);
-    if (this.portalG) this.drawPortals(time);
+    this.gates?.update(time);
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes
     this.bars.clear();
 
@@ -1331,7 +1332,7 @@ class WorldScene extends Phaser.Scene {
 
     this.shadows.clear();
     const wv = this.cameras.main.worldView; // fora da tela: sem placa, sombra nem efeitos (culling)
-    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean; reflect?: boolean; stun?: boolean; root?: boolean }) => {
+    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean; reflect?: boolean; stun?: boolean; root?: boolean; shield?: number }) => {
       const v = this.sprites.get(key);
       if (!v) return;
       const s = v.obj;
@@ -1367,6 +1368,7 @@ class WorldScene extends Phaser.Scene {
         const d = dirScreen(face);
         this.bars.lineStyle(3, 0xffffff, 0.85).lineBetween(s.x, s.y, s.x + d.x * 16, s.y + d.y * 16);
       }
+      if (o.shield) drawShieldBubble(this.bars, s.x, s.y, time, o.shield); // bolha de chegada (imune a dano)
       if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, 18); // Brasa ativa
       if (o.reflect) { // Escudo Refletor: cúpula azul-aço que pulsa em volta do guerreiro
         const k = 1 + 0.05 * Math.sin(time / 160), cy = s.y - 16;
@@ -1401,7 +1403,12 @@ class WorldScene extends Phaser.Scene {
       }
     });
     st.players.forEach((p: any, id: string) => {
-      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember, reflect: !!p.reflect, level: Number(p.level) || 1, kind: id === this.room.sessionId ? (p.pvp ? "pvp" : "me") : mateOf(p, id) ? "party" : p.pvp ? "pvp" : "ally" });
+      let shield = 0; // 0 = sem bolha; senão a opacidade (pisca de leve nos últimos 2 s, só para o dono, que sabe o tempo)
+      if (p.shield && !p.dead) {
+        shield = 1;
+        if (id === this.room.sessionId && this.shieldEnd && this.shieldEnd - performance.now() < 2000) shield = 0.55 + 0.35 * Math.sin(time / 70);
+      }
+      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { shield, dead: p.dead, ember: p.ember, reflect: !!p.reflect, level: Number(p.level) || 1, kind: id === this.room.sessionId ? (p.pvp ? "pvp" : "me") : mateOf(p, id) ? "party" : p.pvp ? "pvp" : "ally" });
     });
     st.enemies.forEach((e: any, id: string) => {
       const key = `e:${id}`;
@@ -1423,6 +1430,10 @@ class WorldScene extends Phaser.Scene {
       if (H.q !== q) { H.q = q; this.hud.setQMode(q); }
       const bf = `${!!me.buff}|${!!me.ember}`;
       if (H.buff !== bf) { H.buff = bf; this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Escudo ativo" : "Brasa ativa"); }
+      const hpk = `${me.hp}|${me.maxHp}`;
+      if (H.hp !== hpk) { H.hp = hpk; this.hud.setHp(me.hp, me.maxHp); }
+      this.hud.setShield(me.shield && !me.dead ? (this.shieldEnd ? Math.max(0, (this.shieldEnd - performance.now()) / 1000) : -1) : null);
+      this.lowHp.set(!me.dead && !this.busy && !this.loader.visible && me.maxHp > 0 && me.hp / me.maxHp <= LOW_HP_RATIO); // vida baixa: moldura vermelha leve
       const pg = `${me.level}|${me.xp}`;
       if (H.prog !== pg) { H.prog = pg; this.hud.setProgress(me.level, me.xp, xpToNext(me.level)); }
       this.updateBubbles(time);

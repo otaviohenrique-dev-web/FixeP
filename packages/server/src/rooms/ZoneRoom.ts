@@ -8,7 +8,7 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
+  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
@@ -103,6 +103,15 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!pl || pl.dead || pl.traveling || !Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
       pl.tx = clamp(p.x, 0, this.zone.w - 1);
       pl.ty = clamp(p.y, 0, this.zone.h - 1);
+    });
+
+    // O cliente terminou de carregar e o jogador já controla o personagem: a bolha de chegada começa a contar agora (não durante o load).
+    // Também solta qualquer destino/deslocamento preso, para o personagem nascer sempre móvel.
+    this.onMessage(Msg.Ready, (client) => {
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || pl.traveling) return;
+      pl.tx = pl.x; pl.ty = pl.y; pl.dashLeft = 0;
+      if (pl.shieldPending) this.startShield(client.sessionId, pl);
     });
 
     // Travessia: basta pisar no portal (checado a cada tick); este pedido explícito passa pela MESMA validação de distância
@@ -297,12 +306,35 @@ export class ZoneRoom extends Room<ZoneState> {
     }
   }
 
+  /** Ponto de nascimento. Só nos testes (TEST_START_ZONE, fora de produção) os bots antigos (sem `load: true`) nascem nas Cinzas no ponto de antes da clareira segura, (20, 20),
+   *  de onde as suítes de combate andam até os esqueletos e1..e3 com tempos fixos; o cliente de verdade e os testes de chegada usam sempre o `spawn` real da zona. */
+  private spawnPoint(bot: boolean): { x: number; y: number } {
+    if (bot && this.zone.id === 1 && process.env.TEST_START_ZONE && process.env.NODE_ENV !== "production") return { x: 20, y: 20 };
+    return this.zone.spawn;
+  }
+
+  /** começa a contar a bolha de chegada (o dono é avisado para mostrar o tempo restante) */
+  private startShield(id: string, p: Player, s = ARRIVAL_SHIELD_S) {
+    p.shield = true;
+    p.shieldPending = false;
+    p.shieldUntil = this.t + s;
+    this.clients.getById(id)?.send(Evt.Shield, { ms: s * 1000 });
+  }
+
+  /** a bolha estoura na hora: o jogador agiu (atacou, usou habilidade, causou dano) */
+  private breakShield(p: Player) {
+    if (!p.shield) return;
+    p.shield = false;
+    p.shieldPending = false;
+    p.shieldUntil = 0;
+  }
+
   private async travel(id: string, p: Player, portal: Pick<PortalDef, "to">, fromDeath = false) {
     if (p.traveling || !ZONES[portal.to]) return;
     if (!fromDeath) { // em combate não se atravessa nem se usa o portão (a morte leva à cidade normalmente)
       const wait = TRAVEL_COMBAT_LOCK_S - (this.t - p.combatAt);
       if (wait > 0) {
-        if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Em combate: espere ${Math.ceil(wait)}s para atravessar.`); }
+        if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Em combate: espere ${Math.ceil(wait)}s para atravessar.`); this.clients.getById(id)?.send(Evt.TravelDenied, {}); }
         return;
       }
     }
@@ -370,7 +402,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** dano de jogador em jogador: só se AMBOS estão em PvP (quem não está nunca é alvo) */
   private canPvpHit(by: string, o: Player, oid: string): boolean {
-    if (this.zone.safe || oid === by || o.dead || !o.pvp || this.t < o.invulnUntil) return false;
+    if (this.zone.safe || oid === by || o.dead || !o.pvp || o.shield || this.t < o.invulnUntil) return false;
     const a = this.state.players.get(by);
     if (!a || a.dead || !a.pvp) return false;
     return !(a.party && a.party === o.party); // membros do mesmo grupo nunca se ferem
@@ -770,15 +802,18 @@ export class ZoneRoom extends Room<ZoneState> {
     return { user, character, inventory };
   }
 
-  onJoin(client: Client, _options: unknown, auth: JoinAuth) {
+  onJoin(client: Client, options: { load?: boolean } | undefined, auth: JoinAuth) {
     this.userIds.set(client.sessionId, auth.user.id);
     active.set(auth.user.id, { room: this, sid: client.sessionId });
     const pl = new Player();
     const from = arrivals.get(auth.character.id); // chegou por um portal: nasce junto do portal de volta
     arrivals.delete(auth.character.id);
-    const at = (from !== undefined && this.zone.arrive[from]) || this.zone.spawn;
+    const at = (from !== undefined && this.zone.arrive[from]) || this.spawnPoint(options?.load !== true);
     pl.x = pl.tx = at.x;
     pl.y = pl.ty = at.y;
+    // o cliente de verdade avisa que vai carregar (options.load): a bolha já vale durante o load e só começa a contar no Msg.Ready.
+    // Sem o aviso (bots e testes antigos) não há bolha: ninguém ganha proteção sem o cliente confirmar que a tela está pronta.
+    if (options?.load === true) { pl.shield = true; pl.shieldPending = true; pl.shieldUntil = this.t + ARRIVAL_SHIELD_WAIT_S; }
     pl.name = auth.character.name;
     pl.charId = auth.character.id;
     pl.cls = auth.character.class;
@@ -944,12 +979,15 @@ export class ZoneRoom extends Room<ZoneState> {
       p.hp = p.maxHp;
       p.manaF = p.maxMana;
       p.mana = p.maxMana;
-      p.x = p.tx = this.zone.spawn.x;
-      p.y = p.ty = this.zone.spawn.y;
+      const sp = this.spawnPoint(true);
+      p.x = p.tx = sp.x;
+      p.y = p.ty = sp.y;
       p.combatAt = -1e9;
       p.invulnUntil = this.t + 2; // um respiro ao renascer
+      this.startShield(id, p); // renasceu: bolha de proteção (sem tela de load aqui, conta já)
       return;
     }
+    if (p.shield && this.t >= p.shieldUntil) { if (p.shieldPending) this.startShield(id, p); else p.shield = false; } // fim da bolha (ou fim da espera sem aviso do cliente)
     p.buff = this.t < p.buffUntil;
     p.ember = this.t < p.emberUntil;
     p.reflect = this.t < p.reflectUntil;
@@ -1003,6 +1041,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const def: ActionDef = effectiveAction(classAction(p.cls as CharClass, a, p.qMode), a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
     if (this.t < (p.cdUntil[a] ?? 0) - 0.05) return; // em recarga (tolerância de rede)
     if (p.dashLeft > 0) return; // não age durante o deslocamento
+    if (a !== "dodge") this.breakShield(p); // atacar ou usar habilidade estoura a bolha de chegada
 
     // Ressurgir sem ninguém caído por perto: avisa e NÃO gasta a recarga
     const fallen = def.kind === "revive" ? this.nearestDead(p, def.radius ?? 0) : null;
@@ -1278,7 +1317,7 @@ export class ZoneRoom extends Room<ZoneState> {
     e.lastHurt = this.t; // o dano recebido SEMPRE conta: nada de regenerar enquanto apanha
     if (!e.fightStart) { e.fightStart = this.t; e.nextPulse = this.t + (enemyKind(e.kind).boss?.pulseEveryS ?? 0); }
     const att = this.state.players.get(by);
-    if (att) att.combatAt = this.t;
+    if (att) { att.combatAt = this.t; this.breakShield(att); }
     if (!e.targetId && e.st !== "evade") e.targetId = by; // quem bate chama a atenção (inimigo voltando para casa ignora)
     this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by, refl: refl || undefined });
     if (e.hp > 0) return;
@@ -1370,7 +1409,7 @@ export class ZoneRoom extends Room<ZoneState> {
     let best: [string, Player] | null = null;
     let bestD = maxDist;
     this.state.players.forEach((p, id) => {
-      if (p.dead || p.traveling || dist(p.x, p.y, e.sx, e.sy) > leash) return; // além da coleira: não vira alvo
+      if (p.dead || p.traveling || p.shield || dist(p.x, p.y, e.sx, e.sy) > leash) return; // além da coleira: não vira alvo
       const d = dist(e.x, e.y, p.x, p.y);
       if (d < bestD) { bestD = d; best = [id, p]; }
     });
@@ -1472,10 +1511,10 @@ export class ZoneRoom extends Room<ZoneState> {
     // alvo: provocação ativa > quem já está em combate > mais próximo no raio de aggro (e dentro da coleira: quem está além dela não "puxa" o inimigo)
     let target: [string, Player] | null = null;
     const taunter = this.t < e.tauntUntil ? this.state.players.get(e.tauntId) : undefined;
-    if (taunter && !taunter.dead && !taunter.traveling) target = [e.tauntId, taunter];
+    if (taunter && !taunter.dead && !taunter.traveling && !taunter.shield) target = [e.tauntId, taunter];
     else {
       const current = e.targetId ? this.state.players.get(e.targetId) : undefined;
-      if (current && !current.dead && !current.traveling && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
+      if (current && !current.dead && !current.traveling && !current.shield && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
       else target = this.nearestPlayer(e, K.aggro, this.leashOf(K));
     }
     e.targetId = target ? target[0] : "";
@@ -1556,6 +1595,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false, src?: { id: string; e: Enemy }) {
     if (this.zone.safe) return; // cidade segura: NINGUÉM leva dano, venha de onde vier (área, armadilha, projétil)
+    if (p.shield) return; // bolha de chegada: imune a inimigos, chefes e PvP (também durante o load)
     p.combatAt = this.t; // em combate: a regeneração de vida recomeça só depois de um tempo
     p.regenAcc = 0;
     if (by) { const a = this.state.players.get(by); if (a) a.combatAt = this.t; }

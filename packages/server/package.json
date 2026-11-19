@@ -16,6 +16,8 @@
     "test:chat": "node test/chat.mjs",
     "test:pvp": "node test/pvp.mjs",
     "test:zones": "node test/zones.mjs",
+    "test:chegada": "node test/chegada.mjs",
+    "test:chegada:unit": "tsx test/chegada.unit.ts",
     "test:cidade": "node test/cidade.mjs",
     "test:morte": "node test/morte.mjs",
     "test:vault:unit": "tsx test/vault.unit.ts",

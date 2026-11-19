@@ -54,6 +54,7 @@ export const Msg = {
   MarketBuy: "market_buy", // { npc, id }: compra uma listagem
   MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
+  Ready: "ready", // {}: o cliente terminou de carregar a zona e o jogador já pode agir: só então começa a contar a bolha de chegada
   QMode: "q_mode", // { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
 } as const;
 
@@ -68,6 +69,8 @@ export const Evt = {
   Proj: "proj", // projétil criado (o cliente anima o voo)
   ProjEnd: "projend", // projétil terminou (acertou ou acabou o alcance)
   Trap: "trap", // armadilha: colocada, disparou ou sumiu
+  TravelDenied: "travel_denied", // {}: o servidor recusou a travessia (em combate): o cliente tira a tela de load que mostrou ao pisar no portão
+  Shield: "shield", // { ms }: a bolha de chegada começou a contar (só para o dono; o cliente mostra o tempo restante)
   WorldMap: "world_map", // {}: o jogador pisou no portão da cidade: o cliente abre o mapa-mundo (escolher a zona); a escolha volta em Msg.Travel { to }
   Travel: "travel", // { zone }: travessia aprovada; o cliente sai da sala e entra na da nova zona
   Pong: "pong", // resposta ao ping, só para quem perguntou
@@ -342,6 +345,14 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
 export const BOSS_CC_RESIST = 0.4;
 /** Quem causou ou recebeu dano há menos de tantos segundos está em combate: não atravessa portais nem o portão (a morte leva à cidade normalmente). */
 export const TRAVEL_COMBAT_LOCK_S = 8;
+/** Bolha de proteção da chegada: imune a dano (inimigos, chefes, PvP) por tantos segundos, contados SÓ depois que a tela de carregamento acaba. Some na hora se o jogador atacar ou usar habilidade. */
+export const ARRIVAL_SHIELD_S = 9;
+/** Enquanto o cliente carrega (ainda não mandou Msg.Ready) o jogador já está protegido; se o aviso nunca vier, a contagem começa sozinha depois deste tempo. */
+export const ARRIVAL_SHIELD_WAIT_S = 25;
+/** Raio (tiles) em volta de todo ponto de chegada/nascimento sem nenhum inimigo (o aggro é de 7 a 11; sobra margem). */
+export const ARRIVAL_SAFE_RADIUS = 14;
+/** Distância (tiles) entre o centro do portão e o ponto em que se chega: fora do alcance de pisar nele. */
+export const ARRIVAL_GATE_DIST = 5.5;
 
 export const SKELETON = {
   name: "Esqueleto",

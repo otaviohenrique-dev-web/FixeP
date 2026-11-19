@@ -216,7 +216,7 @@ await Promise.all([P1, P2, P3].map((p) => p.room.leave()));
 console.log("\n== Grupo entre zonas, ausência e chat ==");
 const M = await spawn("warrior"), N = await spawn("cleric");
 await group(M, N, 2);
-N.room.send("move_to", { x: 36, y: 36 }); // portal para a zona 2
+N.room.send("move_to", { x: 4, y: 35 }); // portão para a zona 2 (Floresta, muralha oeste das Cinzas)
 check("N pisa no portal e a travessia é aprovada", await until(() => N.ev.travel.length > 0, 9000) && N.ev.travel[0].zone === 2);
 check("durante a travessia o grupo continua (M ainda vê N)", M.members().includes(N.name));
 await N.room.leave(true);

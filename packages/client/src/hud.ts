@@ -21,7 +21,10 @@ export interface HudOptions {
 }
 export interface Hud {
   trigger(a: ActionId): void;
+  /** barra de vida vermelha (com a sombra que desce devagar ao levar dano) e os números "67/170" */
   setHp(hp: number, max: number): void;
+  /** bolha de chegada: segundos restantes (-1 = protegido durante o carregamento, sem contagem; null = sem bolha) */
+  setShield(secondsLeft: number | null): void;
   setMana(cur: number, max: number): void;
   setProgress(level: number, xp: number, need: number): void;
   /** desenha o retrato; `null` mantém o retrato provisório (inicial do nome) */
@@ -62,6 +65,7 @@ const ICON: Record<string, string> = {
 };
 
 const TIER_NAMES = ["Bronze", "Prata", "Ouro", "Gelo", "Violeta", "Brasa"];
+const TIER_VARS = [["#9a8460", "#dccfb0"], ["#c9d3df", "#f4f8ff"], ["#f0c34a", "#fff0b8"], ["#4cc3ee", "#d4f4ff"], ["#b575f5", "#ecd7ff"], ["#ff6a3d", "#ffd9b8"]]; // as mesmas cores das molduras (.hd-pwrap.tN)
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 
 const CSS = `
@@ -99,8 +103,21 @@ const CSS = `
 .hd-fill,.hd-lag{position:absolute;inset:0;transform-origin:left;transform:scaleX(1)}
 .hd-fill{transition:transform .15s}
 .hd-lag{background:rgba(255,230,180,.5);transition:transform .7s .25s}
-.hd-tr .hd-fill{background:linear-gradient(180deg,var(--tl),var(--tc))}
-.hd-tr .hd-txt{letter-spacing:.14em;text-transform:uppercase}
+/* vida: vermelha, no padrão clássico de RPG (a mesma cor da placa do jogador); a sombra clara é o dano recém-levado, que desce mais devagar */
+.hd-hp .hd-track{height:20px;border-color:#6b1d24;background:#12060a}
+.hd-hp .hd-hpf{background:linear-gradient(180deg,#ff6b74 0%,#e5202e 46%,#9d1220 100%);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.hd-hp .hd-hlag{position:absolute;inset:0;transform-origin:left;transform:scaleX(1);background:linear-gradient(180deg,#ffd9a8,#e59a62);opacity:.9;transition:transform .8s ease-out .3s}
+.hd-hp .hd-txt{font-size:11px;letter-spacing:.05em;color:#fff4f2}
+.hd-hp.low .hd-track{animation:hd-hplow 1s ease-in-out infinite}
+@keyframes hd-hplow{0%,100%{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 0 rgba(255,40,50,0)}50%{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 10px rgba(255,40,50,.7)}}
+@media (prefers-reduced-motion:reduce){.hd-hp.low .hd-track{animation:none;box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 8px rgba(255,40,50,.6)}}
+/* faixa de nível: linha fina de XP com texto pequeno, sem competir com a vida */
+.hd-tr{gap:6px;margin-top:-1px}
+.hd-thin{position:relative;flex:1;height:4px;border-radius:2px;overflow:hidden;background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(122,95,46,.55)}
+.hd-thin .hd-fill{background:linear-gradient(90deg,var(--tc),var(--tl))}
+.hd-tt{flex:none;font:700 8px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:var(--tl);opacity:.85;text-shadow:0 1px 2px #000;white-space:nowrap}
+.hd-shd{margin-top:1px;font:700 9px/1 "Cinzel",Georgia,serif;letter-spacing:.2em;text-transform:uppercase;color:#bfe6ff;text-shadow:0 0 10px rgba(120,190,255,.7);opacity:0;transition:opacity .25s}
+.hd-shd.on{opacity:1}
 .hd-track::after{content:"";position:absolute;left:0;right:0;top:0;height:40%;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0))}
 .hd-txt{position:absolute;inset:0;display:grid;place-items:center;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-shadow:0 1px 3px #000,0 0 4px #000}
 .hd-buff{margin-top:2px;font:700 9px/1 "Cinzel",Georgia,serif;letter-spacing:.25em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 10px rgba(255,120,40,.6);opacity:0;transition:opacity .2s}
@@ -216,9 +233,11 @@ export function mountHud(opts: HudOptions): Hud {
       <div class="hd-pwrap t0"><div class="hd-frame hd-portrait"><canvas width="48" height="48"></canvas><span class="hd-ini"></span></div><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-gem"></i><span class="hd-lvb">1</span></div>
       <div class="hd-bars">
         <div class="hd-name"><span class="hd-nm"></span><small>${cdef.name}</small></div>
-        <div class="hd-meter hd-tr"><span class="ic" style="color:var(--tc)">${ICON.crown}</span><div class="hd-track"><div class="hd-fill"></div><div class="hd-txt hd-tr-t"></div></div></div>
+        <div class="hd-meter hd-hp"><span class="ic" style="color:#ff5a64">${ICON.heart}</span><div class="hd-track"><div class="hd-hlag"></div><div class="hd-fill hd-hpf" style="transform:scaleX(0)"></div><div class="hd-txt hd-hp-t">—</div></div></div>
+        <div class="hd-meter hd-tr"><div class="hd-thin"><div class="hd-fill"></div></div><span class="hd-tt"></span></div>
         <div class="hd-meter hd-rs"><span class="ic" style="color:${resColor}">${ICON[res.icon] ?? ""}</span><div class="hd-track"><div class="hd-fill" style="background:linear-gradient(180deg,${resColor},color-mix(in srgb,${resColor} 45%,#000))"></div><div class="hd-txt hd-rs-t"></div></div></div>
         <div class="hd-buff">Escudo ativo</div>
+        <div class="hd-shd"></div>
       </div>
     </div>
     <button type="button" class="hd-pvp" aria-label="Modo PvP"><span class="ic"></span><span class="hd-pvp-t">PvP</span></button>
@@ -242,8 +261,15 @@ export function mountHud(opts: HudOptions): Hud {
   q(".hd-ini").textContent = (opts.name ?? cdef.name).slice(0, 1).toUpperCase();
   const pwrap = q(".hd-pwrap");
   const lvb = q(".hd-lvb");
+  const unit = q(".hd-unit");
   const trFill = q(".hd-tr .hd-fill");
-  const trTxt = q(".hd-tr-t");
+  const trTxt = q(".hd-tt");
+  const hpRoot = q(".hd-hp");
+  const hpFill = q(".hd-hpf");
+  const hpLag = q(".hd-hlag");
+  const hpTxt = q(".hd-hp-t");
+  const shdEl = q(".hd-shd");
+  let hpRatio = -1;
   const rsFill = q(".hd-rs .hd-fill");
   const rsTxt = q(".hd-rs-t");
   const buff = q(".hd-buff");
@@ -431,8 +457,22 @@ export function mountHud(opts: HudOptions): Hud {
 
   return {
     trigger,
-    setHp() {
-      /* a vida agora fica só na placa sobre a cabeça (plate.ts): sem barra repetida aqui */
+    setHp(hp, max) {
+      const m = Math.max(1, max), r = Math.max(0, Math.min(1, hp / m));
+      hpFill.style.transform = `scaleX(${r})`;
+      if (r >= hpRatio) { // ganhou vida (ou primeira leitura): a sombra acompanha na hora; ao perder, ela fica para trás e desce devagar
+        hpLag.style.transition = "none";
+        hpLag.style.transform = `scaleX(${r})`;
+        void hpLag.offsetWidth;
+        hpLag.style.transition = "";
+      } else hpLag.style.transform = `scaleX(${r})`;
+      hpRatio = r;
+      hpTxt.textContent = `${Math.max(0, Math.ceil(hp))}/${m}`;
+      hpRoot.classList.toggle("low", r <= 0.2 && hp > 0);
+    },
+    setShield(s) {
+      shdEl.classList.toggle("on", s !== null);
+      if (s !== null) shdEl.textContent = s < 0 ? "Protegido" : `Proteção ${Math.ceil(s)}s`;
     },
     setMana(cur, max) {
       curRes = cur;
@@ -442,6 +482,8 @@ export function mountHud(opts: HudOptions): Hud {
     },
     setProgress(level, xp, need) {
       const tier = levelTier(level);
+      unit.style.setProperty("--tc", TIER_VARS[tier][0]);
+      unit.style.setProperty("--tl", TIER_VARS[tier][1]);
       pwrap.className = `hd-pwrap t${tier}`; // a moldura do retrato (cor, rebites, gema, brilho) acompanha a faixa de nível
       lvb.textContent = String(level);
       // barra da faixa: quanto falta para a próxima borda (o incentivo para continuar subindo)
@@ -449,7 +491,7 @@ export function mountHud(opts: HudOptions): Hud {
       const next = (tier + 1) * 10;
       const rr = need > 0 ? Math.min(1, xp / need) : 1;
       if (tier >= 5) { trFill.style.transform = "scaleX(1)"; trTxt.textContent = `${TIER_NAMES[tier]} · máx`; }
-      else { trFill.style.transform = `scaleX(${Math.min(1, (level - start + rr) / (next - start))})`; trTxt.textContent = `${TIER_NAMES[tier]} · ${level} / ${next}`; }
+      else { trFill.style.transform = `scaleX(${Math.min(1, (level - start + rr) / (next - start))})`; trTxt.textContent = `${TIER_NAMES[tier]} ${level}/${next}`; }
       const r = need > 0 ? Math.min(1, xp / need) : 1;
       lvTxt.textContent = need > 0 ? `NV ${level}  ·  ${Math.floor(xp)} / ${need}` : `NV ${level}  ·  MÁX`;
       xpFill.style.transform = `scaleX(${r})`;

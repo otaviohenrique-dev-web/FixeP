@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { drawVeil } from "./gate";
 import { VAULT_REACH, zoneNpcs, type ZoneDef } from "@frixep/shared";
 import {
   houseTex, treeTex, lampTex, barrelTex, crateTex, benchTex, bannerTex, braziertTex, fxTextures, fountainTex, chestTex, canvasTex, isoBox, poly, line, rngOf, shade,
@@ -176,7 +177,9 @@ export function drawTown(scene: Phaser.Scene, zone: ZoneDef, toScreen: ToScreen,
 
   // ---------------------------------------------------------------- portão (arte no chão; aqui só o pulso e o rótulo)
   const [gx, gy] = S(GATE.x, GATE.y);
-  const gateRing = scene.add.image(gx, gy, "town_ring").setBlendMode(Phaser.BlendModes.ADD).setDepth(0.5).setTint(0xffd27a);
+  void gx; void gy;
+  const veilG = scene.add.graphics().setDepth(0.6); // véu de energia dourado dentro do arco da muralha
+  const veilAt = S(24, -0.5);
   const [gax, gay] = S(24, -0.5);
   scene.add
     .text(gax, gay - 132, "➜ Portão de Brasalume", { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "14px", color: "#f4ecd2", stroke: "#000", strokeThickness: 4 })
@@ -228,7 +231,9 @@ export function drawTown(scene: Phaser.Scene, zone: ZoneDef, toScreen: ToScreen,
       }
       fGlow.setAlpha(0.15 + 0.05 * Math.sin(time / 600));
       const p = 0.5 + 0.5 * Math.sin(time / 520);
-      gateRing.setScale(0.62 + 0.04 * p, 0.62 + 0.04 * p).setAlpha(0.45 + 0.35 * p);
+      veilG.clear();
+      drawVeil(veilG, veilAt[0], veilAt[1], [32, 16], 2, 58, 12, time, 0xffc873);
+      void p;
       flies.setPosition(cam.worldView.centerX, cam.worldView.centerY);
       const near = !!me && Math.hypot(me.x - vault.x, me.y - vault.y) <= VAULT_REACH;
       chestGlow.setAlpha(0.13 + 0.05 * Math.sin(time / 500));
@@ -297,19 +302,6 @@ function bakeGround(c: Ctx, W: number, Hh: number, TW: number, TH: number, S: (x
   for (const [x, y] of lamps) pool(x, y, 110, 0.2, "255,170,70");
   for (const [x, y] of braziers) pool(x, y, 130, 0.26, "255,130,40");
   c.restore();
-
-  // ---------------------------------------------------------------- portão: anel rúnico no chão (o mapa-mundo abre aqui)
-  {
-    const [gx, gy] = S(GATE.x, GATE.y);
-    c.save(); c.translate(gx, gy); c.scale(1, 0.5);
-    const gg = c.createRadialGradient(0, 0, 0, 0, 0, 74); gg.addColorStop(0, "rgba(255,210,120,0.16)"); gg.addColorStop(1, "rgba(255,210,120,0)");
-    c.fillStyle = gg; c.beginPath(); c.arc(0, 0, 74, 0, 7); c.fill();
-    c.strokeStyle = "rgba(60,40,20,0.8)"; c.lineWidth = 7; c.beginPath(); c.arc(0, 0, 64, 0, 7); c.stroke();
-    c.strokeStyle = "rgba(240,200,110,0.85)"; c.lineWidth = 3; c.beginPath(); c.arc(0, 0, 64, 0, 7); c.stroke();
-    c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, 52, 0, 7); c.stroke();
-    for (let i = 0; i < 16; i++) { const a = (i / 16) * 6.283; c.beginPath(); c.moveTo(Math.cos(a) * 53, Math.sin(a) * 53); c.lineTo(Math.cos(a) * 62, Math.sin(a) * 62); c.stroke(); }
-    c.restore();
-  }
 
   // ---------------------------------------------------------------- muralha norte e oeste (altas), portão e torre de canto
   const WH = 62;
