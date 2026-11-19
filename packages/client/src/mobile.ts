@@ -51,7 +51,7 @@ body.mob .gm-btn{right:${SAFE_R}}
 body.mob .iv-btn{right:calc(max(8px,env(safe-area-inset-right)) + 42px*var(--hs))}
 body.mob .ec-wallet{top:calc(${SAFE_T} + 42px*var(--hs));right:${SAFE_R};height:calc(22px*var(--hs));padding:0 8px;gap:8px;font-size:calc(11px*var(--hs));opacity:.8;backdrop-filter:none;-webkit-backdrop-filter:none}
 body.mob .ec-wallet img,body.mob .ec-wallet .ec-coin{width:calc(14px*var(--hs));height:calc(14px*var(--hs))}
-body.mob .st{top:calc(${SAFE_T} + 70px*var(--hs));right:${SAFE_R};font-size:9px;opacity:.7}
+body.mob .st{display:none} /* métricas (FPS/ping) não cabem no celular: não sobrepõem as moedas */
 /* ---------- grupo: recolhido sob o PvP ---------- */
 body.mob .pt{top:calc(${SAFE_T} + 80px*var(--hs));left:${SAFE_L};width:min(220px,52vw)}
 body.mob .pt-tog{width:calc(26px*var(--hs));height:calc(26px*var(--hs));font-size:15px;opacity:.7}
