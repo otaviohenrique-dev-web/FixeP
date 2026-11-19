@@ -1,7 +1,7 @@
 import { Room, Client, ServerError } from "colyseus";
 import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
-  TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, ZONES, ZONE_IDS, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
+  TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, TRADE_CHAT_MAX_LEN, ZONES, ZONE_IDS, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   PLAYER_RADIUS, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, BOSS_CC_RESIST, classAction, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
@@ -165,6 +165,15 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.TradeOffer, (client, p: unknown) => this.tradeOffer(client, p));
     this.onMessage(Msg.TradeReady, (client, p: { ready?: unknown; rev?: unknown }) => this.tradeReady(client, p?.ready === true, p?.rev));
     this.onMessage(Msg.TradeCancel, (client) => { const tr = this.trades.get(client.sessionId); if (tr && this.allow(client)) this.closeTrade(tr, "Troca cancelada."); });
+    // chat privado da troca: só entre os dois da troca ativa; nada é guardado
+    this.onMessage(Msg.TradeChat, (client, p: { text?: unknown }) => {
+      if (!this.allow(client)) return;
+      const tr = this.trades.get(client.sessionId), pl = this.state.players.get(client.sessionId);
+      if (!tr || !pl) return this.notify(client.sessionId, "Você não está numa troca.");
+      const text = this.chatText(client, p?.text, TRADE_CHAT_MAX_LEN);
+      if (!text) return;
+      for (const id of [tr.a, tr.b]) this.clients.getById(id)?.send(Evt.TradeChat, { name: pl.name, text });
+    });
     // mercado dos jogadores (leiloeiro)
     this.onMessage(Msg.MarketBrowse, (client, p: { npc?: unknown; filter?: unknown }) => this.marketRead(client, p?.npc, async (pl) => client.send(Evt.MarketPage, await this.market.browse(p?.filter, pl.charId))));
     this.onMessage(Msg.MarketMy, (client, p: { npc?: unknown }) => this.marketRead(client, p?.npc, (pl) => this.sendMarketMine(client.sessionId, pl)));
@@ -372,9 +381,9 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   /** valida, limpa e aplica a taxa do chat (zona e grupo dividem o mesmo limite); "" = descartar */
-  private chatText(client: Client, raw: unknown): string {
+  private chatText(client: Client, raw: unknown, max = CHAT_MAX_LEN): string {
     if (typeof raw !== "string") return "";
-    if (raw.length > CHAT_MAX_LEN) { this.notify(client.sessionId, `Mensagem longa demais (máx. ${CHAT_MAX_LEN} caracteres).`); return ""; }
+    if (raw.length > max) { this.notify(client.sessionId, `Mensagem longa demais (máx. ${max} caracteres).`); return ""; }
     const text = cleanChat(raw);
     if (!text) return "";
     const now = Date.now();

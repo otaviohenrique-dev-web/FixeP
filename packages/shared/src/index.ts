@@ -42,6 +42,7 @@ export const Msg = {
   TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols, seq }: define a minha oferta (reinicia as confirmações dos dois lados); seq = contador do cliente, devolvido em mine.seq
   TradeReady: "trade_ready", // { ready: boolean, rev }: aceita a versão `rev` da oferta (ou retira o aceite); executa quando os dois aceitaram a MESMA versão
   TradeCancel: "trade_cancel", // {}: cancela a troca
+  TradeChat: "trade_chat", // { text }: sussurro só para o parceiro da troca ativa (mesmos limites do chat; some ao fechar)
   VaultOpen: "vault_open", // {}: abre o baú da cidade (o servidor valida a distância e envia Evt.Vault)
   VaultDeposit: "vault_deposit", // { slot, qty?, to? }: bolsa -> baú (to = espaço do baú, opcional)
   VaultWithdraw: "vault_withdraw", // { slot, qty?, to? }: baú -> bolsa (to = espaço da bolsa, opcional)
@@ -84,6 +85,7 @@ export const Evt = {
   Trade: "trade", // TradeEvent: estado da janela de troca (aberta, ofertas, confirmações) ou fechamento
   TradeInvite: "trade_invite", // { from }: convite de troca recebido (expira em TRADE_INVITE_S)
   TradeInviteEnd: "trade_invite_end", // {}: o convite acabou
+  TradeChat: "trade_chat", // { name, text }: mensagem do chat privado da troca (vai só aos dois da troca)
   Vault: "vault", // VaultSnapshot: o conteúdo do baú pessoal (só para o dono, depois de abrir ou de qualquer operação)
   MarketPage: "market_page", // MarketPage: resposta a MarketBrowse
   MarketMine: "market_mine", // MarketMineEvent: minhas listagens e vendas
@@ -114,6 +116,7 @@ export interface PartyMemberInfo {
 }
 export interface PartyEvent { members: PartyMemberInfo[] }
 export interface PartyInviteEvent { kind: "invite" | "join"; from: string; ms: number } // invite: "X convida você"; join: "X pede para entrar no seu grupo"
+export interface TradeChatEvent { name: string; text: string }
 export interface PartyChatEvent { name: string; text: string }
 
 /** PvP: canalização (entrar ou sair) em segundos. Só começa PARADO e sem ter tomado dano nos últimos PVP_NO_DAMAGE_S; mover-se, agir ou tomar dano a cancela. */
@@ -127,6 +130,7 @@ export interface PvpEvent { s: "start" | "cancel" | "stop" | "on" | "off"; why?:
 
 /** Limites do chat (valem no servidor; o cliente só os repete para avisar cedo). */
 export const CHAT_MAX_LEN = 200;
+export const TRADE_CHAT_MAX_LEN = 120; // chat privado da troca: mensagens curtas
 export interface ChatEvent { id: string; name: string; text: string }
 
 export interface MoveToPayload {

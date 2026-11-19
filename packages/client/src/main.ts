@@ -229,6 +229,7 @@ class WorldScene extends Phaser.Scene {
     this.vault = mountVault({ send: (t, p) => this.room.send(t, p) });
     this.room.onMessage(Evt.Vault, (m: VaultSnapshot) => this.vault.setVault(m));
     this.room.onMessage(Evt.Trade, (m: TradeEvent) => this.econ.setTrade(m));
+    this.room.onMessage(Evt.TradeChat, (m: { name: string; text: string }) => this.econ.tradeChat(String(m.name), String(m.text)));
     this.room.onMessage(Evt.MarketPage, (m: MarketPage) => this.econ.setMarketPage(m));
     this.room.onMessage(Evt.MarketMine, (m: MarketMineEvent) => this.econ.setMarketMine(m));
     this.room.onMessage(Evt.MarketDone, (m: MarketDoneEvent) => this.econ.setMarketDone(m));

@@ -23,12 +23,13 @@ async function account(prefix) {
 async function enter(acc) {
   const room = await new Client(WS).joinOrCreate(ROOM, { token: acc.token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
-  const st = { travel: [], snap: null, notices: [], oks: [], coins: [], trade: null, trades: [], invite: null, loot: [], left: null };
+  const st = { travel: [], snap: null, notices: [], oks: [], coins: [], trade: null, trades: [], invite: null, loot: [], tchat: [], left: null };
   room.onMessage("inv", (s) => (st.snap = s));
   room.onMessage("notice", (m) => (m.ok ? st.oks : st.notices).push(m.text));
   room.onMessage("travel", (m) => st.travel.push(m));
   room.onMessage("coins", (m) => st.coins.push(m));
   room.onMessage("trade", (m) => { st.trade = m; st.trades.push(m); });
+  room.onMessage("trade_chat", (m) => st.tchat.push(m));
   room.onMessage("trade_invite", (m) => (st.invite = m));
   room.onMessage("trade_invite_end", () => (st.invite = null));
   room.onMessage("loot", (m) => st.loot.push(m));
@@ -247,6 +248,38 @@ console.log("\n== 6. Troca entre jogadores ==");
   A.room.send("trade_cancel", {});
   await sleep(300);
   check("cancelar fecha para os dois sem mover nada", A.st.trade?.open === false && B.st.trade?.open === false && A.st.snap.iron === iA - 1000 + 5);
+  // chat privado da troca
+  {
+    const C = await enter(await account("c"));
+    A.room.send("trade_chat", { text: "oi, fora da troca" });
+    await sleep(250);
+    check("chat da troca fora de uma troca é recusado", A.st.tchat.length === 0 && /não está numa troca/i.test(lastNotice(A.st)));
+    A.room.send("trade_invite", { name: accB.name });
+    await sleep(250);
+    B.room.send("trade_accept", {});
+    await sleep(250);
+    A.room.send("trade_chat", { text: "  fechamos <b>por</b> 500?  " });
+    await sleep(300);
+    const ok1 = A.st.tchat.length === 1 && B.st.tchat.length === 1 && B.st.tchat[0].name === A.me().name && !/[<>]/.test(B.st.tchat[0].text) && /fechamos/.test(B.st.tchat[0].text);
+    check("a mensagem chega ao parceiro e ecoa ao remetente, já sanitizada", ok1, JSON.stringify(B.st.tchat));
+    B.room.send("trade_chat", { text: "fechado" });
+    await sleep(250);
+    check("o parceiro também responde", A.st.tchat.length === 2 && A.st.tchat[1].text === "fechado");
+    check("quem não está na troca não recebe nada", C.st.tchat.length === 0);
+    A.room.send("trade_chat", { text: "x".repeat(121) });
+    await sleep(250);
+    check("mensagem acima do limite é recusada", A.st.tchat.length === 2 && /longa demais/i.test(lastNotice(A.st)));
+    for (let i = 0; i < 8; i++) A.room.send("trade_chat", { text: "spam " + i });
+    await sleep(400);
+    check("o limite de taxa vale também no chat da troca", A.st.tchat.length <= 7 && /rápido demais/i.test(lastNotice(A.st)), `${A.st.tchat.length}`);
+    check("terceiros continuam sem receber", C.st.tchat.length === 0);
+    A.room.send("trade_cancel", {});
+    await sleep(300);
+    A.room.send("trade_chat", { text: "depois de fechar" });
+    await sleep(250);
+    check("depois que a troca fecha o chat não funciona mais e ninguém recebe", B.st.tchat.every((m) => m.text !== "depois de fechar") && C.st.tchat.length === 0);
+    await C.room.leave();
+  }
   // outro jogador sai no meio da troca: cancela e libera
   A.room.send("trade_invite", { name: accB.name });
   await sleep(250);

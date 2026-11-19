@@ -163,13 +163,18 @@ function compareStats(a: ItemDef, b: ItemDef): { text: string; delta: number }[]
 /** 0 = sem brilho; épico pulsa leve, lendário médio, mítico forte */
 const pulse = (d: ItemDef): string[] => { const r = ["common", "uncommon", "rare", "epic", "legendary", "mythic"].indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
 
-const SILHOUETTE = `<svg class="iv-sil" viewBox="0 0 262 330" aria-hidden="true"><defs><linearGradient id="ivg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3a52"/><stop offset="1" stop-color="#0d1522"/></linearGradient></defs>
-  <g fill="url(#ivg)" stroke="rgba(255,150,70,.45)" stroke-width="1.4" stroke-linejoin="round">
-    <circle cx="131" cy="62" r="20"/>
-    <path d="M110 86h42l22 12 8 70-18 6-6-44-4 70 10 82h-26l-8-70-8 70h-26l10-82-4-70-6 44-18-6 8-70z"/>
+const SILHOUETTE = `<svg class="iv-sil" viewBox="0 0 262 330" aria-hidden="true" shape-rendering="geometricPrecision"><defs>
+  <linearGradient id="ivg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#30425e"/><stop offset=".55" stop-color="#18253a"/><stop offset="1" stop-color="#0a111c"/></linearGradient>
+  <radialGradient id="ivh" cx=".5" cy=".42" r=".5"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".22"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient></defs>
+  <ellipse cx="131" cy="160" rx="118" ry="150" fill="url(#ivh)"/>
+  <ellipse cx="131" cy="312" rx="62" ry="7" fill="#000" opacity=".4"/>
+  <g fill="url(#ivg)" stroke="rgba(150,190,235,.5)" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M103 80C89 83 80 91 78 105L71 178l13 6 8-52 4 68-6 104h30l6-88h5l6 88h30l-6-104 4-68 8 52 13-6-7-73c-2-14-11-22-25-25z"/>
+    <path d="M131 20c-17 0-28 13-28 30 0 9 4 17 10 21l-12 10h60l-12-10c6-4 10-12 10-21 0-17-11-30-28-30z"/>
   </g>
-  <g class="em" fill="#ff8a3d"><circle cx="131" cy="122" r="2.4"/><circle cx="124" cy="132" r="1.4"/><circle cx="139" cy="140" r="1.4"/></g>
-  <path d="M30 300h202" stroke="rgba(255,150,70,.18)" stroke-width="2"/></svg>`;
+  <ellipse cx="131" cy="50" rx="11" ry="14" fill="#05090f" opacity=".9"/>
+  <g fill="none" stroke="rgba(150,190,235,.22)" stroke-width="1.1" stroke-linecap="round"><path d="M92 132l4 68M170 132l-4 68M131 82v124M104 200q27 16 54 0"/></g>
+  <g class="em" fill="#ff8a3d"><circle cx="131" cy="96" r="2.6"/><circle cx="123" cy="52" r="1.3"/><circle cx="139" cy="52" r="1.3"/></g></svg>`;
 
 /** posições (em % do boneco) de cada espaço */
 const EQ_POS: Record<EquipSlot | "potion", [number, number]> = {
