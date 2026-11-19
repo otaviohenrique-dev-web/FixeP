@@ -110,7 +110,7 @@ Quatro zonas: a **Cidade segura** (onde todos nascem) e três de combate. Cada u
 - Ao reconectar, o personagem volta para a zona em que estava; **ao morrer numa zona de combate, renasce na cidade** (o servidor grava a zona 4 e manda o cliente entrar na sala dela). Uma sessão por conta vale em todas as zonas.
 - **Personagem novo nasce na cidade** (a migração `009_cidade_bau.sql` troca o padrão da coluna `characters.zone` para 4; contas e personagens que já existem ficam onde estão).
 - O mapa de cada zona é desenhado por código (cores provisórias por tema); o Lobo Gélido tem kit de sprites próprio (`python tools/gen_wolf.py` recria `assets/placeholder/wolf.*`; arte final em `assets/monsters/wolf.*` tem prioridade) e o Espectro das Catacumbas também (`python tools/gen_wraith.py`, `assets/placeholder/wraith.*`).
-- Teste: `SERVER=http://localhost:2999 npm run test:zones -w @frixep/server`. Fora disso, os testes de combate precisam de personagens que nasçam numa zona com inimigos: suba o servidor de teste com `TEST_START_ZONE=1` (só fora de produção) nessas suítes; `zones.mjs` e `cidade.mjs` rodam **sem** essa variável.
+- Teste: `SERVER=http://localhost:2999 npm run test:zones -w @frixep/server`. Fora disso, os testes de combate precisam de personagens que nasçam numa zona com inimigos: suba o servidor de teste com `TEST_START_ZONE=1` (só fora de produção; também faz quem morre renascer no lugar, em vez de na cidade) nessas suítes; `zones.mjs` e `cidade.mjs` rodam **sem** essa variável.
 
 ### Cidade segura (Brasalume, zona 4)
 

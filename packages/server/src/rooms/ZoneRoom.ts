@@ -915,7 +915,7 @@ export class ZoneRoom extends Room<ZoneState> {
         p.y = p.ty = this.zone.spawn.y;
         p.combatAt = -1e9;
         p.invulnUntil = this.t + 2; // um respiro ao renascer (evita ser abatido de novo no ponto de início)
-        if (!this.zone.safe) void this.travel(id, p, { to: HUB_ZONE }, true); // morreu numa zona de combate: renasce na cidade
+        if (!this.zone.safe && !(process.env.TEST_START_ZONE && process.env.NODE_ENV !== "production")) void this.travel(id, p, { to: HUB_ZONE }, true); // (nos testes antigos, com TEST_START_ZONE, quem cai renasce no lugar) // morreu numa zona de combate: renasce na cidade
       }
       return;
     }
