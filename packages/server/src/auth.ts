@@ -125,7 +125,9 @@ export function authRouter(repo: Repo): Router {
         }),
       });
       const tok: any = await tokRes.json();
-      if (!tok.access_token) throw new Error("troca de código falhou");
+      if (!tok.access_token) {
+        throw new Error(`troca de código falhou: ${tok.error ?? ""} ${tok.error_description ?? ""}`.trim());
+      }
 
       const profRes = await fetch(p.userUrl, { headers: { Authorization: `Bearer ${tok.access_token}` } });
       const prof = p.profile(await profRes.json());
