@@ -1,15 +1,17 @@
 import Phaser from "phaser";
-import { VAULT_REACH, type ZoneDef } from "@frixep/shared";
+import { VAULT_REACH, zoneNpcs, type ZoneDef } from "@frixep/shared";
+import {
+  houseTex, treeTex, lampTex, barrelTex, crateTex, benchTex, bannerTex, braziertTex, fxTextures, fountainTex, chestTex, canvasTex, isoBox, poly, line, rngOf, shade,
+  type HouseSpec, type Pt, type Tex, type Ctx,
+} from "./townart";
 
 /**
- * A cidade segura (Brasalume), desenhada por código: pedras claras e quentes, praça com fonte, casas e árvores,
- * lanternas, fogueiras e vaga-lumes. Nada daqui interfere na simulação (o servidor decide tudo); é só cenário.
- *
- * Otimizado para alta taxa de quadros (60 FPS):
- * - Árvores, lanternas, bancos e barris gerados como texturas em canvas e renderizados como Sprites/Imagens (WebGL instanced batching).
- * - Casas alinhadas 100% à geometria isométrica (quinas nos nós de azulejos 2:1, janelas e portas inclinadas com paralelogramos isométricos).
- * - Sombra de contato integrada ao chão.
- * - Redução drástica de objetos Graphics individuais e limites controlados de luzes aditivas.
+ * Brasalume, a cidade-hub segura. Tudo é gerado por código UMA vez e fica em cache de textura (sobrevive às travessias):
+ *   - o CHÃO inteiro (grama, ruas, praça, caminhos até as portas, muralha, portão, fence, poças de luz dos lampiões) é UMA textura/Image;
+ *   - casas, árvores, lampiões, fonte, baú... são Images de texturas pequenas (1 textura por tipo), ordenadas por profundidade;
+ *   - animado: só 4 braseiros (chama+brilho), 2 ondas da fonte, o pulso do portão, o brilho do baú e um emissor de vaga-lumes
+ *     (tudo por seno, sem criar objetos nem Graphics por quadro). Nada depende do número de jogadores.
+ * Nada daqui interfere na simulação: o servidor decide tudo.
  */
 type ToScreen = (x: number, y: number) => { sx: number; sy: number };
 const hash = (x: number, y: number) => {
@@ -17,18 +19,39 @@ const hash = (x: number, y: number) => {
   return h - Math.floor(h);
 };
 
-const HOUSES: { x: number; y: number; w: number; d: number; h: number; wall: number; roof: number }[] = [
-  { x: 8, y: 8, w: 4, d: 4, h: 58, wall: 0xcfb58f, roof: 0x8a4b36 },
-  { x: 14, y: 12, w: 3, d: 3, h: 50, wall: 0xd8c4a0, roof: 0x6f5a8a },
-  { x: 35, y: 8, w: 4, d: 4, h: 62, wall: 0xc9ad84, roof: 0x7a3f32 },
-  { x: 30, y: 12, w: 3, d: 3, h: 48, wall: 0xdac6a2, roof: 0x4f7a6a },
-  { x: 7, y: 28, w: 4, d: 3, h: 54, wall: 0xd0b890, roof: 0x7d4a6a },
-  { x: 12, y: 34, w: 3, d: 3, h: 48, wall: 0xc4aa82, roof: 0x8a5a36 },
-  { x: 36, y: 33, w: 4, d: 3, h: 56, wall: 0xd4bd98, roof: 0x5e6b8a },
-  { x: 32, y: 38, w: 3, d: 3, h: 46, wall: 0xcdb48c, roof: 0x8a4b36 },
-  { x: 13, y: 40, w: 4, d: 3, h: 52, wall: 0xd6c19c, roof: 0x6a7d4a },
+const CX = 24, CY = 24;
+const PLAZA_R = 7.6;
+const GATE = { x: 24, y: 2 }; // o ÚNICO portão da cidade (muralha norte); casa com `zones.ts`
+
+// ---------------------------------------------------------------- casas
+// (x, y) = tile do canto de trás (menor x e y); w x d tiles. Portas: R olha para o leste (rua principal), L para o sul. `lane` = fileira da viela que a porta alcança.
+interface H extends HouseSpec { x: number; y: number; lane?: number }
+const mk = (id: string, kind: HouseSpec["kind"], x: number, y: number, w: number, d: number, floors: 1 | 2, wall: string, roof: string, door: "L" | "R", seed: number, lane?: number): H => ({
+  id, kind, x, y, w, d, floors, wall, roof, door, seed, lane, trim: kind === "smith" ? "#3a2a1c" : "#4a2e1a", stone: kind === "smith" ? "#8b867c" : "#7d7365",
+});
+const HOUSES: H[] = [
+  // noroeste (porta para a rua principal, a leste)
+  mk("hall", "hall", 14, 9, 4, 3, 2, "#e2d2b0", "#5e4a78", "R", 1),
+  mk("shop", "shop", 14, 17, 3, 3, 1, "#dbc7a3", "#8a4b36", "R", 2),
+  mk("nw1", "cottage", 7, 4, 3, 3, 1, "#cfb58f", "#6a7d4a", "R", 3),
+  mk("nw2", "cottage", 7, 12, 3, 3, 2, "#d8c4a0", "#7d4a6a", "R", 4),
+  // nordeste (porta para o sul, na rua leste-oeste)
+  mk("inn", "inn", 28, 16, 4, 3, 2, "#dccaa2", "#7a3a2c", "L", 5),
+  mk("smith", "smith", 33, 16, 3, 3, 1, "#8b867c", "#3f4650", "L", 6),
+  mk("ne1", "cottage", 38, 16, 3, 3, 1, "#cdb68e", "#5e6b8a", "L", 7),
+  mk("ne2", "cottage", 31, 8, 3, 3, 2, "#d6c19c", "#4f7a6a", "L", 8),
+  mk("ne3", "cottage", 36, 8, 3, 3, 1, "#c9ad84", "#8a4b36", "L", 9),
+  // sudoeste
+  mk("sw1", "cottage", 7, 29, 3, 3, 1, "#d0b890", "#8a5a36", "R", 10),
+  mk("sw2", "cottage", 14, 32, 4, 3, 2, "#c4aa82", "#5e6b8a", "R", 11),
+  mk("sw3", "cottage", 7, 36, 3, 3, 1, "#d6c19c", "#6a7d4a", "R", 12),
+  // sudeste (portas para as vielas das fileiras 33 e 40)
+  mk("se1", "cottage", 34, 28, 3, 3, 1, "#d4bd98", "#7d4a6a", "L", 13, 33),
+  mk("se2", "cottage", 39, 28, 3, 3, 2, "#cdb48c", "#6f5a8a", "L", 14, 33),
+  mk("se3", "cottage", 34, 35, 3, 3, 2, "#d0b890", "#4f7a6a", "L", 15, 40),
+  mk("se4", "cottage", 39, 35, 3, 3, 1, "#c8ae86", "#8a4b36", "L", 16, 40),
 ];
-const FIRES = [[20, 31], [28, 33], [24, 36]];
+const LANES = [33, 40]; // vielas leste-oeste (x de 27 a 44)
 
 export interface TownLayer {
   update(time: number, cam: Phaser.Cameras.Scene2D.Camera, me: { x: number; y: number } | null): void;
@@ -38,540 +61,336 @@ export interface TownLayer {
 }
 
 export function drawTown(scene: Phaser.Scene, zone: ZoneDef, toScreen: ToScreen, TILE_W: number, TILE_H: number): TownLayer {
-  scene.cameras.main.setBackgroundColor("#1d1620");
-  const V = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
-  const cx = 24, cy = 24;
-  const inHouse = (x: number, y: number, m = 0) =>
-    HOUSES.some((h) => x > h.x - m && x < h.x + h.w + m && y > h.y - m && y < h.y + h.d + m);
+  const t0 = performance.now();
+  scene.cameras.main.setBackgroundColor("#14101a");
+  fxTextures(scene);
+  const W = zone.w, Hh = zone.h;
+  const S = (x: number, y: number): Pt => { const p = toScreen(x, y); return [p.sx, p.sy]; };
 
-  // ---------------------------------------------------------------- CHÃO ESTÁTICO
-  const g = scene.add.graphics().setDepth(-10);
-  for (let x = 0; x < zone.w; x++) {
-    for (let y = 0; y < zone.h; y++) {
-      const { sx, sy } = toScreen(x, y);
-      const h = hash(x, y), d = Math.hypot(x - cx, y - cy);
-      const road = (Math.abs(x - cx) <= 2 || Math.abs(y - cy) <= 2) && x > 1 && y > 1 && x < zone.w - 2 && y < zone.h - 2;
-      let base: number, line = 0x6a5f50, la = 0.4;
-      if (d <= 7.6) {
-        base = d > 6.2 ? ((x + y) % 2 ? 0x7d725f : 0x857a66) : (x + y) % 2 ? 0x9a8f7a : 0xa3987f;
-        line = 0x7d725f;
-      } else if (road) {
-        base = (x + y) % 2 ? 0x877c68 : 0x8f846f;
-        line = 0x6f6453;
-      } else {
-        base = (x + y) % 2 ? 0x405536 : 0x475d3b;
-        line = 0x33452c;
-        la = 0.25;
-      }
-      const pts = [V(sx, sy - TILE_H / 2), V(sx + TILE_W / 2, sy), V(sx, sy + TILE_H / 2), V(sx - TILE_W / 2, sy)];
-      g.fillStyle(base, 1).fillPoints(pts, true);
-      if (h < 0.08) {
-        g.fillStyle(base === 0x405536 || base === 0x475d3b ? 0x5d7a45 : 0xb4a98f, 0.3).fillEllipse(
-          sx + (h - 0.04) * 120, sy, 8 + h * 40, 3 + h * 10
-        );
-      }
-      g.lineStyle(1, line, la).strokePoints(pts, true);
+  // ---------------------------------------------------------------- mapa lógico (o que é rua, caminho, casa...)
+  const inMain = (x: number, y: number) => (Math.abs(x - CX) <= 2 || Math.abs(y - CY) <= 2) && x >= 1 && y >= 0 && x <= W - 2 && y <= Hh - 2;
+  const road = new Uint8Array(W * Hh); // 1 = rua/praça/caminho pavimentado
+  const idx = (x: number, y: number) => y * W + x;
+  const setRoad = (x: number, y: number) => { if (x >= 0 && y >= 0 && x < W && y < Hh) road[idx(x, y)] = 1; };
+  for (let x = 0; x < W; x++) for (let y = 0; y < Hh; y++) if (inMain(x, y) || Math.hypot(x - CX, y - CY) <= PLAZA_R) setRoad(x, y);
+  for (const ly of LANES) for (let x = 27; x <= 44; x++) setRoad(x, ly);
+  const kdOf = (n: number) => Math.floor((n - 1) / 2);
+  for (const h of HOUSES) { // caminho da porta até a rua
+    if (h.door === "R") {
+      const row = h.y + h.d - 1 - kdOf(h.d);
+      for (let x = h.x + h.w; x <= 21; x++) setRoad(x, row);
+    } else {
+      const col = h.x + kdOf(h.w);
+      const end = h.lane ?? 21;
+      for (let y = h.y + h.d; y <= end; y++) setRoad(col, y);
     }
   }
-  const c = (x: number, y: number) => {
-    const p = toScreen(x, y);
-    return V(p.sx, p.sy);
+  const occ = new Uint8Array(W * Hh); // 1 = ocupado por casa
+  for (const h of HOUSES) for (let x = h.x; x < h.x + h.w; x++) for (let y = h.y; y < h.y + h.d; y++) occ[idx(x, y)] = 1;
+  const nearHouse = (gx: number, gy: number, m: number) => HOUSES.some((h) => gx > h.x - 0.5 - m && gx < h.x + h.w - 0.5 + m && gy > h.y - 0.5 - m && gy < h.y + h.d - 0.5 + m);
+  const nearRoad = (gx: number, gy: number, m: number) => {
+    for (let x = Math.floor(gx - m); x <= Math.ceil(gx + m); x++) for (let y = Math.floor(gy - m); y <= Math.ceil(gy + m); y++) if (x >= 0 && y >= 0 && x < W && y < Hh && road[idx(x, y)] && Math.hypot(x - gx, y - gy) <= m + 0.6) return true;
+    return false;
   };
-  g.lineStyle(3, 0x8a6a45, 0.9).strokePoints(
-    [c(-0.5, -0.5), c(zone.w - 0.5, -0.5), c(zone.w - 0.5, zone.h - 0.5), c(-0.5, zone.h - 0.5)],
-    true
-  );
 
-  // ---------------------------------------------------------------- TEXTURAS DE CENÁRIO (BAKED PARA ALTO FPS)
-  // 1. Textura do Brilho Suave (Luz Aditiva)
-  if (!scene.textures.exists("town_glow")) {
-    const t = scene.textures.createCanvas("town_glow", 128, 128)!;
-    const ctx = t.getContext();
-    const gr = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gr.addColorStop(0, "rgba(255,255,255,1)");
-    gr.addColorStop(0.35, "rgba(255,255,255,0.35)");
-    gr.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = gr;
-    ctx.fillRect(0, 0, 128, 128);
-    t.refresh();
-  }
+  // ---------------------------------------------------------------- posições dos adereços
+  const LAMPS: [number, number][] = [];
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + Math.PI / 6; LAMPS.push([CX + Math.cos(a) * 8.4, CY + Math.sin(a) * 8.4]); }
+  for (const y of [7, 12, 17, 31, 37, 43]) LAMPS.push([21.2, y], [26.8, y]);
+  for (const x of [9, 13, 18, 31, 36, 41]) LAMPS.push([x, 21.2], [x, 26.8]);
+  LAMPS.push([21.4, 3.2], [26.6, 3.2]);
+  const lamps = LAMPS.filter(([x, y]) => !nearHouse(x, y, 0.2) && !(Math.abs(x - CX) < 2.2 && Math.abs(y - CY) < 2.2));
+  const BRAZIERS: [number, number][] = [[21.2, 0.6], [26.8, 0.6], [20.6, 31.5], [27.4, 34]];
+  const BARRELS: [number, number][] = [[17.4, 22.2], [18.1, 22.9], [30.6, 22.1], [20.8, 26.6], [27.6, 16.4], [32.4, 14.4], [18.4, 16.8]];
+  const CRATES: [number, number][] = [[30.7, 22.8], [17.6, 26.8], [28.4, 17.0]];
+  const BENCHES: { x: number; y: number; a: "x" | "y" }[] = [
+    { x: 20.2, y: 20.2, a: "x" }, { x: 27.8, y: 20.2, a: "x" }, { x: 20.2, y: 28.2, a: "x" }, { x: 12, y: 21.4, a: "x" }, { x: 36, y: 26.6, a: "x" },
+  ];
+  const BANNERS: [number, number, 0 | 1][] = [[21.5, 9, 0], [26.5, 9, 1], [21.5, 35, 1], [26.5, 35, 0], [21.5, 14, 1], [26.5, 14, 0]];
+  const vault = zone.vault!;
+  const npcs = zoneNpcs(zone.id);
+  const keepClear = (gx: number, gy: number) =>
+    nearHouse(gx, gy, 1.6) || nearRoad(gx, gy, 1.1) || Math.hypot(gx - CX, gy - CY) < 10 || Math.hypot(gx - vault.x, gy - vault.y) < 3.2 ||
+    Math.hypot(gx - 24, gy - 30) < 3.4 || gx < 2 || gy < 2.2 || gx > W - 3 || gy > Hh - 3 || BRAZIERS.some(([bx, by]) => Math.hypot(gx - bx, gy - by) < 2.4) ||
+    Math.hypot(gx - GATE.x, gy - GATE.y) < 6.5 || npcs.some((n) => Math.hypot(gx - n.x, gy - n.y) < 2.4) || lamps.some(([lx, ly]) => Math.hypot(gx - lx, gy - ly) < 1.3);
 
-  // 2. Texturas de Árvores (Variante 1 e 2)
-  if (!scene.textures.exists("town_tree_1")) {
-    const createTreeTex = (key: string, v2: boolean) => {
-      const w = 128, h = 144;
-      const t = scene.textures.createCanvas(key, w, h)!;
-      const ctx = t.getContext();
-      const tx = w / 2, ty = h - 14;
-      // Sombra suave elíptica no chão
-      ctx.fillStyle = "rgba(0,0,0,0.32)";
-      ctx.beginPath();
-      ctx.ellipse(tx, ty, 32, 12, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Tronco
-      ctx.fillStyle = "#4a2e18";
-      ctx.fillRect(tx - 5, ty - 42, 10, 42);
-      ctx.fillStyle = "#331f10";
-      ctx.fillRect(tx - 2, ty - 42, 4, 42);
-      // Copa frondosa em camadas
-      const colA = v2 ? "#284d24" : "#2f572a";
-      const colB = v2 ? "#356530" : "#3d6f35";
-      const colC = v2 ? "#45823e" : "#4f8d46";
-      const circs = [
-        [-15, -46, 22, colA],
-        [15, -48, 20, colB],
-        [0, -68, 24, colC],
-        [-6, -42, 18, colB],
-        [8, -60, 20, colC],
-      ] as const;
-      for (const [dx, dy, r, col] of circs) {
-        ctx.fillStyle = col;
-        ctx.beginPath();
-        ctx.arc(tx + dx, ty + dy, r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Destaques de luz entre as folhas
-      ctx.fillStyle = "rgba(242, 213, 122, 0.45)";
-      ctx.beginPath();
-      ctx.arc(tx + 8, ty - 70, 3.5, 0, Math.PI * 2);
-      ctx.arc(tx - 12, ty - 54, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      t.refresh();
-    };
-    createTreeTex("town_tree_1", false);
-    createTreeTex("town_tree_2", true);
-  }
-
-  // 3. Textura de Poste de Lanterna
-  if (!scene.textures.exists("town_lamp")) {
-    const w = 32, h = 90;
-    const t = scene.textures.createCanvas("town_lamp", w, h)!;
-    const ctx = t.getContext();
-    const lx = w / 2, ly = h - 8;
-    // Sombra no chão
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
-    ctx.beginPath();
-    ctx.ellipse(lx, ly, 10, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Haste de ferro
-    ctx.fillStyle = "#26221d";
-    ctx.fillRect(lx - 2, ly - 64, 4, 64);
-    ctx.fillRect(lx - 6, ly - 4, 12, 4);
-    // Lanterna
-    ctx.fillStyle = "#382e25";
-    ctx.fillRect(lx - 7, ly - 76, 14, 4);
-    ctx.fillRect(lx - 6, ly - 64, 12, 3);
-    ctx.fillRect(lx - 7, ly - 76, 2, 14);
-    ctx.fillRect(lx + 5, ly - 76, 2, 14);
-    // Vidro iluminado
-    ctx.fillStyle = "#ffd56b";
-    ctx.fillRect(lx - 5, ly - 72, 10, 9);
-    t.refresh();
-  }
-
-  // 4. Textura de Banco e Barril
-  if (!scene.textures.exists("town_barrel")) {
-    const t = scene.textures.createCanvas("town_barrel", 32, 32)!;
-    const ctx = t.getContext();
-    const bx = 16, by = 24;
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
-    ctx.beginPath();
-    ctx.ellipse(bx, by, 12, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#6b4527";
-    ctx.fillRect(bx - 9, by - 18, 18, 18);
-    ctx.beginPath();
-    ctx.ellipse(bx, by - 18, 9, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#3a2a1c";
-    ctx.fillRect(bx - 9, by - 13, 18, 2);
-    ctx.fillRect(bx - 9, by - 6, 18, 2);
-    t.refresh();
-  }
-
-  const glows: { img: Phaser.GameObjects.Image; base: number; ph: number; amp: number }[] = [];
-  const glow = (sx: number, sy: number, size: number, color: number, alpha: number, amp = 0.15, depth = 9000) => {
-    const img = scene.add
-      .image(sx, sy, "town_glow")
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setTint(color)
-      .setAlpha(alpha)
-      .setScale(size / 128)
-      .setDepth(depth);
-    glows.push({ img, base: alpha, ph: Math.random() * 6.28, amp });
-    return img;
-  };
-  const prop = (sy: number) => scene.add.graphics().setDepth(sy);
-
-  // ---------------------------------------------------------------- CASAS ISOMÉTRICAS
-  const house = (hs: (typeof HOUSES)[number]) => {
-    // Quinas exatas na malha de azulejos (losangos 2:1 perfeitos):
-    const x0 = hs.x - 0.5;
-    const y0 = hs.y - 0.5;
-    const x1 = hs.x + hs.w - 0.5;
-    const y1 = hs.y + hs.d - 0.5;
-
-    const A = toScreen(x0, y0); // norte / fundo
-    const B = toScreen(x1, y0); // leste / direita
-    const C = toScreen(x1, y1); // sul / frente (mais próximo da câmera)
-    const D = toScreen(x0, y1); // oeste / esquerda
-
-    // Sombra de contato no chão (firme sob a base da casa, estendendo suavemente para o sudeste)
-    const shGr = scene.add.graphics().setDepth(-9);
-    const sOff = 0.35;
-    const sB = toScreen(x1 + sOff, y0 + sOff);
-    const sC = toScreen(x1 + sOff, y1 + sOff);
-    const sD = toScreen(x0 + sOff, y1 + sOff);
-    shGr.fillStyle(0x000000, 0.32).fillPoints(
-      [V(A.sx, A.sy), V(B.sx, B.sy), V(sB.sx, sB.sy), V(sC.sx, sC.sy), V(sD.sx, sD.sy), V(D.sx, D.sy)],
-      true
-    );
-
-    const gr = prop(C.sy);
-    const up = (p: { sx: number; sy: number }, h: number) => V(p.sx, p.sy - h);
-
-    // 1. Alicerce de pedra na base isométrica (altura 7px)
-    const fH = 7;
-    gr.fillStyle(0x3a3228, 1).fillPoints([V(D.sx, D.sy), V(C.sx, C.sy), up(C, fH), up(D, fH)], true);
-    gr.fillStyle(0x2d261e, 1).fillPoints([V(C.sx, C.sy), V(B.sx, B.sy), up(B, fH), up(C, fH)], true);
-    gr.lineStyle(1.5, 0x221c16, 0.7)
-      .strokePoints([V(D.sx, D.sy), V(C.sx, C.sy), up(C, fH), up(D, fH)], true)
-      .strokePoints([V(C.sx, C.sy), V(B.sx, B.sy), up(B, fH), up(C, fH)], true);
-
-    // 2. Paredes de enxaimel
-    // Parede frontal-esquerda (D -> C): iluminada
-    gr.fillStyle(hs.wall, 1).fillPoints([up(D, fH), up(C, fH), up(C, hs.h), up(D, hs.h)], true);
-    // Parede frontal-direita (C -> B): sombreada (~22% mais escura)
-    gr.fillStyle(hs.wall, 1).fillPoints([up(C, fH), up(B, fH), up(B, hs.h), up(C, hs.h)], true);
-    gr.fillStyle(0x000000, 0.22).fillPoints([up(C, fH), up(B, fH), up(B, hs.h), up(C, hs.h)], true);
-
-    // Vigas mestras de madeira escura
-    gr.lineStyle(2.5, 0x422a18, 0.9);
-    gr.lineBetween(D.sx, D.sy - fH, D.sx, D.sy - hs.h);
-    gr.lineBetween(C.sx, C.sy - fH, C.sx, C.sy - hs.h);
-    gr.lineBetween(B.sx, B.sy - fH, B.sx, B.sy - hs.h);
-
-    const midH = hs.h * 0.52;
-    gr.lineBetween(D.sx, D.sy - midH, C.sx, C.sy - midH);
-    gr.lineBetween(C.sx, C.sy - midH, B.sx, B.sy - midH);
-    gr.lineBetween(D.sx, D.sy - hs.h, C.sx, C.sy - hs.h);
-    gr.lineBetween(C.sx, C.sy - hs.h, B.sx, B.sy - hs.h);
-
-    // 3. Janelas e portas ISOMÉTRICAS (Paralelogramos com inclinação exata 2:1)
-    const winH = 14;
-    const winW = 7;
-
-    // Janelas na parede esquerda (D -> C, inclinação dy/dx = +0.5)
-    for (let i = 0; i < hs.d - 1; i++) {
-      const t = (i + 0.65) / hs.d;
-      const wx = D.sx + (C.sx - D.sx) * t;
-      const wy = D.sy + (C.sy - D.sy) * t - hs.h * 0.65;
-      const p1 = V(wx - winW, wy - winW * 0.5);
-      const p2 = V(wx + winW, wy + winW * 0.5);
-      const p3 = V(wx + winW, wy + winW * 0.5 - winH);
-      const p4 = V(wx - winW, wy - winW * 0.5 - winH);
-      gr.fillStyle(0x28190e, 1).fillPoints([p1, p2, p3, p4], true);
-      const iW = winW - 2, iH = winH - 3;
-      const ip1 = V(wx - iW, wy - iW * 0.5 - 1.5);
-      const ip2 = V(wx + iW, wy + iW * 0.5 - 1.5);
-      const ip3 = V(wx + iW, wy + iW * 0.5 - 1.5 - iH);
-      const ip4 = V(wx - iW, wy - iW * 0.5 - 1.5 - iH);
-      gr.fillStyle(0xffcb52, 0.98).fillPoints([ip1, ip2, ip3, ip4], true);
-      gr.lineStyle(1.5, 0x422a18, 0.95);
-      gr.lineBetween(wx, wy - 1.5 - iH, wx, wy - 1.5);
-      gr.lineBetween(wx - iW, wy - iW * 0.5 - 1.5 - iH * 0.5, wx + iW, wy + iW * 0.5 - 1.5 - iH * 0.5);
-    }
-
-    // Janelas na parede direita (C -> B, inclinação dy/dx = -0.5)
-    for (let i = 0; i < hs.w - 1; i++) {
-      const t = (i + 0.65) / hs.w;
-      const wx = C.sx + (B.sx - C.sx) * t;
-      const wy = C.sy + (B.sy - C.sy) * t - hs.h * 0.65;
-      const p1 = V(wx - winW, wy + winW * 0.5);
-      const p2 = V(wx + winW, wy - winW * 0.5);
-      const p3 = V(wx + winW, wy - winW * 0.5 - winH);
-      const p4 = V(wx - winW, wy + winW * 0.5 - winH);
-      gr.fillStyle(0x28190e, 1).fillPoints([p1, p2, p3, p4], true);
-      const iW = winW - 2, iH = winH - 3;
-      const ip1 = V(wx - iW, wy + iW * 0.5 - 1.5);
-      const ip2 = V(wx + iW, wy - iW * 0.5 - 1.5);
-      const ip3 = V(wx + iW, wy - iW * 0.5 - 1.5 - iH);
-      const ip4 = V(wx - iW, wy + iW * 0.5 - 1.5 - iH);
-      gr.fillStyle(0xffcb52, 0.95).fillPoints([ip1, ip2, ip3, ip4], true);
-      gr.fillStyle(0x000000, 0.15).fillPoints([ip1, ip2, ip3, ip4], true);
-      gr.lineStyle(1.5, 0x422a18, 0.95);
-      gr.lineBetween(wx, wy - 1.5 - iH, wx, wy - 1.5);
-      gr.lineBetween(wx - iW, wy + iW * 0.5 - 1.5 - iH * 0.5, wx + iW, wy - iW * 0.5 - 1.5 - iH * 0.5);
-    }
-
-    // Porta na parede direita
-    const dt = 0.28;
-    const doorX = C.sx + (B.sx - C.sx) * dt;
-    const doorY = C.sy + (B.sy - C.sy) * dt;
-    const dW = 7, dH = 26;
-    const dp1 = V(doorX - dW, doorY + dW * 0.5);
-    const dp2 = V(doorX + dW, doorY - dW * 0.5);
-    const dp3 = V(doorX + dW, doorY - dW * 0.5 - dH);
-    const dp4 = V(doorX - dW, doorY + dW * 0.5 - dH);
-    gr.fillStyle(0x351e10, 1).fillPoints([dp1, dp2, dp3, dp4], true);
-    gr.lineStyle(1.5, 0x22130a, 1).strokePoints([dp1, dp2, dp3, dp4], true);
-    gr.fillStyle(0xe5b85a, 1).fillCircle(doorX + 2, doorY - dH * 0.45, 1.8);
-
-    // 4. Telhado isométrico de 4 águas com beiral uniforme no grid
-    const ov = 0.22;
-    const Ar = toScreen(x0 - ov, y0 - ov);
-    const Br = toScreen(x1 + ov, y0 - ov);
-    const Cr = toScreen(x1 + ov, y1 + ov);
-    const Dr = toScreen(x0 - ov, y1 + ov);
-
-    const eavesH = hs.h - 2;
-    const bTop = up(Br, eavesH);
-    const cTop = up(Cr, eavesH);
-    const dTop = up(Dr, eavesH);
-
-    const center = toScreen((x0 + x1) / 2, (y0 + y1) / 2);
-    const roofApexH = hs.h + 34 + Math.min(hs.w, hs.d) * 3;
-    const apex = up(center, roofApexH);
-
-    // Sombra sob o beiral
-    gr.fillStyle(0x000000, 0.35).fillPoints([up(D, hs.h), up(C, hs.h), cTop, dTop], true);
-    gr.fillStyle(0x000000, 0.45).fillPoints([up(C, hs.h), up(B, hs.h), bTop, cTop], true);
-
-    // Telhado: faces visíveis
-    gr.fillStyle(hs.roof, 1).fillTriangle(dTop.x, dTop.y, cTop.x, cTop.y, apex.x, apex.y);
-    gr.fillStyle(hs.roof, 1).fillTriangle(cTop.x, cTop.y, bTop.x, bTop.y, apex.x, apex.y);
-    gr.fillStyle(0x000000, 0.25).fillTriangle(cTop.x, cTop.y, bTop.x, bTop.y, apex.x, apex.y);
-
-    // Arestas de madeira / acabamento do telhado
-    gr.lineStyle(2.5, 0x24150d, 0.85);
-    gr.lineBetween(dTop.x, dTop.y, cTop.x, cTop.y);
-    gr.lineBetween(cTop.x, cTop.y, bTop.x, bTop.y);
-    gr.lineBetween(cTop.x, cTop.y, apex.x, apex.y);
-    gr.lineBetween(dTop.x, dTop.y, apex.x, apex.y);
-    gr.lineBetween(bTop.x, bTop.y, apex.x, apex.y);
-
-    // Chaminé de pedra
-    const chX = center.sx - 8;
-    const chY = apex.y + 12;
-    gr.fillStyle(0x4a443c, 1).fillRect(chX, chY, 11, 24);
-    gr.fillStyle(0x363028, 1).fillRect(chX + 5, chY, 6, 24);
-    gr.fillStyle(0x605850, 1).fillRect(chX - 2, chY - 3, 15, 4);
-  };
-  HOUSES.forEach(house);
-
-  // ---------------------------------------------------------------- ÁRVORES BATCHED (SPRITES)
-  for (let x = 1; x < zone.w - 1; x += 3) {
-    for (let y = 1; y < zone.h - 1; y += 3) {
-      const gx = x + (hash(x, y) - 0.5) * 2.2, gy = y + (hash(y, x) - 0.5) * 2.2;
-      const onRoad = Math.abs(gx - cx) < 3.8 || Math.abs(gy - cy) < 3.8;
-      if (onRoad || Math.hypot(gx - cx, gy - cy) < 10 || inHouse(gx, gy, 1.6) || Math.hypot(gx - zone.vault!.x, gy - zone.vault!.y) < 3.5)
-        continue;
-      if (zone.portals.some((p) => Math.hypot(gx - p.x, gy - p.y) < 4.5)) continue;
-      if (Math.hypot(gx - 24, gy - 30) < 5 || FIRES.some(([fx, fy]) => Math.hypot(gx - fx, gy - fy) < 3)) continue;
-      if (hash(x * 3, y * 7) < 0.42) {
-        const { sx, sy } = toScreen(gx, gy);
-        const s = 0.85 + hash(x, y * 2) * 0.45;
-        const key = hash(x, y) > 0.5 ? "town_tree_1" : "town_tree_2";
-        scene.add.image(sx, sy, key).setOrigin(0.5, 130 / 144).setScale(s).setDepth(sy);
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------- CANTEIROS DE FLORES (ESTÁTICO)
-  const flowers = prop(8000).setDepth(-5);
-  const FL = [0xf2a0b8, 0xf2d57a, 0xe8e0f5, 0xe58a5a];
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 + 0.2, rr = 9.2;
-    for (let k = 0; k < 9; k++) {
-      const gx = cx + Math.cos(a) * rr + (hash(i, k) - 0.5) * 1.8;
-      const gy = cy + Math.sin(a) * rr + (hash(k, i) - 0.5) * 1.8;
-      if (Math.abs(gx - cx) < 3 || Math.abs(gy - cy) < 3) continue;
-      const { sx, sy } = toScreen(gx, gy);
-      flowers.fillStyle(0x36502c, 1).fillEllipse(sx, sy + 1, 9, 4);
-      flowers.fillStyle(FL[(i + k) % 4], 1).fillCircle(sx, sy - 2, 2.2);
-    }
-  }
-
-  // ---------------------------------------------------------------- BANCOS E BARRIS
-  const bench = (gx: number, gy: number, flip: boolean) => {
-    const { sx, sy } = toScreen(gx, gy);
-    const gr = prop(sy);
-    gr.fillStyle(0x000000, 0.28).fillEllipse(sx, sy + 2, 48, 14);
-    gr.fillStyle(0x4a2e1a, 1).fillRect(sx - 20, sy - 8, 4, 10).fillRect(sx + 16, sy - 8, 4, 10);
-    gr.fillStyle(0x8a5e36, 1).fillRect(sx - 22, sy - 12, 44, 6);
-    gr.fillStyle(0x6e4a2a, 1).fillRect(sx - 22, sy - 22, 44, 5);
-  };
-  for (let i = 0; i < 4; i++) {
-    const a = Math.PI / 4 + (i * Math.PI) / 2;
-    bench(cx + Math.cos(a) * 5.4, cy + Math.sin(a) * 5.4, i % 2 === 0);
-  }
-
-  [[17.2, 22.2], [17.8, 22.8], [31.2, 22.4], [20.8, 26.4]].forEach(([x, y]) => {
-    const { sx, sy } = toScreen(x, y);
-    scene.add.image(sx, sy, "town_barrel").setOrigin(0.5, 24 / 32).setDepth(sy);
-  });
-
-  // ---------------------------------------------------------------- FONTE DA PRAÇA
-  const fc = toScreen(cx, cy);
-  const fount = prop(fc.sy);
-  fount.fillStyle(0x000000, 0.28).fillEllipse(fc.sx, fc.sy + 8, 220, 90);
-  fount.fillStyle(0x6f6657, 1).fillEllipse(fc.sx, fc.sy + 6, 200, 96);
-  fount.fillStyle(0x9a8f7a, 1).fillEllipse(fc.sx, fc.sy - 4, 200, 96);
-  fount.fillStyle(0x4aa0b8, 1).fillEllipse(fc.sx, fc.sy - 6, 176, 80);
-  fount.fillStyle(0x6bc2d6, 0.55).fillEllipse(fc.sx - 14, fc.sy - 10, 110, 44);
-  fount.fillStyle(0x8c8270, 1).fillRect(fc.sx - 10, fc.sy - 70, 20, 66).fillEllipse(fc.sx, fc.sy - 4, 34, 14);
-  fount.fillStyle(0xa89d86, 1).fillEllipse(fc.sx, fc.sy - 56, 78, 28).fillStyle(0x4aa0b8, 1).fillEllipse(fc.sx, fc.sy - 58, 62, 20);
-  fount.fillStyle(0xb9a98a, 1).fillCircle(fc.sx, fc.sy - 82, 9);
-  const water = scene.add.graphics().setDepth(fc.sy + 1);
-
-  // ---------------------------------------------------------------- LANTERNAS E FOGUEIRAS BATCHED
-  const LAMPS: number[][] = [];
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    LAMPS.push([cx + Math.cos(a) * 8.6, cy + Math.sin(a) * 8.6]);
-  }
-  for (const y of [11, 17, 36, 42]) LAMPS.push([21.2, y], [26.8, y]);
-  for (const x of [10, 15, 33, 38]) LAMPS.push([x, 21.2], [x, 26.8]);
-
-  LAMPS.forEach(([x, y]) => {
-    if (!inHouse(x, y, 0.5)) {
-      const { sx, sy } = toScreen(x, y);
-      scene.add.image(sx, sy, "town_lamp").setOrigin(0.5, 82 / 90).setDepth(sy);
-      glow(sx, sy - 66, 160, 0xffa646, 0.32, 0.08); // 1 único glow suave na lanterna
-    }
-  });
-
-  const fires = FIRES.map(([fx, fy]) => {
-    const { sx, sy } = toScreen(fx, fy);
-    const base = prop(sy);
-    base.fillStyle(0x000000, 0.28).fillEllipse(sx, sy + 2, 56, 20);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * 6.28;
-      base.fillStyle(0x6e6a64, 1).fillCircle(sx + Math.cos(a) * 17, sy + Math.sin(a) * 7, 4);
-    }
-    base.fillStyle(0x4a2e1a, 1).fillRect(sx - 14, sy - 4, 28, 5).fillRect(sx - 4, sy - 8, 8, 9);
-    const flame = scene.add.graphics().setDepth(sy + 1);
-    glow(sx, sy - 14, 220, 0xff8a2a, 0.38, 0.12);
-    return { sx, sy, flame };
-  });
-  [[18.4, 31], [29.6, 33]].forEach(([x, y]) => bench(x, y, true));
-
-  // ---------------------------------------------------------------- PORTAIS: PILARES COM TOCHAS
-  zone.portals.forEach((p) => {
-    const horiz = Math.abs(p.y - 24) < 1;
-    const off = [[0, -2.1], [0, 2.1]].map(([a, b]) => (horiz ? [p.x + a, p.y + b] : [p.x + b, p.y + a]));
-    off.forEach(([x, y]) => {
-      const { sx, sy } = toScreen(x, y);
-      const gr = prop(sy);
-      gr.fillStyle(0x000000, 0.28).fillEllipse(sx, sy, 34, 12);
-      gr.fillStyle(0x7d7466, 1).fillRect(sx - 9, sy - 70, 18, 70).fillStyle(0xa0968a, 1).fillRect(sx - 12, sy - 78, 24, 10).fillRect(sx - 12, sy - 4, 24, 4);
-      gr.fillStyle(0xffd27a, 1).fillCircle(sx, sy - 86, 6);
-      glow(sx, sy - 86, 150, 0xffb050, 0.38, 0.12);
+  // ---------------------------------------------------------------- CHÃO (UMA textura em cache)
+  const ox = (Hh + 4) * (TILE_W / 2), oy = 230;
+  const gw = Math.ceil((W + Hh + 8) * (TILE_W / 2)), gh = Math.ceil(oy + (W + Hh + 3) * (TILE_H / 2) + 60);
+  const groundKey = "town_ground_v2";
+  if (!scene.textures.exists(groundKey)) {
+    canvasTex(scene, groundKey, gw, gh, (c) => {
+      c.translate(ox, oy);
+      bakeGround(c, W, Hh, TILE_W, TILE_H, S, road, lamps, BRAZIERS);
     });
+  }
+  scene.add.image(-ox, -oy, groundKey).setOrigin(0, 0).setDepth(-10);
+
+  // ---------------------------------------------------------------- casas
+  const placed: Phaser.GameObjects.Image[] = [];
+  const put = (tex: Tex, gx: number, gy: number, depth?: number, scale = 1) => {
+    const [sx, sy] = S(gx, gy);
+    const im = scene.add.image(sx, sy, tex.key).setOrigin(tex.ax / tex.w, tex.ay / tex.h).setScale(scale).setDepth(depth ?? sy);
+    placed.push(im);
+    return im;
+  };
+  for (const h of HOUSES) put(houseTex(scene, h), h.x + h.w - 0.5, h.y + h.d - 0.5, S(h.x + h.w - 0.5, h.y + h.d - 0.5)[1] + 0.5);
+
+  // ---------------------------------------------------------------- árvores (poucas, variadas, só fora de ruas e casas)
+  const trees = [treeTex(scene, 0), treeTex(scene, 1), treeTex(scene, 2)];
+  let treeCount = 0;
+  for (let gx = 2; gx < W - 2; gx += 2) {
+    for (let gy = 2; gy < Hh - 2; gy += 2) {
+      const x = gx + (hash(gx, gy) - 0.5) * 1.6, y = gy + (hash(gy, gx) - 0.5) * 1.6;
+      if (hash(gx * 3, gy * 7) > 0.34 || keepClear(x, y)) continue;
+      const k = hash(gx, gy * 2);
+      const t = trees[k < 0.45 ? 0 : k < 0.75 ? 1 : 2];
+      put(t, x, y, undefined, 0.85 + hash(gx * 5, gy) * 0.35);
+      treeCount++;
+    }
+  }
+
+  // ---------------------------------------------------------------- lampiões e adereços
+  const lampT = lampTex(scene), barrelT = barrelTex(scene), crateT = crateTex(scene);
+  lamps.forEach(([x, y]) => put(lampT, x, y));
+  BARRELS.forEach(([x, y]) => put(barrelT, x, y));
+  CRATES.forEach(([x, y]) => put(crateT, x, y));
+  BENCHES.forEach((b) => put(benchTex(scene, b.a), b.x, b.y));
+  BANNERS.forEach(([x, y, v]) => put(bannerTex(scene, v), x, y));
+  const brazT = braziertTex(scene);
+  const fires = BRAZIERS.map(([x, y]) => {
+    const im = put(brazT, x, y);
+    const [sx, sy] = S(x, y);
+    const flame = scene.add.image(sx, sy - 32, "town_flame").setBlendMode(Phaser.BlendModes.ADD).setDepth(sy + 1).setOrigin(0.5, 0.85);
+    const glow = scene.add.image(sx, sy - 34, "town_glow").setBlendMode(Phaser.BlendModes.ADD).setTint(0xff8a2a).setDepth(9000).setScale(1.5);
+    void im;
+    return { flame, glow, ph: x * 1.7 + y };
   });
 
-  // ---------------------------------------------------------------- BAÚ DE ARMAZENAMENTO
-  const v = zone.vault!;
-  const vp = toScreen(v.x, v.y);
-  const chest = prop(vp.sy);
-  chest.fillStyle(0x000000, 0.28).fillEllipse(vp.sx, vp.sy + 4, 110, 40);
-  const bw = 46, bd = 26, bh = 36, hx = vp.sx, hy = vp.sy;
-  const top = [V(hx, hy - bd - bh), V(hx + bw, hy - bd / 2 - bh), V(hx, hy - bh), V(hx - bw, hy - bd / 2 - bh)];
-  chest.fillStyle(0x6b4423, 1).fillPoints([V(hx - bw, hy - bd / 2 - bh), V(hx, hy - bh), V(hx, hy), V(hx - bw, hy - bd / 2)], true);
-  chest.fillStyle(0x4f3219, 1).fillPoints([V(hx, hy - bh), V(hx + bw, hy - bd / 2 - bh), V(hx + bw, hy - bd / 2), V(hx, hy)], true);
-  chest.fillStyle(0x8a5a2e, 1).fillPoints(top, true);
-  chest.fillStyle(0x7d4f28, 1).fillPoints([V(hx - bw, hy - bd / 2 - bh), V(hx, hy - bh), V(hx, hy - bh - 18), V(hx - bw + 2, hy - bd / 2 - bh - 14)], true);
-  chest.fillStyle(0x5e3a1d, 1).fillPoints([V(hx, hy - bh), V(hx + bw, hy - bd / 2 - bh), V(hx + bw - 2, hy - bd / 2 - bh - 14), V(hx, hy - bh - 18)], true);
-  chest.fillStyle(0x9a6a36, 1).fillPoints([V(hx, hy - bd - bh - 16), V(hx + bw - 2, hy - bd / 2 - bh - 14), V(hx, hy - bh - 18), V(hx - bw + 2, hy - bd / 2 - bh - 14)], true);
-  chest.fillStyle(0x30302f, 1).fillRect(hx - bw + 8, hy - bd / 2 - bh - 12, 6, bh + 12).fillRect(hx + bw - 14, hy - bd / 2 - bh - 12, 6, bh + 12);
-  chest.fillRect(hx - 26, hy - bh + 4 - 12, 6, bh - 4).fillRect(hx + 18, hy - bh + 4 - 12, 6, bh - 4);
-  chest.fillStyle(0xe0b565, 1).fillRoundedRect(hx - 8, hy - bh - 4, 16, 18, 3);
-  chest.fillStyle(0x3a2810, 1).fillCircle(hx, hy - bh + 4, 2.4).fillRect(hx - 1, hy - bh + 4, 2, 6);
-  chest.lineStyle(2, 0x2a1a0c, 0.7).strokePoints(top, true);
-  const chestGlow = glow(vp.sx, vp.sy - 30, 220, 0xffc060, 0.2, 0.1);
-  const sign = scene.add
-    .text(vp.sx, vp.sy - bh - bd - 44, "BAÚ DE ARMAZENAMENTO", {
-      fontFamily: "Cinzel, Georgia, serif",
-      fontStyle: "bold",
-      fontSize: "12px",
-      color: "#f4e6b8",
-      stroke: "#000",
-      strokeThickness: 3,
-      backgroundColor: "rgba(74,46,26,0.92)",
-      padding: { x: 7, y: 4 },
+  // ---------------------------------------------------------------- fonte
+  const fT = fountainTex(scene);
+  const [fx, fy] = S(CX, CY);
+  scene.add.image(fx, fy, fT.key).setOrigin(fT.ax / fT.w, fT.ay / fT.h).setDepth(fy + 18);
+  const ripples = [0, 1].map(() => scene.add.image(fx, fy - 17, "town_ring").setBlendMode(Phaser.BlendModes.ADD).setDepth(fy + 19).setTint(0xcff1ff));
+  const fGlow = scene.add.image(fx, fy - 100, "town_glow").setBlendMode(Phaser.BlendModes.ADD).setTint(0x8fd8f0).setAlpha(0.18).setScale(1.6).setDepth(fy + 20);
+
+  // ---------------------------------------------------------------- portão (arte no chão; aqui só o pulso e o rótulo)
+  const [gx, gy] = S(GATE.x, GATE.y);
+  const gateRing = scene.add.image(gx, gy, "town_ring").setBlendMode(Phaser.BlendModes.ADD).setDepth(0.5).setTint(0xffd27a);
+  const [gax, gay] = S(24, -0.5);
+  scene.add
+    .text(gax, gay - 132, "➜ Portão de Brasalume", { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "14px", color: "#f4ecd2", stroke: "#000", strokeThickness: 4 })
+    .setOrigin(0.5)
+    .setDepth(1e5);
+
+  // ---------------------------------------------------------------- baú de armazenamento
+  const cT = chestTex(scene);
+  const vp = S(vault.x, vault.y);
+  put(cT, vault.x, vault.y, vp[1] + 6);
+  const chestGlow = scene.add.image(vp[0], vp[1] - 16, "town_glow").setBlendMode(Phaser.BlendModes.ADD).setTint(0xffc060).setAlpha(0.16).setScale(1.5).setDepth(vp[1] + 7);
+  const ring = scene.add.image(vp[0], vp[1], "town_ring").setBlendMode(Phaser.BlendModes.ADD).setTint(0xf0cf86).setDepth(0.7).setScale(0.6, 0.6).setVisible(false);
+  scene.add
+    .text(vp[0], vp[1] - 72, "BAÚ DE ARMAZENAMENTO", {
+      fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "12px", color: "#f4e6b8", stroke: "#000", strokeThickness: 3,
+      backgroundColor: "rgba(74,46,26,0.92)", padding: { x: 7, y: 4 },
     })
     .setOrigin(0.5)
-    .setDepth(vp.sy + 3);
-  const ring = scene.add.graphics().setDepth(0.7);
+    .setDepth(vp[1] + 8);
 
-  // ---------------------------------------------------------------- VAGA-LUMES (LEVE)
-  if (!scene.textures.exists("town_fly")) {
-    const t = scene.textures.createCanvas("town_fly", 16, 16)!;
-    const ctx = t.getContext();
-    const gr = ctx.createRadialGradient(8, 8, 0, 8, 8, 8);
-    gr.addColorStop(0, "rgba(255,244,190,1)");
-    gr.addColorStop(0.4, "rgba(255,214,110,0.55)");
-    gr.addColorStop(1, "rgba(255,200,90,0)");
-    ctx.fillStyle = gr;
-    ctx.fillRect(0, 0, 16, 16);
-    t.refresh();
-  }
+  // ---------------------------------------------------------------- vaga-lumes (um emissor, poucas partículas)
   const flies = scene.add
     .particles(0, 0, "town_fly", {
-      x: { min: -400, max: 400 },
-      y: { min: -280, max: 280 },
-      lifespan: { min: 3000, max: 6000 },
-      frequency: 250,
-      quantity: 1,
-      speedX: { min: -10, max: 10 },
-      speedY: { min: -10, max: 6 },
-      scale: { start: 0.3, end: 0.08 },
-      alpha: { values: [0, 0.8, 0.2, 0.7, 0] },
-      blendMode: "ADD",
+      x: { min: -380, max: 380 }, y: { min: -260, max: 260 }, lifespan: { min: 3500, max: 6500 }, frequency: 420, quantity: 1, maxAliveParticles: 14,
+      speedX: { min: -10, max: 10 }, speedY: { min: -10, max: 6 }, scale: { start: 0.3, end: 0.08 }, alpha: { values: [0, 0.8, 0.2, 0.7, 0] }, blendMode: "ADD",
     })
     .setDepth(9500);
 
+  const genMs = performance.now() - t0;
+  if (import.meta.env.DEV) {
+    const info = { genMs: +genMs.toFixed(1), houses: HOUSES.length, trees: treeCount, lamps: lamps.length, images: placed.length, groundPx: `${gw}x${gh}` };
+    (window as unknown as { __frixepTown?: unknown }).__frixepTown = info;
+    console.log("[cidade] gerada em", info);
+  }
+
   return {
-    chestPos: v,
-    chestHit: (wx, wy) => Math.abs(wx - vp.sx) < 62 && wy > vp.sy - 110 && wy < vp.sy + 16,
-    nearChest: (gx, gy) => Math.hypot(gx - v.x, gy - v.y) <= VAULT_REACH,
+    chestPos: vault,
+    chestHit: (wx, wy) => Math.abs(wx - vp[0]) < 40 && wy > vp[1] - 64 && wy < vp[1] + 26,
+    nearChest: (px, py) => Math.hypot(px - vault.x, py - vault.y) <= VAULT_REACH,
     update(time, cam, me) {
-      for (const l of glows) l.img.setAlpha(l.base + Math.sin(time / 420 + l.ph) * l.base * l.amp * 2.2);
-      flies.setPosition(cam.worldView.centerX, cam.worldView.centerY);
-
-      // Fonte: ondas e gotas
-      water.clear();
-      for (let i = 0; i < 2; i++) {
-        const t = (time / 1800 + i / 2) % 1;
-        water.lineStyle(2, 0xdff6ff, 0.5 * (1 - t)).strokeEllipse(fc.sx, fc.sy - 6, 40 + 120 * t, 18 + 52 * t);
-      }
-      for (let i = 0; i < 6; i++) {
-        const t = (time / 900 + i / 6) % 1,
-          a = (i / 6) * 6.28;
-        water
-          .fillStyle(0xcff1ff, 0.75 * (1 - t * 0.6))
-          .fillCircle(fc.sx + Math.cos(a) * 24 * t, fc.sy - 84 + 104 * t * t - 38 * Math.sin(t * 3.14), 2.2);
-      }
-
-      // Fogueiras
       for (const f of fires) {
-        f.flame.clear();
-        for (let i = 0; i < 3; i++) {
-          const w = 8 - i * 2,
-            hgt = 22 + Math.sin(time / (110 + i * 37) + i) * 5 - i * 3;
-          f.flame
-            .fillStyle([0xff5a1c, 0xff8a2a, 0xfff0a0][i], 0.92)
-            .fillTriangle(f.sx - w, f.sy - 4, f.sx + w, f.sy - 4, f.sx + Math.sin(time / 170 + i) * 2.5, f.sy - 4 - hgt);
-        }
+        const k = 0.5 + 0.5 * Math.sin(time / 90 + f.ph) * Math.sin(time / 143 + f.ph * 2);
+        f.flame.setScale(0.9 + 0.25 * k, 0.9 + 0.35 * k).setAlpha(0.85 + 0.15 * k);
+        f.glow.setAlpha(0.28 + 0.12 * k);
       }
-
-      // Baú: anel quando ao alcance
-      ring.clear();
-      chestGlow.setScale((220 + Math.sin(time / 500) * 14) / 128);
-      if (me && Math.hypot(me.x - v.x, me.y - v.y) <= VAULT_REACH) {
-        ring.lineStyle(3, 0xf0cf86, 0.55 + 0.25 * Math.sin(time / 260)).strokeEllipse(vp.sx, vp.sy + 6, 120, 52);
+      for (let i = 0; i < 2; i++) { // ondas da fonte
+        const t = (time / 2200 + i / 2) % 1;
+        ripples[i].setScale(0.12 + 0.62 * t, 0.12 + 0.62 * t).setAlpha(0.55 * (1 - t));
       }
-      sign.setAlpha(1);
+      fGlow.setAlpha(0.15 + 0.05 * Math.sin(time / 600));
+      const p = 0.5 + 0.5 * Math.sin(time / 520);
+      gateRing.setScale(0.62 + 0.04 * p, 0.62 + 0.04 * p).setAlpha(0.45 + 0.35 * p);
+      flies.setPosition(cam.worldView.centerX, cam.worldView.centerY);
+      const near = !!me && Math.hypot(me.x - vault.x, me.y - vault.y) <= VAULT_REACH;
+      chestGlow.setAlpha(0.13 + 0.05 * Math.sin(time / 500));
+      if (near) ring.setVisible(true).setScale(0.5, 0.5).setAlpha(0.45 + 0.25 * Math.sin(time / 260));
+      else if (ring.visible) ring.setVisible(false);
     },
   };
+}
+
+// =====================================================================================================================
+// CHÃO: tudo num canvas só
+// =====================================================================================================================
+function bakeGround(c: Ctx, W: number, Hh: number, TW: number, TH: number, S: (x: number, y: number) => Pt, road: Uint8Array, lamps: [number, number][], braziers: [number, number][]) {
+  const rnd = rngOf(4242);
+  const dia = (sx: number, sy: number, k = 1): Pt[] => [[sx, sy - (TH / 2) * k], [sx + (TW / 2) * k, sy], [sx, sy + (TH / 2) * k], [sx - (TW / 2) * k, sy]];
+  const stone = (sx: number, sy: number, k: number, col: string, hi: boolean) => {
+    poly(c, dia(sx, sy, k), col);
+    if (hi) { line(c, [sx - (TW / 2) * k, sy], [sx, sy - (TH / 2) * k], "rgba(255,255,255,0.12)", 1); line(c, [sx, sy + (TH / 2) * k], [sx + (TW / 2) * k, sy], "rgba(0,0,0,0.16)", 1); }
+  };
+  const FLOWERS = ["#f2a0b8", "#f2d57a", "#e8e0f5", "#e58a5a"];
+
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < Hh; y++) {
+      const [sx, sy] = S(x, y);
+      const h = hash(x, y), d = Math.hypot(x - CX, y - CY);
+      if (road[y * W + x]) {
+        if (d <= PLAZA_R) { // praça: lajes grandes, anéis alternados e uma faixa escura de contorno
+          const ring = d > 6.3 ? 0 : d > 2.9 ? 1 : 2;
+          const base = ring === 0 ? ((x + y) % 2 ? "#847a68" : "#8d826e") : ring === 1 ? ((x + y) % 2 ? "#a2977f" : "#ab9f86") : ((x + y) % 2 ? "#6e6554" : "#766c5a");
+          poly(c, dia(sx, sy), "#5f5646");
+          for (const [a, b] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]] as const) {
+            const px = sx + (a - b) * (TW / 4) * 1.0, py = sy + (a + b) * (TH / 4) * 1.0;
+            stone(px, py, 0.46, shade(base, 0.93 + hash(x * 3 + a * 2, y * 5 + b * 2) * 0.16), true);
+          }
+          if (d > 6.0 && d < 6.9) poly(c, dia(sx, sy), "rgba(40,30,20,0.18)");
+        } else { // rua: paralelepípedos pequenos
+          const base = (x + y) % 2 ? "#8a7f6b" : "#92876f";
+          poly(c, dia(sx, sy), "#5f5646");
+          for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+            const px = sx + (i - j) * (TW / 6) * 0.98, py = sy + (i + j) * (TH / 6) * 0.98;
+            stone(px, py, 0.3, shade(base, 0.86 + hash(x * 7 + i, y * 11 + j) * 0.26), false);
+          }
+        }
+      } else {
+        const base = (x + y) % 2 ? "#3f5a34" : "#456338";
+        poly(c, dia(sx, sy), shade(base, 0.94 + h * 0.14));
+        if (h < 0.55) for (let k = 0; k < 3; k++) {
+          const px = sx + (rnd() - 0.5) * TW * 0.6, py = sy + (rnd() - 0.5) * TH * 0.6;
+          line(c, [px, py], [px + (rnd() - 0.5) * 3, py - 3 - rnd() * 3], rnd() < 0.5 ? "#5e8a48" : "#2f4a28", 1);
+        }
+        if (h > 0.93) { const px = sx + (rnd() - 0.5) * 30, py = sy + (rnd() - 0.5) * 10; c.fillStyle = "#36502c"; c.beginPath(); c.ellipse(px, py + 1, 4, 2, 0, 0, 7); c.fill(); c.fillStyle = FLOWERS[Math.floor(rnd() * 4)]; c.beginPath(); c.arc(px, py - 1.5, 2, 0, 7); c.fill(); }
+        if (h < 0.05) { c.fillStyle = "rgba(20,40,20,0.35)"; c.beginPath(); c.ellipse(sx + (h - 0.025) * 300, sy, 12 + h * 80, 5 + h * 20, 0, 0, 7); c.fill(); }
+      }
+    }
+  }
+
+  // linhas de contorno suaves entre ruas e grama (meio-tom) ficam por conta das cores; agora sombras de contato dos lampiões e luz no chão
+  c.save();
+  c.globalCompositeOperation = "lighter";
+  const pool = (gx: number, gy: number, r: number, a: number, rgb: string) => {
+    const [sx, sy] = S(gx, gy);
+    c.save(); c.translate(sx, sy); c.scale(1, 0.5);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, r); g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(1, `rgba(${rgb},0)`);
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
+  };
+  for (const [x, y] of lamps) pool(x, y, 110, 0.2, "255,170,70");
+  for (const [x, y] of braziers) pool(x, y, 130, 0.26, "255,130,40");
+  c.restore();
+
+  // ---------------------------------------------------------------- portão: anel rúnico no chão (o mapa-mundo abre aqui)
+  {
+    const [gx, gy] = S(GATE.x, GATE.y);
+    c.save(); c.translate(gx, gy); c.scale(1, 0.5);
+    const gg = c.createRadialGradient(0, 0, 0, 0, 0, 74); gg.addColorStop(0, "rgba(255,210,120,0.16)"); gg.addColorStop(1, "rgba(255,210,120,0)");
+    c.fillStyle = gg; c.beginPath(); c.arc(0, 0, 74, 0, 7); c.fill();
+    c.strokeStyle = "rgba(60,40,20,0.8)"; c.lineWidth = 7; c.beginPath(); c.arc(0, 0, 64, 0, 7); c.stroke();
+    c.strokeStyle = "rgba(240,200,110,0.85)"; c.lineWidth = 3; c.beginPath(); c.arc(0, 0, 64, 0, 7); c.stroke();
+    c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, 52, 0, 7); c.stroke();
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * 6.283; c.beginPath(); c.moveTo(Math.cos(a) * 53, Math.sin(a) * 53); c.lineTo(Math.cos(a) * 62, Math.sin(a) * 62); c.stroke(); }
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------- muralha norte e oeste (altas), portão e torre de canto
+  const WH = 62;
+  const wallStone = "#8c877c";
+  const courses = (a: Pt, b: Pt, h: number, dark: boolean) => { // juntas de pedra numa face vertical entre a e b
+    const rows = Math.round(h / 8);
+    for (let r = 1; r < rows; r++) line(c, [a[0], a[1] - (h * r) / rows], [b[0], b[1] - (h * r) / rows], dark ? "rgba(0,0,0,0.30)" : "rgba(0,0,0,0.22)", 1);
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    for (let r = 0; r < rows; r++) for (let t = (r % 2) * 14; t < len; t += 28) {
+      const u = t / len; const px = a[0] + (b[0] - a[0]) * u, py = a[1] + (b[1] - a[1]) * u;
+      line(c, [px, py - (h * r) / rows], [px, py - (h * (r + 1)) / rows], "rgba(0,0,0,0.18)", 1);
+    }
+  };
+  const faceL = wallStone, faceR = shade(wallStone, 0.74), topC = shade(wallStone, 1.18);
+  const northWall = (xa: number, xb: number) => {
+    const a = S(xa, -0.5), b = S(xb, -0.5), a2 = S(xa, -1.7), b2 = S(xb, -1.7);
+    poly(c, [a, b, [b[0], b[1] - WH], [a[0], a[1] - WH]], faceL);
+    courses(a, b, WH, false);
+    poly(c, [[a[0], a[1] - WH], [b[0], b[1] - WH], [b2[0], b2[1] - WH], [a2[0], a2[1] - WH]], topC, "rgba(0,0,0,0.3)", 1);
+    for (let x = Math.ceil(xa + 0.25); x < xb - 0.25; x += 1) isoBox(c, [S(x + 0.25, -0.5)[0], S(x + 0.25, -0.5)[1] - WH], 0.5, 0.7, 10, { top: shade(wallStone, 1.25), left: shade(wallStone, 1.05), right: shade(wallStone, 0.74), edge: "rgba(0,0,0,0.35)" });
+  };
+  const westWall = (ya: number, yb: number) => {
+    const a = S(-0.5, ya), b = S(-0.5, yb), a2 = S(-1.7, ya), b2 = S(-1.7, yb);
+    poly(c, [a, b, [b[0], b[1] - WH], [a[0], a[1] - WH]], faceR);
+    courses(a, b, WH, true);
+    poly(c, [[a[0], a[1] - WH], [b[0], b[1] - WH], [b2[0], b2[1] - WH], [a2[0], a2[1] - WH]], topC, "rgba(0,0,0,0.3)", 1);
+    for (let y = Math.ceil(ya + 0.25); y < yb - 0.25; y += 1) isoBox(c, [S(-0.5, y + 0.25)[0], S(-0.5, y + 0.25)[1] - WH], 0.7, 0.5, 10, { top: shade(wallStone, 1.25), left: shade(wallStone, 1.05), right: shade(wallStone, 0.74), edge: "rgba(0,0,0,0.35)" });
+  };
+  // a muralha oeste termina no canto sudoeste e a norte no nordeste; a leste e a sul são baixas (abaixo)
+  westWall(-0.5, Hh - 0.5);
+  northWall(-0.5, 19.7);
+  northWall(28.3, W - 0.5);
+  // chão sob o arco do portão (continua a rua para fora)
+  for (let x = 22; x <= 25; x++) for (let y = -2; y <= -1; y++) { const [sx, sy] = S(x, y); poly(c, dia(sx, sy), "#4a4238"); }
+  // torres do portão e arco
+  const TH_ = 98;
+  const towerCols = { top: shade(wallStone, 1.2), left: shade(wallStone, 1.08), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.4)" };
+  const tower = (xr: number, w: number) => {
+    const C0 = S(xr, -0.5);
+    const t = isoBox(c, C0, w, 2.2, TH_, towerCols);
+    void t;
+    // juntas
+    const D0: Pt = [C0[0] - 32 * w, C0[1] - 16 * w];
+    courses(D0, C0, TH_, false);
+    courses(C0, [C0[0] + 32 * 2.2, C0[1] - 16 * 2.2], TH_, true);
+    // ameias
+    for (let i = 0; i < Math.floor(w * 2); i += 2) { const bx = xr - w + 0.15 + i * 0.5; isoBox(c, [S(bx + 0.4, -0.5)[0], S(bx + 0.4, -0.5)[1] - TH_], 0.4, 0.5, 9, { top: shade(wallStone, 1.3), left: shade(wallStone, 1.1), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.35)" }); }
+    // seteira iluminada
+    const sw = S(xr - w / 2, -0.5); c.fillStyle = "#1a1410"; c.fillRect(sw[0] - 2.5, sw[1] - 62, 5, 16); c.fillStyle = "#ffcf70"; c.fillRect(sw[0] - 1.2, sw[1] - 60, 2.4, 12);
+  };
+  tower(22, 2.3);
+  tower(28.3, 2.3);
+  { // lintel e arco
+    const C0 = S(26, -0.5);
+    isoBox(c, C0, 4, 2.2, TH_ - 6, { top: shade(wallStone, 1.2), left: shade(wallStone, 1.0), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.4)" }, 56);
+    const q = (xx: number, v: number): Pt => { const p = S(xx, -0.5); return [p[0], p[1] - v]; };
+    const arcTop = (xx: number) => 58 + 12 * Math.sin((Math.PI * (xx - 22)) / 4);
+    const pts: Pt[] = [q(22, 0)];
+    for (let i = 0; i <= 16; i++) { const xx = 22 + (i / 16) * 4; pts.push(q(xx, arcTop(xx))); }
+    pts.push(q(26, 0));
+    const g = c.createLinearGradient(0, q(24, 0)[1] - 70, 0, q(24, 0)[1]); g.addColorStop(0, "#0b0912"); g.addColorStop(0.7, "#1c1630"); g.addColorStop(1, "#3a2a50");
+    poly(c, pts, g, "#2a2622", 3);
+    const dy = c.createRadialGradient(q(24, 0)[0], q(24, 0)[1] - 18, 2, q(24, 0)[0], q(24, 0)[1] - 18, 48); dy.addColorStop(0, "rgba(255,210,140,0.35)"); dy.addColorStop(1, "rgba(255,210,140,0)");
+    poly(c, pts, dy);
+    for (let i = 0; i <= 12; i++) { const xx = 22 + (i / 12) * 4; line(c, q(xx, arcTop(xx)), q(xx, arcTop(xx) + 7), "rgba(0,0,0,0.5)", 1.5); } // aduelas
+    const key = q(24, arcTop(24) + 6); poly(c, [[key[0] - 5, key[1]], [key[0] + 5, key[1]], [key[0] + 3, key[1] - 11], [key[0] - 3, key[1] - 11]], shade(wallStone, 1.3), "rgba(0,0,0,0.5)", 1);
+    // brasões
+    const b0 = q(22.6, 70); void b0;
+  }
+  // torre de canto (noroeste)
+  isoBox(c, S(-0.5, -0.5), 2.2, 2.2, 82, { top: shade(wallStone, 1.2), left: shade(wallStone, 1.08), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.4)" });
+  for (const [mx, my] of [[-2.2, -2.2], [-1.2, -2.2], [-2.2, -1.2], [-0.8, -1.4]] as const) isoBox(c, [S(mx + 0.5, my + 0.5)[0], S(mx + 0.5, my + 0.5)[1] - 82], 0.5, 0.5, 9, { top: shade(wallStone, 1.3), left: shade(wallStone, 1.1), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.35)" });
+  { const C0 = S(-0.5, -0.5); courses([C0[0] - 32 * 2.2, C0[1] - 16 * 2.2], C0, 82, false); courses(C0, [C0[0] + 32 * 2.2, C0[1] - 16 * 2.2], 82, true); }
+
+  // ---------------------------------------------------------------- cerca baixa ao sul e a leste (rente ao chão, por cima do mapa)
+  const LH = 22;
+  const lowCols = { top: shade(wallStone, 1.2), left: shade(wallStone, 1.05), right: shade(wallStone, 0.74), edge: "rgba(0,0,0,0.35)" };
+  for (let x = -0.5; x < W - 0.5; x += 1) isoBox(c, S(x + 1, Hh - 0.5 + 0.9), 1, 0.9, LH, lowCols); // sul
+  for (let y = 0.5; y <= Hh - 0.5 + 1e-6; y += 1) isoBox(c, S(W - 0.5 + 0.9, y), 0.9, 1, LH, lowCols); // leste
+  for (let i = 0; i <= 12; i++) { // pilares mais altos
+    const x = -0.5 + i * 4; isoBox(c, S(Math.min(x + 0.5, W - 0.5 + 0.2), Hh - 0.5 + 1.0), 0.8, 1.0, 34, { ...lowCols, top: shade(wallStone, 1.3) });
+    const y = -0.5 + i * 4; isoBox(c, S(W - 0.5 + 1.0, Math.min(y + 0.5, Hh - 0.5 + 0.2)), 1.0, 0.8, 34, { ...lowCols, top: shade(wallStone, 1.3) });
+  }
 }

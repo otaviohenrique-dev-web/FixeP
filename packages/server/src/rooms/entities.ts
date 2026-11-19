@@ -4,6 +4,7 @@ import { emptyInventory, type Inventory } from "../game/inventory.js";
 import type { Vault } from "../game/vault.js";
 
 export class Player extends Schema {
+  atGate = false; // na cidade: já está dentro do raio do portão (o mapa-mundo abre uma vez por entrada)
   @type("number") x = SPAWN.x;
   @type("number") y = SPAWN.y;
   @type("number") face = 0; // ângulo (rad) no espaço da grade
@@ -95,6 +96,7 @@ export class Enemy extends Schema {
   slam = false; // o golpe em preparo é a pancada em área
   contrib = new Map<string, number>(); // sessão -> dano causado (define quem é elegível a XP e loot)
   lastHurt = -1e9; // último dano recebido: o inimigo só regenera depois de ENEMY_REGEN.delayS sem apanhar
+  noTargetSince = -1; // chefe em luta: desde quando não há nenhum alvo vivo (-1 = há alvo)
   fightStart = 0; // chefe: início da luta (fúria por tempo); 0 = fora de combate
   nextPulse = 0; // chefe: próximo pulso sombrio
 }

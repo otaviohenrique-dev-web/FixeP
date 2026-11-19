@@ -26,7 +26,7 @@ export interface Hud {
   setProgress(level: number, xp: number, need: number): void;
   /** desenha o retrato; `null` mantém o retrato provisório (inicial do nome) */
   setPortrait(source: CanvasImageSource | null, crop?: { x: number; y: number; w: number; h: number }): void;
-  setDead(secondsLeft: number | null): void;
+  setDead(secondsLeft: number | null, place?: string): void;
   setBuff(on: boolean, label?: string): void;
   /** liga o layout de toque: botões no canto direito, ao alcance do polegar */
   setTouch(on: boolean): void;
@@ -463,9 +463,12 @@ export function mountHud(opts: HudOptions): Hud {
       else ctx.drawImage(source, 0, 0, pCanvas.width, pCanvas.height);
       portrait.classList.add("has");
     },
-    setDead(secondsLeft) {
+    setDead(secondsLeft, place) {
       dead.classList.toggle("on", secondsLeft !== null);
-      if (secondsLeft !== null) deadSub.textContent = `Renascendo em ${Math.max(0, Math.ceil(secondsLeft))}`;
+      if (secondsLeft === null) return;
+      const n = Math.max(0, Math.ceil(secondsLeft));
+      const txt = place ? `Renascendo em ${place} em ${n}s...` : `Renascendo em ${n}s...`;
+      if (deadSub.textContent !== txt) deadSub.textContent = txt; // só mexe no DOM quando o segundo muda
     },
     setTouch(on) {
       root.classList.toggle("touch", on);

@@ -68,6 +68,7 @@ export const Evt = {
   Proj: "proj", // projétil criado (o cliente anima o voo)
   ProjEnd: "projend", // projétil terminou (acertou ou acabou o alcance)
   Trap: "trap", // armadilha: colocada, disparou ou sumiu
+  WorldMap: "world_map", // {}: o jogador pisou no portão da cidade: o cliente abre o mapa-mundo (escolher a zona); a escolha volta em Msg.Travel { to }
   Travel: "travel", // { zone }: travessia aprovada; o cliente sai da sala e entra na da nova zona
   Pong: "pong", // resposta ao ping, só para quem perguntou
   Inv: "inv", // fotografia completa do inventário (só para o dono)
@@ -173,6 +174,8 @@ export const ELIGIBLE_DMG_PCT = 0.1; // fora de grupo, só recebe XP/loot quem c
 export const PLAYER_REGEN_DELAY_S = 6; // sem causar nem receber dano por 6 s, o personagem começa a recuperar vida
 export const PLAYER_REGEN_PCT_S = 0.02; // ...a 2% da vida máxima por segundo (vida cheia em ~50 s)
 /** Regeneração dos inimigos: só parados em casa ou voltando para ela, e só depois de ficarem sem receber dano. */
+/** Chefe sem NENHUM alvo vivo (todo mundo morreu, saiu ou fugiu) por tanto tempo: reseta a vida na hora e esquece a luta. */
+export const BOSS_RESET_GRACE_S = 3;
 export const ENEMY_REGEN = { delayS: 5, pctS: 0.1, bossDelayS: 8, bossPctS: 0.03 } as const;
 
 // ------------------------------------------------------------ chefes: exigem grupo

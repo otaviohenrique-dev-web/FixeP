@@ -7,6 +7,8 @@ import type { Rarity } from "./items";
 export type EnemyKind = "skeleton" | "wolf" | "wraith" | "bone_king" | "frost_alpha" | "crypt_lord";
 export type ZoneTheme = "ash" | "frost" | "crypt" | "town";
 
+/** Destino especial de um portal: o PORTÃO da cidade. Pisar nele abre o mapa-mundo (o jogador escolhe a zona de combate); não leva a uma zona fixa. */
+export const WORLD_GATE = 0;
 export interface PortalDef { x: number; y: number; r: number; to: number }
 export interface ZoneDef {
   id: number;
@@ -102,13 +104,10 @@ export const ZONES: Record<number, ZoneDef> = {
   4: {
     id: 4, name: "Cidade de Brasalume", theme: "town", w: 48, h: 48,
     spawn: { x: 24, y: 30 },
-    // chegando de cada zona de combate: ao lado do portal de volta (fora do raio dele)
-    arrive: { 1: { x: 41, y: 24 }, 2: { x: 24, y: 7 }, 3: { x: 7, y: 24 } },
-    portals: [
-      { x: 44, y: 24, r: PORTAL_RADIUS, to: 1 }, // leste: Cinzas (a Cripta)
-      { x: 24, y: 4, r: PORTAL_RADIUS, to: 2 }, // norte: Floresta Gélida
-      { x: 4, y: 24, r: PORTAL_RADIUS, to: 3 }, // oeste: Catacumbas
-    ],
+    // a cidade tem UM só portão (norte, na muralha) e ele leva ao mapa-mundo: cada zona nova entra na lista do mapa, sem abrir portais novos na cidade.
+    // chegando de qualquer zona de combate o jogador aparece logo dentro do portão (fora do raio dele)
+    arrive: { 1: { x: 24, y: 7.5 }, 2: { x: 24, y: 7.5 }, 3: { x: 24, y: 7.5 } },
+    portals: [{ x: 24, y: 2, r: PORTAL_RADIUS, to: WORLD_GATE }],
     enemies: [],
     lootMult: 0,
     drops: { gear: 0, potion: 0, weights: {} },

@@ -298,7 +298,9 @@ console.log("\n== 6. Troca entre jogadores ==");
 console.log("\n== 7. Abate: tostões garantidos, sacola e Óbolo no chão ==");
 {
   // vai às Cinzas pelo portal leste da cidade (A anda até lá e o servidor aprova a travessia)
-  A.room.send("move_to", { x: 44, y: 24 });
+  A.room.send("move_to", { x: 24, y: 2 });
+  for (let t = 0; t < 200 && Math.hypot(A.me().x - 24, A.me().y - 2) > 1.5; t++) await sleep(100);
+  A.room.send("travel", { to: 1 });
   for (let t = 0; t < 150 && !A.st.travel?.length; t++) await sleep(100);
   await A.room.leave();
   await sleep(500);
