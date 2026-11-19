@@ -71,6 +71,8 @@ O simulador assume o Guerreiro colado nos 5 inimigos (risco de corpo a corpo); M
 
 **F** bebe uma poção. Mouse: clique no chão para andar e a mira segue o ponteiro.
 
+**Balão das habilidades**: passe o mouse sobre um botão da barra (Golpe, Q, W, E, R, Esquiva, Poção) e espere ~0,4 s; no celular, **segure** o botão por ~0,4 s (não dispara; soltar fecha). Mostra o tipo, os números reais (dano, raio, duração, custo, recarga) e uma dica de combinação. Os números vêm de `CLASS_DEFS`; os textos ficam em `SKILL_TEXT` (`packages/shared/src/skilltips.ts`), por nome da habilidade.
+
 **Celular:** joystick flutuante com o polegar esquerdo (toque em qualquer ponto da metade de baixo à esquerda e arraste; tocar no campo de visão não anda mais);
 botões em arco no canto direito (ataque grande, Q, W, E, R, esquiva e poção). A mira vai para o inimigo mais próximo.
 Quem cai fica 8 s no chão antes de renascer no ponto inicial.

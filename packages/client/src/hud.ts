@@ -1,4 +1,4 @@
-import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -118,6 +118,13 @@ const CSS = `
 .hd-qs{position:absolute;left:2px;top:17px;z-index:3;width:18px;height:14px;display:grid;place-items:center;border-radius:4px;background:rgba(0,0,0,.7);border:1px solid var(--gold-d);color:#ffd9a0;font:700 9px/1 "Cinzel",Georgia,serif;cursor:pointer}
 .hd-qs:hover{border-color:#f0cf86;color:#fff}
 .hd.touch .hd-qs{width:22px;height:18px;left:50%;margin-left:-11px;top:-1px}
+.hd-tip{position:fixed;z-index:60;left:0;top:0;width:min(250px,calc(100vw - 16px));box-sizing:border-box;padding:9px 11px;border-radius:8px;background:linear-gradient(#141b2a,#0b1018);border:1px solid #b89458;box-shadow:0 6px 22px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,225,160,.12);color:#dfe8f2;font:12px/1.35 Georgia,serif;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s}
+.hd-tip.on{opacity:1;visibility:visible}
+.hd-tip-h{display:flex;justify-content:space-between;align-items:center;gap:8px;font:700 14px/1.2 "Cinzel",Georgia,serif;color:#ffd9a0}
+.hd-tip-k{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.6);border:1px solid #6b5636}
+.hd-tip-t{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#e0742a;margin:2px 0 5px}
+.hd-tip p{margin:0 0 5px}.hd-tip ul{margin:0 0 5px;padding:0;list-style:none}.hd-tip li{padding:1px 0;color:#bcd0e4}
+.hd-tip .hd-tip-d{color:#9fd6a8;margin:6px 0 0;font-style:italic}
 .hd-btn:active{transform:scale(.93)}
 .hd-btn:hover{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.3),0 0 14px rgba(255,190,90,.35)}
 .hd-btn:focus-visible{outline:2px solid #ffd9a0;outline-offset:2px}
@@ -264,6 +271,59 @@ export function mountHud(opts: HudOptions): Hud {
   const els = new Map<ActionId, { btn: HTMLElement; cd: HTMLElement; n: HTMLElement }>();
   let curRes = Infinity;
 
+  // ---- balão de descrição: mouse = passar e esperar; toque = pressionar e segurar (sem disparar)
+  const TIP_MS = 400;
+  const tipEl = document.createElement("div");
+  tipEl.className = "hd-tip";
+  tipEl.setAttribute("role", "tooltip");
+  document.body.append(tipEl);
+  let tipFor: HTMLElement | null = null;
+  const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+  function tipHtml(d: SkillTooltipData): string {
+    return `<div class="hd-tip-h"><b>${esc(d.name)}</b><span class="hd-tip-k">${esc(d.key)}</span></div><div class="hd-tip-t">${esc(d.type)}</div>` +
+      (d.desc ? `<p>${esc(d.desc)}</p>` : "") + `<ul>${d.stats.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` + (d.tip ? `<p class="hd-tip-d">Dica: ${esc(d.tip)}</p>` : "");
+  }
+  function showTip(el: HTMLElement, html: string) {
+    tipEl.innerHTML = html;
+    tipEl.classList.add("on");
+    tipFor = el;
+    const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight, m = 8;
+    let x = r.left + r.width / 2 - w / 2;
+    x = Math.max(m, Math.min(window.innerWidth - w - m, x));
+    let y = r.top - h - 10; // por cima do botão
+    if (y < m) y = Math.min(window.innerHeight - h - m, r.bottom + 10); // sem espaço: por baixo
+    tipEl.style.left = `${x}px`;
+    tipEl.style.top = `${y}px`;
+  }
+  function hideTip() { tipEl.classList.remove("on"); tipFor = null; }
+  document.addEventListener("pointerdown", (e) => { if (tipFor && !tipFor.contains(e.target as Node)) hideTip(); }, true);
+  window.addEventListener("blur", hideTip);
+  function pressable(el: HTMLElement, act: () => void, html: () => string) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let held = false, touching = false;
+    const clear = () => { clearTimeout(timer); timer = undefined; };
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
+    el.addEventListener("pointerenter", (e) => {
+      if (e.pointerType !== "mouse") return;
+      clear(); timer = setTimeout(() => showTip(el, html()), TIP_MS);
+    });
+    el.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") { clear(); hideTip(); } });
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (e.pointerType === "mouse") { clear(); hideTip(); act(); return; }
+      touching = true; held = false; clear();
+      timer = setTimeout(() => { held = true; showTip(el, html()); navigator.vibrate?.(8); }, TIP_MS);
+    });
+    const end = (fire: boolean) => {
+      if (!touching) return;
+      touching = false; clear();
+      if (held) { hideTip(); held = false; return; } // soltar fecha o balão, sem disparar
+      if (fire) act();
+    };
+    el.addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") end(true); });
+    el.addEventListener("pointercancel", () => end(false));
+  }
+
   // ordem visual: esquiva, skills, ataque (maior) à direita
   const order: ActionId[] = ["dodge", "skill1", "skill2", "skill3", "ultimate", "attack"];
   for (const a of order) {
@@ -275,10 +335,8 @@ export function mountHud(opts: HudOptions): Hud {
     b.setAttribute("aria-label", `${def.name} (${def.key})${cost ? `, custa ${cost} de ${res.name}` : ""}`);
     b.innerHTML = `<span class="hd-key">${def.key}</span>${def.icon ? `<span class="hd-ic">${ICON[def.icon] ?? ""}</span>` : ""}<span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
     // pointerdown: resposta imediata no toque, sem esperar o "click"
-    b.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      trigger(a);
-    });
+    // toque: dispara ao soltar (um toque longo abre o balão em vez de disparar); mouse: dispara ao apertar
+    pressable(b, () => trigger(a), () => tipHtml(skillTooltip(defs[a], res.name)));
     bar.append(b);
     els.set(a, { btn: b, cd: b.querySelector(".hd-cd")!, n: b.querySelector(".hd-cdn")! });
   }
@@ -315,7 +373,10 @@ export function mountHud(opts: HudOptions): Hud {
   pb.className = "hd-btn hd-pot empty";
   pb.setAttribute("aria-label", "Beber poção (F)");
   pb.innerHTML = `<span class="hd-key">F</span>${ICON.potion}<span class="hd-qty">0</span><span class="hd-sn">Poção</span><span class="hd-cd"></span><span class="hd-cdn"></span>`;
-  pb.addEventListener("pointerdown", (e) => { e.preventDefault(); opts.onPotion?.(); });
+  pressable(pb, () => opts.onPotion?.(), () => {
+    const heal = ITEMS.pocao_de_vida?.heal ?? 40;
+    return tipHtml({ name: "Poção de Vida", key: "F", type: "Cura", stats: [`Cura: ${heal} de vida`, `Estoque: ${potCount}`, `Recarga: ${POTION_COOLDOWN_S} s`], desc: "Bebe uma poção do inventário e recupera vida na hora.", tip: "Compartilha a recarga com todas as poções: não desperdice com a vida cheia." });
+  });
   bar.append(pb);
   const potCd = pb.querySelector<HTMLElement>(".hd-cd")!;
   const potN = pb.querySelector<HTMLElement>(".hd-cdn")!;
