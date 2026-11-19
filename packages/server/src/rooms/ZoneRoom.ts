@@ -3,7 +3,7 @@ import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
   TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, ZONES, ZONE_IDS, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
-  PLAYER_RADIUS, PVP_CHANNEL_S, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
+  PLAYER_RADIUS, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, BOSS_CC_RESIST, classAction, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
@@ -217,6 +217,18 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!pl || pl.dead || typeof p?.on !== "boolean") return;
       this.requestPvp(client.sessionId, pl, p.on);
     });
+    // Clérigo: escolhe o Q (0 = cura em área, 1 = cura focada). Só fora de combate; o servidor decide.
+    this.onMessage(Msg.QMode, (client, p: { mode?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || pl.dead || pl.traveling || (p?.mode !== 0 && p?.mode !== 1)) return;
+      if (pl.cls !== "cleric") return this.notify(client.sessionId, "Só o Clérigo escolhe o tipo de Q.");
+      if (pl.qMode === p.mode) return;
+      const wait = QMODE_SWAP_S - (this.t - pl.combatAt);
+      if (wait > 0) return this.notify(client.sessionId, `Troque o Q fora de combate (${Math.ceil(wait)}s).`);
+      pl.qMode = p.mode;
+      this.notifyOk(client.sessionId, p.mode === 1 ? "Q: Cura Focada (um aliado, mais forte)" : "Q: Cura em Área (todos em volta, mais fraca)");
+    });
     this.onMessage(Msg.InvSync, (client) => {
       if (!this.allow(client)) return;
       const p = this.state.players.get(client.sessionId);
@@ -251,8 +263,13 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   // ------------------------------------------------------------------ PvP
-  private pvpEvt(id: string, s: "start" | "cancel" | "stop" | "on" | "off") {
-    this.clients.getById(id)?.send(Evt.Pvp, { s });
+  private pvpEvt(id: string, s: "start" | "cancel" | "stop" | "on" | "off", why?: "move" | "act" | "damage") {
+    this.clients.getById(id)?.send(Evt.Pvp, { s, why });
+  }
+
+  /** parado de verdade: sem destino pendente e sem deslocamento (avanço/esquiva) em curso */
+  private standingStill(p: Player) {
+    return p.dashLeft <= 0 && Math.hypot(p.tx - p.x, p.ty - p.y) < 0.05;
   }
 
   /** liga/desliga o modo. Já estar no estado pedido não faz nada; pedir o contrário no meio da canalização a cancela. */
@@ -262,19 +279,24 @@ export class ZoneRoom extends Room<ZoneState> {
       return;
     }
     if (p.pvp === on) return;
+    // entrar OU sair só começa parado e sem dano recente (anti "sair do PvP correndo da luta")
+    if (!this.standingStill(p)) return this.notify(id, "Fique parado para canalizar o PvP.");
+    const wait = PVP_NO_DAMAGE_S - (this.t - p.hurtAt);
+    if (wait > 0) return this.notify(id, `Você tomou dano há pouco: aguarde ${Math.ceil(wait)}s sem apanhar para canalizar o PvP.`);
     p.pvpChan = on ? 1 : 2;
     p.pvpChanUntil = this.t + PVP_CHANNEL_S;
     this.pvpEvt(id, "start");
   }
 
-  /** qualquer dano recebido interrompe a canalização na hora */
-  private interruptPvp(id: string, p: Player) {
+  /** dano, movimento ou ação interrompem a canalização na hora (`why` diz o motivo ao jogador) */
+  private interruptPvp(id: string, p: Player, why?: "move" | "act" | "damage") {
     if (p.pvpChan === 0) return;
     p.pvpChan = 0;
-    this.pvpEvt(id, "cancel");
+    this.pvpEvt(id, "cancel", why);
   }
 
   private updatePvp(id: string, p: Player) {
+    if (p.pvpChan !== 0 && !this.standingStill(p)) return this.interruptPvp(id, p, "move");
     if (p.pvpChan === 0 || this.t < p.pvpChanUntil) return;
     p.pvp = p.pvpChan === 1;
     p.pvpChan = 0;
@@ -855,6 +877,7 @@ export class ZoneRoom extends Room<ZoneState> {
     }
     p.buff = this.t < p.buffUntil;
     p.ember = this.t < p.emberUntil;
+    p.reflect = this.t < p.reflectUntil;
     if (p.hp < p.maxHp && this.t - p.combatAt >= PLAYER_REGEN_DELAY_S) { // fora de combate: recupera aos poucos (o servidor decide)
       p.regenAcc += p.maxHp * PLAYER_REGEN_PCT_S * dt;
       const whole = Math.floor(p.regenAcc);
@@ -902,7 +925,7 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private doAction(id: string, p: Player, a: ActionId, ax: number, ay: number) {
-    const def: ActionDef = effectiveAction(this.classOf(p).actions[a], a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
+    const def: ActionDef = effectiveAction(classAction(p.cls as CharClass, a, p.qMode), a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
     if (this.t < (p.cdUntil[a] ?? 0) - 0.05) return; // em recarga (tolerância de rede)
     if (p.dashLeft > 0) return; // não age durante o deslocamento
 
@@ -918,6 +941,7 @@ export class ZoneRoom extends Room<ZoneState> {
       p.mana = Math.floor(p.manaF);
     }
 
+    this.interruptPvp(id, p, "act"); // agir cancela a canalização do PvP
     let dx = ax - p.x, dy = ay - p.y;
     const aimDist = Math.hypot(dx, dy);
     if (aimDist < 0.01) { dx = Math.cos(p.face); dy = Math.sin(p.face); } else { dx /= aimDist; dy /= aimDist; }
@@ -948,14 +972,21 @@ export class ZoneRoom extends Room<ZoneState> {
       case "dashHit": {
         const ex = p.x + dx * (def.dash ?? 0), ey = p.y + dy * (def.dash ?? 0);
         const sx = p.x, sy = p.y;
-        this.hitEnemies(id, dmg, (e) => distToSegment(e.x, e.y, sx, sy, ex, ey) <= (def.radius ?? 1) + enemyKind(e.kind).radius);
+        this.hitEnemies(id, dmg, (e) => {
+          const hit = distToSegment(e.x, e.y, sx, sy, ex, ey) <= (def.radius ?? 1) + enemyKind(e.kind).radius;
+          if (hit && def.stunS) this.stunEnemy(e, def.stunS);
+          return hit;
+        });
         this.hitPlayers(id, dmg, (o) => distToSegment(o.x, o.y, sx, sy, ex, ey) <= (def.radius ?? 1) + PLAYER_RADIUS);
         this.startDash(p, dx, dy, def);
         break;
       }
-      case "tauntBuff": {
+      case "tauntBuff":
+      case "reflectBuff": {
         p.buffUntil = this.t + (def.buffS ?? 0);
+        p.buffRed = def.reduction ?? 0;
         p.buff = true;
+        if (def.kind === "reflectBuff") { p.reflectUntil = p.buffUntil; p.reflectPct = def.reflect ?? 0; p.reflect = true; }
         this.state.enemies.forEach((e) => {
           if (e.st !== "dead" && dist(e.x, e.y, p.x, p.y) <= (def.tauntRadius ?? 0)) {
             e.tauntId = id;
@@ -997,7 +1028,12 @@ export class ZoneRoom extends Room<ZoneState> {
         const delay = def.delayS ?? 0.8;
         this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: delay * 1000, friendly: true, fx: def.fx });
         this.pending.push({ at: this.t + delay, run: () => {
-          this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, pos.x, pos.y) <= r + enemyKind(e.kind).radius);
+          this.hitEnemies(id, dmg, (e) => {
+            const hit = dist(e.x, e.y, pos.x, pos.y) <= r + enemyKind(e.kind).radius;
+            if (hit && def.stunS) this.stunEnemy(e, def.stunS);
+            if (hit && def.rootS) this.rootEnemy(e, def.rootS);
+            return hit;
+          });
           this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, pos.x, pos.y) <= r + PLAYER_RADIUS);
         } });
         break;
@@ -1024,6 +1060,16 @@ export class ZoneRoom extends Room<ZoneState> {
         });
         break;
       }
+      case "healFocus": { // um só alvo: o jogador vivo mais perto da mira (até 2,2 tiles dela) dentro do alcance; sem ninguém ali, cura a si mesmo
+        let target: [string, Player] = [id, p], bestD = Infinity;
+        this.state.players.forEach((o, oid) => {
+          if (o.dead || o.traveling || dist(o.x, o.y, p.x, p.y) > (def.range ?? 9)) return;
+          const d = dist(o.x, o.y, ax, ay);
+          if (d <= 2.2 && d < bestD) { bestD = d; target = [oid, o]; }
+        });
+        this.healPlayer(target[0], target[1], Math.round((def.heal ?? 0) * power), id);
+        break;
+      }
       case "emberBuff": {
         this.state.players.forEach((o) => {
           if (!o.dead && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) {
@@ -1047,11 +1093,26 @@ export class ZoneRoom extends Room<ZoneState> {
     }
   }
 
-  private healPlayer(id: string, p: Player, amount: number) {
+  private healPlayer(id: string, p: Player, amount: number, from?: string) {
     const before = p.hp;
     p.hp = Math.min(p.maxHp, p.hp + amount);
     const healed = p.hp - before;
-    if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y });
+    if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y, from });
+  }
+
+  /** Atordoa o inimigo (não age até acabar; cancela o golpe que preparava). Chefes resistem: a duração cai para BOSS_CC_RESIST. */
+  private stunEnemy(e: Enemy, s: number) {
+    if (e.st === "dead") return;
+    const until = this.t + s * (enemyKind(e.kind).boss ? BOSS_CC_RESIST : 1);
+    if (until <= e.stunUntil) return;
+    e.stunUntil = until;
+    if (e.st === "windup") { e.st = "recover"; e.slam = false; e.recoverEnd = until; }
+  }
+
+  /** Enraíza o inimigo (não anda; se o alvo estiver ao alcance, ainda ataca). Chefes resistem. */
+  private rootEnemy(e: Enemy, s: number) {
+    if (e.st === "dead") return;
+    e.rootUntil = Math.max(e.rootUntil, this.t + s * (enemyKind(e.kind).boss ? BOSS_CC_RESIST : 1));
   }
 
   private startDash(p: Player, dx: number, dy: number, def: ActionDef) {
@@ -1131,9 +1192,9 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   // ------------------------------------------------------------------ dano e recompensas
-  private damageEnemy(by: string, eid: string, e: Enemy, baseDmg: number) {
+  private damageEnemy(by: string, eid: string, e: Enemy, baseDmg: number, refl = false) {
     if (e.st === "dead") return;
-    const crit = Math.random() < this.critChance(by);
+    const crit = !refl && Math.random() < this.critChance(by);
     const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
     const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult : 1)));
     const shown = Math.min(dmg, e.hp);
@@ -1144,7 +1205,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const att = this.state.players.get(by);
     if (att) att.combatAt = this.t;
     if (!e.targetId && e.st !== "evade") e.targetId = by; // quem bate chama a atenção (inimigo voltando para casa ignora)
-    this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by });
+    this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by, refl: refl || undefined });
     if (e.hp > 0) return;
     e.st = "dead";
     e.respawnAt = this.t + enemyKind(e.kind).respawnS;
@@ -1303,6 +1364,10 @@ export class ZoneRoom extends Room<ZoneState> {
       return;
     }
 
+    e.stunned = this.t < e.stunUntil;
+    e.rooted = this.t < e.rootUntil;
+    if (e.stunned) return; // atordoado: congelado (depois segue o estado em que estava)
+
     if (this.t < e.pullUntil) { // puxado para o centro: não age até terminar (depois fica atordoado em "recover")
       const d = dist(e.x, e.y, e.pullX, e.pullY);
       if (d > 0.5) this.moveToward(e, e.pullX, e.pullY, Math.max(d, 0.5) / Math.max(0.05, e.pullUntil - this.t), dt);
@@ -1377,7 +1442,7 @@ export class ZoneRoom extends Room<ZoneState> {
           this.state.players.forEach((p, pid) => {
             if (p.dead || this.t < p.invulnUntil) return; // esquiva (i-frames)
             const rad = e.slam && K.boss ? K.boss.slamRadius : K.strikeRadius;
-            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= rad + PLAYER_RADIUS) this.damagePlayer(pid, p, enemyDmg(e.level, e.kind) * (e.slam && K.boss ? K.boss.slamMul : 1) * mult);
+            if (dist(p.x, p.y, e.strikeX, e.strikeY) <= rad + PLAYER_RADIUS) this.damagePlayer(pid, p, enemyDmg(e.level, e.kind) * (e.slam && K.boss ? K.boss.slamMul : 1) * mult, undefined, false, { id: _id, e });
           });
           e.slam = false;
           e.recoverEnd = this.t + K.recoverS;
@@ -1392,6 +1457,7 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private moveToward(e: Enemy, x: number, y: number, speed: number, dt: number) {
+    if (this.t < e.rootUntil) return; // enraizado
     const dx = x - e.x, dy = y - e.y;
     const d = Math.hypot(dx, dy);
     if (d < 0.01) return;
@@ -1401,12 +1467,14 @@ export class ZoneRoom extends Room<ZoneState> {
     e.face = Math.atan2(dy, dx);
   }
 
-  private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false) {
+  private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false, src?: { id: string; e: Enemy }) {
     p.combatAt = this.t; // em combate: a regeneração de vida recomeça só depois de um tempo
     p.regenAcc = 0;
     if (by) { const a = this.state.players.get(by); if (a) a.combatAt = this.t; }
-    this.interruptPvp(id, p); // qualquer dano (inimigo, projétil, habilidade, área) cancela a canalização do PvP
-    const reduction = Math.min(0.8, (this.t < p.buffUntil ? (CLASS_DEFS.warrior.actions.skill3.reduction ?? 0) : 0) + p.gear.dr / 100);
+    p.hurtAt = this.t;
+    this.interruptPvp(id, p, "damage"); // qualquer dano (inimigo, projétil, habilidade, área) cancela a canalização do PvP
+    const reduction = Math.min(0.8, (this.t < p.buffUntil ? p.buffRed : 0) + p.gear.dr / 100);
+    if (src && this.t < p.reflectUntil && p.reflectPct > 0) this.damageEnemy(id, src.id, src.e, Math.max(1, baseDmg * p.reflectPct), true); // Escudo Refletor: parte do golpe volta ao atacante
     const dmg = Math.max(1, Math.round(baseDmg * (1 - reduction)));
     p.hp = Math.max(0, p.hp - dmg);
     this.broadcast(Evt.Hit, { k: "p", id, dmg, crit, x: p.x, y: p.y, by });

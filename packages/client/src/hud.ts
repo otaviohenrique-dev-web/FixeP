@@ -1,4 +1,4 @@
-import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -16,6 +16,8 @@ export interface HudOptions {
   onPotion?(): void;
   /** botão PvP: `true` pede para entrar, `false` para sair (o servidor canaliza e decide) */
   onPvp?(on: boolean): void;
+  /** Clérigo: pede a troca do Q (0 = cura em área, 1 = cura focada); o servidor só aceita fora de combate */
+  onQMode?(mode: 0 | 1): void;
 }
 export interface Hud {
   trigger(a: ActionId): void;
@@ -36,6 +38,10 @@ export interface Hud {
   potionReady(): boolean;
   /** aviso curto em destaque no alto da tela (ex.: "Canalização interrompida") */
   alert(text: string): void;
+  /** Q ativo do Clérigo (vindo do servidor): troca nome, custo, recarga e ícone do botão */
+  setQMode(mode: 0 | 1): void;
+  /** alterna o Q do Clérigo (tecla Z ou botão ⇄) */
+  toggleQ(): void;
 }
 
 const ICON: Record<string, string> = {
@@ -46,6 +52,13 @@ const ICON: Record<string, string> = {
   swords: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M2 2h3l1 1 1 1 1 1 1 1-1 1-1-1-1-1-1-1-1-1H2zM14 2h-3l-1 1-1 1-1 1-1 1 1 1 1-1 1-1 1-1 1-1h3zM3 12l2-2 1 1-2 2zm10 0l-2-2-1 1 2 2zM7 8l1 1 1-1-1-1z"/><path fill="currentColor" d="M2 13h2v1H2zm10 0h2v1h-2z"/></svg>`,
   potion: `<svg viewBox="0 0 16 16" width="18" height="18" shape-rendering="crispEdges"><path fill="#d8e4f0" d="M6 1h4v1H9v3h1v1h1v1h1v5h-1v2H5v-2H4V7h1V6h1V5h1V2H6z"/><path fill="#d94a4a" d="M5 9h6v4H5z"/><path fill="#ff8f8f" d="M6 10h1v2H6z"/><path fill="#fff" opacity=".5" d="M6 6h1v2H6z"/></svg>`,
   drop: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M7 1h2v2h1v2h1v2h1v4h-1v2h-1v1H6v-1H5v-2H4V7h1V5h1V3h1z"/><path fill="#fff" opacity=".55" d="M6 8h1v3H6z"/></svg>`,
+  // ícones das habilidades
+  charge: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M1 3h3l4 5-4 5H1l4-5zM8 3h3l4 5-4 5H8l4-5z"/></svg>`,
+  chains: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h7v1H2v4h6v1H1zM8 5h7v6H8v-1h6V6H8zM6 7h4v2H6z"/></svg>`,
+  shield: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M2 2h12v7h-1v2h-2v2H9v1H7v-1H5v-2H3V9H2z"/><path fill="#fff" opacity=".5" d="M4 4h3v5H4z"/><path fill="#0b1018" opacity=".5" d="M8 4h1v8H8z"/></svg>`,
+  hammer: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M7 0h2v2H7zM7 2h2v2H7zM3 4h10v2H3zM6 6h4v6H6zM7 12h2v3H7z"/><path fill="#fff" opacity=".55" d="M7 6h1v5H7z"/></svg>`,
+  healAoe: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M7 4h2v3h3v2H9v3H7V9H4V7h3zM1 1h2v1H1zM13 1h2v1h-2zM1 14h2v1H1zM13 14h2v1h-2z"/></svg>`,
+  healFocus: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M7 0h2v3H7zM7 13h2v3H7zM0 7h3v2H0zM13 7h3v2h-3zM7 5h2v2h2v2H9v2H7V9H5V7h2z"/></svg>`,
 };
 
 const TIER_NAMES = ["Bronze", "Prata", "Ouro", "Gelo", "Violeta", "Brasa"];
@@ -98,6 +111,20 @@ const CSS = `
   background:linear-gradient(180deg,#22304a,#0d1522);border:2px solid var(--gold-d);box-shadow:inset 0 0 0 1px rgba(255,225,160,.2),0 2px 6px rgba(0,0,0,.6);
   display:grid;place-items:center;transition:transform .1s,border-color .15s,box-shadow .15s,filter .15s}
 .hd-btn.big{width:64px;height:64px;border-color:var(--gold)}
+.hd-btn.hasic{place-items:end center}
+.hd-btn.hasic .hd-sn{padding-bottom:4px}
+.hd-btn.hasic .hd-cost,.hd.touch .hd-btn.hasic .hd-cost{top:2px;bottom:auto;left:auto;right:3px;text-align:right}
+.hd-ic{position:absolute;left:50%;top:11px;margin-left:-8px;pointer-events:none;color:#ffe3a8;filter:drop-shadow(0 1px 2px #000)}
+.hd-qs{position:absolute;left:2px;top:17px;z-index:3;width:18px;height:14px;display:grid;place-items:center;border-radius:4px;background:rgba(0,0,0,.7);border:1px solid var(--gold-d);color:#ffd9a0;font:700 9px/1 "Cinzel",Georgia,serif;cursor:pointer}
+.hd-qs:hover{border-color:#f0cf86;color:#fff}
+.hd.touch .hd-qs{width:22px;height:18px;left:50%;margin-left:-11px;top:-1px}
+.hd-tip{position:fixed;z-index:60;left:0;top:0;width:min(250px,calc(100vw - 16px));box-sizing:border-box;padding:9px 11px;border-radius:8px;background:linear-gradient(#141b2a,#0b1018);border:1px solid #b89458;box-shadow:0 6px 22px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,225,160,.12);color:#dfe8f2;font:12px/1.35 Georgia,serif;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s}
+.hd-tip.on{opacity:1;visibility:visible}
+.hd-tip-h{display:flex;justify-content:space-between;align-items:center;gap:8px;font:700 14px/1.2 "Cinzel",Georgia,serif;color:#ffd9a0}
+.hd-tip-k{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.6);border:1px solid #6b5636}
+.hd-tip-t{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#e0742a;margin:2px 0 5px}
+.hd-tip p{margin:0 0 5px}.hd-tip ul{margin:0 0 5px;padding:0;list-style:none}.hd-tip li{padding:1px 0;color:#bcd0e4}
+.hd-tip .hd-tip-d{color:#9fd6a8;margin:6px 0 0;font-style:italic}
 .hd-btn:active{transform:scale(.93)}
 .hd-btn:hover{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.3),0 0 14px rgba(255,190,90,.35)}
 .hd-btn:focus-visible{outline:2px solid #ffd9a0;outline-offset:2px}
@@ -191,7 +218,7 @@ export function mountHud(opts: HudOptions): Hud {
         <div class="hd-name"><span class="hd-nm"></span><small>${cdef.name}</small></div>
         <div class="hd-meter hd-tr"><span class="ic" style="color:var(--tc)">${ICON.crown}</span><div class="hd-track"><div class="hd-fill"></div><div class="hd-txt hd-tr-t"></div></div></div>
         <div class="hd-meter hd-rs"><span class="ic" style="color:${resColor}">${ICON[res.icon] ?? ""}</span><div class="hd-track"><div class="hd-fill" style="background:linear-gradient(180deg,${resColor},color-mix(in srgb,${resColor} 45%,#000))"></div><div class="hd-txt hd-rs-t"></div></div></div>
-        <div class="hd-buff">Grito ativo</div>
+        <div class="hd-buff">Escudo ativo</div>
       </div>
     </div>
     <button type="button" class="hd-pvp" aria-label="Modo PvP"><span class="ic"></span><span class="hd-pvp-t">PvP</span></button>
@@ -238,10 +265,64 @@ export function mountHud(opts: HudOptions): Hud {
   });
   const deadSub = dead.querySelector("p")!;
 
-  const defs = cdef.actions;
+  const defs: Record<ActionId, ActionDef> = { ...cdef.actions };
+  let qMode: 0 | 1 = 0;
   const cdUntil: Partial<Record<ActionId, number>> = {};
   const els = new Map<ActionId, { btn: HTMLElement; cd: HTMLElement; n: HTMLElement }>();
   let curRes = Infinity;
+
+  // ---- balão de descrição: mouse = passar e esperar; toque = pressionar e segurar (sem disparar)
+  const TIP_MS = 400;
+  const tipEl = document.createElement("div");
+  tipEl.className = "hd-tip";
+  tipEl.setAttribute("role", "tooltip");
+  document.body.append(tipEl);
+  let tipFor: HTMLElement | null = null;
+  const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+  function tipHtml(d: SkillTooltipData): string {
+    return `<div class="hd-tip-h"><b>${esc(d.name)}</b><span class="hd-tip-k">${esc(d.key)}</span></div><div class="hd-tip-t">${esc(d.type)}</div>` +
+      (d.desc ? `<p>${esc(d.desc)}</p>` : "") + `<ul>${d.stats.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` + (d.tip ? `<p class="hd-tip-d">Dica: ${esc(d.tip)}</p>` : "");
+  }
+  function showTip(el: HTMLElement, html: string) {
+    tipEl.innerHTML = html;
+    tipEl.classList.add("on");
+    tipFor = el;
+    const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight, m = 8;
+    let x = r.left + r.width / 2 - w / 2;
+    x = Math.max(m, Math.min(window.innerWidth - w - m, x));
+    let y = r.top - h - 10; // por cima do botão
+    if (y < m) y = Math.min(window.innerHeight - h - m, r.bottom + 10); // sem espaço: por baixo
+    tipEl.style.left = `${x}px`;
+    tipEl.style.top = `${y}px`;
+  }
+  function hideTip() { tipEl.classList.remove("on"); tipFor = null; }
+  document.addEventListener("pointerdown", (e) => { if (tipFor && !tipFor.contains(e.target as Node)) hideTip(); }, true);
+  window.addEventListener("blur", hideTip);
+  function pressable(el: HTMLElement, act: () => void, html: () => string) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let held = false, touching = false;
+    const clear = () => { clearTimeout(timer); timer = undefined; };
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
+    el.addEventListener("pointerenter", (e) => {
+      if (e.pointerType !== "mouse") return;
+      clear(); timer = setTimeout(() => showTip(el, html()), TIP_MS);
+    });
+    el.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") { clear(); hideTip(); } });
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (e.pointerType === "mouse") { clear(); hideTip(); act(); return; }
+      touching = true; held = false; clear();
+      timer = setTimeout(() => { held = true; showTip(el, html()); navigator.vibrate?.(8); }, TIP_MS);
+    });
+    const end = (fire: boolean) => {
+      if (!touching) return;
+      touching = false; clear();
+      if (held) { hideTip(); held = false; return; } // soltar fecha o balão, sem disparar
+      if (fire) act();
+    };
+    el.addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") end(true); });
+    el.addEventListener("pointercancel", () => end(false));
+  }
 
   // ordem visual: esquiva, skills, ataque (maior) à direita
   const order: ActionId[] = ["dodge", "skill1", "skill2", "skill3", "ultimate", "attack"];
@@ -250,16 +331,39 @@ export function mountHud(opts: HudOptions): Hud {
     const cost = def.cost ?? 0;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = `hd-btn hd-a-${a}` + (a === "attack" ? " big" : "") + (a === "ultimate" ? " ult" : "");
+    b.className = `hd-btn hd-a-${a}` + (a === "attack" ? " big" : "") + (a === "ultimate" ? " ult" : "") + (def.icon ? " hasic" : "");
     b.setAttribute("aria-label", `${def.name} (${def.key})${cost ? `, custa ${cost} de ${res.name}` : ""}`);
-    b.innerHTML = `<span class="hd-key">${def.key}</span><span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
+    b.innerHTML = `<span class="hd-key">${def.key}</span>${def.icon ? `<span class="hd-ic">${ICON[def.icon] ?? ""}</span>` : ""}<span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
     // pointerdown: resposta imediata no toque, sem esperar o "click"
-    b.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      trigger(a);
-    });
+    // toque: dispara ao soltar (um toque longo abre o balão em vez de disparar); mouse: dispara ao apertar
+    pressable(b, () => trigger(a), () => tipHtml(skillTooltip(defs[a], res.name)));
     bar.append(b);
     els.set(a, { btn: b, cd: b.querySelector(".hd-cd")!, n: b.querySelector(".hd-cdn")! });
+  }
+
+  // Clérigo: botão ⇄ no Q para alternar entre Cura em Área e Cura Focada (também a tecla Z); o servidor só troca fora de combate
+  const qBtn = els.get("skill1")!.btn;
+  if (opts.cls === "cleric" && cdef.skill1Alt) {
+    const sw = document.createElement("span");
+    sw.className = "hd-qs";
+    sw.textContent = "⇄";
+    sw.title = "Alternar o Q: Cura em Área / Cura Focada (Z)";
+    sw.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); toggleQ(); });
+    qBtn.append(sw);
+  }
+  function applyQ() {
+    const d = qMode === 1 && cdef.skill1Alt ? cdef.skill1Alt : cdef.actions.skill1;
+    defs.skill1 = d;
+    qBtn.querySelector(".hd-sn")!.textContent = d.name;
+    const ic = qBtn.querySelector(".hd-ic");
+    if (ic && d.icon) ic.innerHTML = ICON[d.icon] ?? "";
+    const c = qBtn.querySelector(".hd-cost");
+    if (c) c.textContent = String(d.cost ?? 0);
+    qBtn.setAttribute("aria-label", `${d.name} (${d.key}), custa ${d.cost ?? 0} de ${res.name}`);
+  }
+  function toggleQ() {
+    if (opts.cls !== "cleric") return;
+    opts.onQMode?.(qMode === 1 ? 0 : 1);
   }
 
   // slot da poção: ao lado da barra de habilidades, com ícone, estoque e contagem de recarga (a tecla F e o toque bebem)
@@ -269,7 +373,10 @@ export function mountHud(opts: HudOptions): Hud {
   pb.className = "hd-btn hd-pot empty";
   pb.setAttribute("aria-label", "Beber poção (F)");
   pb.innerHTML = `<span class="hd-key">F</span>${ICON.potion}<span class="hd-qty">0</span><span class="hd-sn">Poção</span><span class="hd-cd"></span><span class="hd-cdn"></span>`;
-  pb.addEventListener("pointerdown", (e) => { e.preventDefault(); opts.onPotion?.(); });
+  pressable(pb, () => opts.onPotion?.(), () => {
+    const heal = ITEMS.pocao_de_vida?.heal ?? 40;
+    return tipHtml({ name: "Poção de Vida", key: "F", type: "Cura", stats: [`Cura: ${heal} de vida`, `Estoque: ${potCount}`, `Recarga: ${POTION_COOLDOWN_S} s`], desc: "Bebe uma poção do inventário e recupera vida na hora.", tip: "Compartilha a recarga com todas as poções: não desperdice com a vida cheia." });
+  });
   bar.append(pb);
   const potCd = pb.querySelector<HTMLElement>(".hd-cd")!;
   const potN = pb.querySelector<HTMLElement>(".hd-cdn")!;
@@ -382,13 +489,19 @@ export function mountHud(opts: HudOptions): Hud {
       pb.classList.toggle("empty", count <= 0);
     },
     potionReady: () => performance.now() >= potUntil,
+    setQMode(mode) {
+      if (mode === qMode) return;
+      qMode = mode;
+      applyQ();
+    },
+    toggleQ,
     alert(text) {
       alertEl.textContent = text;
       alertEl.classList.add("on");
       clearTimeout(alertTimer);
       alertTimer = setTimeout(() => alertEl.classList.remove("on"), 2600);
     },
-    setBuff(on, label = "Grito ativo") {
+    setBuff(on, label = "Escudo ativo") {
       if (on) buff.textContent = label;
       buff.classList.toggle("on", on);
     },

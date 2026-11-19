@@ -48,6 +48,7 @@ export const Msg = {
   MarketBuy: "market_buy", // { npc, id }: compra uma listagem
   MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
+  QMode: "q_mode", // { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
 } as const;
 
 /** Eventos enviados pelo servidor. */
@@ -109,11 +110,14 @@ export interface PartyEvent { members: PartyMemberInfo[] }
 export interface PartyInviteEvent { kind: "invite" | "join"; from: string; ms: number } // invite: "X convida você"; join: "X pede para entrar no seu grupo"
 export interface PartyChatEvent { name: string; text: string }
 
-/** PvP: canalização (entrar ou sair) em segundos; qualquer dano recebido a cancela. */
+/** PvP: canalização (entrar ou sair) em segundos. Só começa PARADO e sem ter tomado dano nos últimos PVP_NO_DAMAGE_S; mover-se, agir ou tomar dano a cancela. */
 export const PVP_CHANNEL_S = 5;
+export const PVP_NO_DAMAGE_S = 5;
+/** Trocar o Q do Clérigo exige ficar sem causar nem receber dano por este tempo (s). */
+export const QMODE_SWAP_S = 4;
 /** Estado da canalização sincronizado no jogador: 0 nenhuma, 1 entrando, 2 saindo. */
 export type PvpChannel = 0 | 1 | 2;
-export interface PvpEvent { s: "start" | "cancel" | "stop" | "on" | "off" }
+export interface PvpEvent { s: "start" | "cancel" | "stop" | "on" | "off"; why?: "move" | "act" | "damage" }
 
 /** Limites do chat (valem no servidor; o cliente só os repete para avisar cedo). */
 export const CHAT_MAX_LEN = 200;
@@ -136,12 +140,12 @@ export interface ActPayload {
 
 export interface SwingEvent { id: string; a: ActionId; x: number; y: number; dir: number }
 export interface TelegraphEvent { id: string; x: number; y: number; r: number; ms: number; friendly?: boolean; fx?: SkillFx }
-export interface HitEvent { k: "e" | "p"; id: string; dmg: number; crit: boolean; x: number; y: number; by?: string }
+export interface HitEvent { k: "e" | "p"; id: string; dmg: number; crit: boolean; x: number; y: number; by?: string; refl?: boolean } // refl: dano devolvido pelo Escudo Refletor
 export interface DiedEvent { k: "e" | "p"; id: string }
 export interface ChestEvent { x: number; y: number; rarity: Rarity; boss: string }
 export interface XpEvent { amount: number; x: number; y: number }
 export interface LevelUpEvent { id: string; level: number }
-export interface HealEvent { id: string; amount: number; x: number; y: number; revive?: boolean }
+export interface HealEvent { id: string; amount: number; x: number; y: number; revive?: boolean; from?: string } // from: quem curou (a cura focada desenha o raio até o alvo)
 export interface ProjEvent { id: string; x: number; y: number; dir: number; speed: number; range: number; look: "arrow" | "pierce" | "bolt" | "fire" | "arcane"; blast?: number }
 export interface ProjEndEvent { id: string; x: number; y: number; hit: boolean }
 export interface TrapEvent { id: string; s: "set" | "boom" | "gone"; x: number; y: number; r: number }
@@ -181,7 +185,7 @@ export const GROUND_MAX = 120; // limite de itens no chão por zona (os mais ant
 export type CharClass = "warrior" | "archer" | "cleric" | "mage";
 
 /** Visual de skills que "caem do céu" (eixo Z): o servidor só diz qual; o cliente anima (meteoro, raio, chuva de fogo...). */
-export type SkillFx = "meteor" | "lightning" | "firerain" | "holy" | "arrows";
+export type SkillFx = "meteor" | "lightning" | "firerain" | "holy" | "arrows" | "chains" | "colossus";
 
 /** Tipo de efeito de cada ação: o servidor decide o resultado, o cliente escolhe o visual. */
 export type ActionKind =
@@ -189,6 +193,7 @@ export type ActionKind =
   | "ring" // golpe em círculo ao redor
   | "dashHit" // avanço que machuca no caminho
   | "tauntBuff" // reduz dano recebido e provoca inimigos
+  | "reflectBuff" // como tauntBuff, e devolve parte do dano dos inimigos a quem os golpeia
   | "dodge" // deslocamento com invulnerabilidade
   | "projectile" // projétil em linha reta
   | "blast" // projétil que explode ao acertar (ou no fim do alcance), ferindo uma área
@@ -196,6 +201,7 @@ export type ActionKind =
   | "rain" // área atingida depois de um atraso (telegrafada)
   | "pull" // puxa os inimigos de uma área para o centro (controle)
   | "healAoe" // cura aliados em volta
+  | "healFocus" // cura UM aliado (o mais próximo da mira, o selecionado ou o próprio)
   | "emberBuff" // aliados causam mais dano por um tempo
   | "revive"; // levanta um aliado caído
 
@@ -233,6 +239,10 @@ export interface ActionDef {
   heal?: number;
   dmgPct?: number; // bônus de dano da Brasa (%)
   hpPct?: number; // vida com que o aliado volta
+  // controle e reflexão (inimigos; os chefes resistem: BOSS_CC_RESIST)
+  rootS?: number; // enraíza (não anda, mas ainda ataca de perto)
+  reflect?: number; // fração do dano recebido de inimigos que volta a eles (kind "reflectBuff")
+  icon?: string; // ícone da habilidade na HUD
 }
 
 export interface ClassDef {
@@ -243,6 +253,7 @@ export interface ClassDef {
   color: number; // cor provisória do personagem (até a arte chegar)
   resource: ResourceDef;
   actions: Record<ActionId, ActionDef>;
+  skill1Alt?: ActionDef; // Q alternativo escolhido pelo jogador (hoje só o Clérigo)
 }
 
 /** Recurso gasto pelas habilidades: cada classe tem o seu (a Esquiva e o ataque básico quase não gastam). */
@@ -263,10 +274,14 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     resource: { name: "Fúria", icon: "flame", color: 0xe0742a, max: 100, regen: 5, perLevel: 3 },
     actions: {
       attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, dmg: 12, offset: 1.0, radius: 1.25 },
-      skill1: { kind: "ring", name: "Giro", key: "Q", cd: 4, cost: 25, dmg: 20, offset: 0, radius: 2.3 },
-      skill2: { kind: "dashHit", name: "Carga", key: "W", cd: 6, cost: 30, dmg: 16, dash: 4.5, dashTime: 0.25, radius: 1.1 },
-      skill3: { kind: "tauntBuff", name: "Grito", key: "E", cd: 12, cost: 35, buffS: 4, reduction: 0.5, tauntRadius: 6, tauntS: 3 },
-      ultimate: { kind: "ring", name: "Terremoto", key: "R", cd: 40, cost: 80, dmg: 60, offset: 0, radius: 3.8 },
+      // Q: avanço com o escudo à frente; quem estiver no caminho leva dano e fica ATORDOADO
+      skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dmg: 18, dash: 4.5, dashTime: 0.25, radius: 1.2, stunS: 1.5, icon: "charge" },
+      // W: correntes brotam do chão e ENRAIZAM os inimigos da área
+      skill2: { kind: "rain", name: "Correntes", key: "W", cd: 10, cost: 30, dmg: 14, radius: 2.8, placeRange: 6, delayS: 0.45, rootS: 3.5, fx: "chains", icon: "chains" },
+      // E: PROVOCA e ergue o Escudo Refletor: menos dano recebido e parte do que os inimigos causam volta a eles
+      skill3: { kind: "reflectBuff", name: "Escudo Refletor", key: "E", cd: 14, cost: 35, buffS: 5, reduction: 0.5, reflect: 0.75, tauntRadius: 6, tauntS: 3, icon: "shield" },
+      // R: um colosso de aço desaba do céu (telegrafado): dano enorme em área e atordoamento
+      ultimate: { kind: "rain", name: "Queda do Colosso", key: "R", cd: 40, cost: 80, dmg: 120, radius: 4.2, placeRange: 6, delayS: 1.5, stunS: 2.2, fx: "colossus", icon: "hammer" },
       dodge: dodge(3, 1.4),
     },
   },
@@ -274,11 +289,11 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     id: "archer", name: "Arqueiro", role: "Dano à distância", maxHp: 90, color: 0x6fcf6f,
     resource: { name: "Foco", icon: "eye", color: 0x6fcf6f, max: 100, regen: 6, perLevel: 3 },
     actions: {
-      attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 10, speed: 15, range: 9, radius: 0.35 },
-      skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 18, speed: 20, range: 12, radius: 0.5, pierce: true },
-      skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 28, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
-      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 15, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows" },
-      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 40, radius: 3.6, placeRange: 9, delayS: 1.0, fx: "arrows" },
+      attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 9, speed: 15, range: 9, radius: 0.35 },
+      skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 15, speed: 20, range: 12, radius: 0.5, pierce: true },
+      skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 18, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
+      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 10, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows" },
+      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 26, radius: 3.6, placeRange: 9, delayS: 1.0, fx: "arrows" },
       dodge: dodge(5, 1.6), // rolamento longo
     },
   },
@@ -287,26 +302,31 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     resource: { name: "Mana", icon: "drop", color: 0x4aa8ff, max: 120, regen: 6, perLevel: 4 },
     actions: {
       attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, dmg: 8, speed: 12, range: 8, radius: 0.4 },
-      skill1: { kind: "healAoe", name: "Cura", key: "Q", cd: 5, cost: 30, heal: 30, radius: 4 },
+      skill1: { kind: "healAoe", name: "Cura em Área", key: "Q", cd: 5, cost: 26, heal: 16, radius: 4, icon: "healAoe" }, // Q (A): cura todos em volta, mas pouco
       skill2: { kind: "pull", name: "Compressor de Ar", key: "W", cd: 12, cost: 30, radius: 4.5, placeRange: 6, pullS: 0.45, stunS: 1.2 },
       skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, dmg: 26, radius: 3, placeRange: 7, delayS: 0.6, fx: "holy" },
       ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, heal: 80, radius: 6 },
       dodge: dodge(3, 1.4),
     },
+    // Q (B): cura focada em UM jogador (o selecionado, o mais próximo da mira ou o próprio): bem mais forte
+    skill1Alt: { kind: "healFocus", name: "Cura Focada", key: "Q", cd: 4, cost: 30, heal: 65, range: 9, icon: "healFocus" },
   },
   mage: {
     id: "mage", name: "Mago", role: "Dano explosivo", maxHp: 75, color: 0xa070ff,
     resource: { name: "Mana", icon: "drop", color: 0xa070ff, max: 140, regen: 7, perLevel: 5 },
     actions: {
-      attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, dmg: 15, speed: 13, range: 9, radius: 0.4 },
-      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, dmg: 44, speed: 11, range: 10, radius: 0.45, blast: 2.3 },
-      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, dmg: 40, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning" },
-      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, dmg: 62, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain" },
-      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, dmg: 230, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor" },
+      attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, dmg: 13, speed: 13, range: 9, radius: 0.4 },
+      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, dmg: 28, speed: 11, range: 10, radius: 0.45, blast: 2.3 },
+      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, dmg: 26, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning" },
+      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, dmg: 38, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain" },
+      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, dmg: 140, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor" },
       dodge: dodge(4, 1.5), // passo arcano curto: o Mago tem pouco sustain, depende de manter distância
     },
   },
 };
+
+/** Chefes resistem a atordoar e enraizar: a duração cai para esta fração. */
+export const BOSS_CC_RESIST = 0.4;
 
 export const SKELETON = {
   name: "Esqueleto",
@@ -382,7 +402,15 @@ export const NAME_MAX = 16;
 export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number; zone?: number }
 export interface TravelEvent { zone: number }
 
+/** A ação como a classe a tem agora: o Clérigo troca o Q conforme a escolha (0 = cura em área, 1 = cura focada). */
+export function classAction(cls: CharClass, a: ActionId, qMode = 0): ActionDef {
+  const d = CLASS_DEFS[cls] ?? CLASS_DEFS.warrior;
+  return a === "skill1" && qMode === 1 && d.skill1Alt ? d.skill1Alt : d.actions[a];
+}
+
 export * from "./items";
+export * from "./balance";
 export * from "./economy";
 export * from "./market";
 export * from "./zones";
+export * from "./skilltips";

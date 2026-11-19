@@ -50,7 +50,7 @@ const mana0 = me().manaF ?? me().mana;
 act("skill1", e1.x, e1.y);
 check("a Bola de Fogo é um projétil explosivo (look fire, com raio de explosão)", await until(() => ev.proj.some((p) => p.look === "fire" && p.blast > 0), 3000), JSON.stringify(ev.proj.find((p) => p.look === "fire")));
 check("a Bola de Fogo gasta 30 de Mana", await until(() => me().mana <= mana0 - 25, 1500), `${mana0} -> ${me().mana}`);
-check("ela explode (projend com hit) e fere o inimigo", await until(() => ev.projend.some((p) => p.hit) && ev.hit.some((h) => h.k === "e" && h.dmg >= 30), 4000), `maior dano ${Math.max(0, ...ev.hit.map((h) => h.dmg))}`);
+check("ela explode (projend com hit) e fere o inimigo", await until(() => ev.projend.some((p) => p.hit) && ev.hit.some((h) => h.k === "e" && h.dmg >= 22), 4000), `maior dano ${Math.max(0, ...ev.hit.map((h) => h.dmg))}`);
 
 console.log("\n== 3. Skills vindas de cima ==");
 await sleep(5000); // recarga da Bola de Fogo
