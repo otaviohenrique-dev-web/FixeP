@@ -210,6 +210,26 @@ console.log("\n== Busca, filtros, ordenação e páginas ==");
   check("uma página além do fim volta para a última", (await browse({ kind: "potion", page: 99 })).page === p0.pages - 1);
 }
 
+console.log("\n== Óbolos de Sangue: qualquer item pode ser vendido na moeda rara ==");
+{
+  const so = await mk(10, [["warrior_armor_epic", 1]]);
+  so.inv.obols = 5;
+  const buyerO = await mk(1000); buyerO.inv.obols = 50;
+  const poorO = await mk(1000);
+  check("moeda inválida é recusada", !(await market.list(so, 0, 1, 10, "ouro" as any)).ok);
+  check("preço em óbolos tem limite próprio (máx. 99.999)", !(await market.list(so, 0, 1, 100_000, "obols")).ok && !(await market.list(so, 0, 1, 0, "obols")).ok);
+  check("a taxa em óbolos é cobrada em óbolos (mínimo 1) e não mexe nos tostões", (await market.list(so, 0, 1, 20, "obols")).ok && so.inv.obols === 5 - listingFee(20) && so.inv.iron === 10 && count(so.inv, "warrior_armor_epic") === 0, `${so.inv.obols}`);
+  const f = await browse({ currency: "obols" }), g = await browse({ currency: "iron", kind: "armor", rarity: "epic" });
+  check("o filtro de moeda separa as listagens", f.items.some((i) => i.itemId === "warrior_armor_epic" && i.currency === "obols") && g.items.every((i) => i.currency === "iron"));
+  const id = f.items.find((i) => i.itemId === "warrior_armor_epic")!.id;
+  check("sem óbolos suficientes não compra (tostões não valem)", !(await market.buy(poorO, id)).ok && poorO.inv.iron === 1000);
+  check("comprar cobra óbolos, não tostões", (await market.buy(buyerO, id)).ok && buyerO.inv.obols === 30 && buyerO.inv.iron === 1000 && count(buyerO.inv, "warrior_armor_epic") === 1);
+  const ob0 = so.inv.obols;
+  check("o vendedor recolhe os óbolos inteiros", (await market.claim(so, id)).ok && so.inv.obols === ob0 + 20 && so.inv.iron === 10);
+  const rl = await repo.loadInventory(so.charId);
+  check("os óbolos recolhidos foram gravados", rl.obols === so.inv.obols);
+}
+
 console.log("\n== Limpeza ==");
 {
   const s8 = await mk(100, [["warrior_armor_common", 1]]);
