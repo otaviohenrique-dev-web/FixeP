@@ -1,13 +1,13 @@
 import { Room, Client, ServerError } from "colyseus";
 import {
   Msg, Evt, MoveToPayload, ActPayload, ActionId, ACTION_IDS, ActionDef,
-  TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, TRADE_CHAT_MAX_LEN, ZONES, ZONE_IDS, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
+  TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, TRADE_CHAT_MAX_LEN, ZONES, ZONE_IDS, WORLD_GATE, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   PLAYER_RADIUS, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, BOSS_CC_RESIST, classAction, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
   LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
-  ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
+  ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
   START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
@@ -110,6 +110,13 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
       if (!pl || pl.dead || pl.traveling || typeof p?.to !== "number") return;
+      if (this.zone.safe) { // cidade: o pedido vem do mapa-mundo do portão; vale qualquer zona de combate, mas só junto do portão
+        const gate = this.zone.portals.find((q) => q.to === WORLD_GATE);
+        const dest = ZONES[p.to as number];
+        if (!gate || !dest || dest.safe) return;
+        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5) return this.notify(client.sessionId, "Você está longe demais do portão.");
+        return void this.travel(client.sessionId, pl, { to: dest.id });
+      }
       const portal = this.zone.portals.find((q) => q.to === p.to);
       if (!portal || dist(pl.x, pl.y, portal.x, portal.y) > portal.r + 0.5) return this.notify(client.sessionId, "Você está longe demais do portal.");
       void this.travel(client.sessionId, pl, portal);
@@ -311,6 +318,7 @@ export class ZoneRoom extends Room<ZoneState> {
       console.error("[zona] falha ao gravar a travessia:", (e as Error).message);
       p.traveling = false; // não atravessa sem gravar: tenta de novo quando pisar no portal outra vez
       p.invulnUntil = 0;
+      if (fromDeath) p.deadUntil = this.t + 2; // morto: tenta de novo em 2 s
       return this.notify(id, "A passagem falhou. Tente de novo.");
     }
     arrivals.set(p.charId, fromDeath ? 0 : this.zone.id); // 0 = sem portal de origem: nasce no ponto de nascimento da cidade
@@ -903,7 +911,10 @@ export class ZoneRoom extends Room<ZoneState> {
       this.updatePvp(id, p);
       if (!p.dead && !p.traveling) { // pisou num portal: atravessa (sem apertar nada)
         const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= q.r);
-        if (portal) void this.travel(id, p, portal);
+        if (portal && portal.to === WORLD_GATE) { // portão da cidade: abre o mapa-mundo uma vez por entrada no raio
+          if (!p.atGate) { p.atGate = true; this.clients.getById(id)?.send(Evt.WorldMap, {}); }
+        } else if (portal) void this.travel(id, p, portal);
+        else p.atGate = false;
       }
     });
     this.updateProjectiles(dt);
@@ -922,17 +933,21 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private updatePlayer(id: string, p: Player, dt: number) {
     if (p.dead) {
-      if (this.t >= p.deadUntil) {
-        p.dead = false;
-        p.hp = p.maxHp;
-        p.manaF = p.maxMana;
-        p.mana = p.maxMana;
-        p.x = p.tx = this.zone.spawn.x;
-        p.y = p.ty = this.zone.spawn.y;
-        p.combatAt = -1e9;
-        p.invulnUntil = this.t + 2; // um respiro ao renascer (evita ser abatido de novo no ponto de início)
-        if (!this.zone.safe && !(process.env.TEST_START_ZONE && process.env.NODE_ENV !== "production")) void this.travel(id, p, { to: HUB_ZONE }, true); // (nos testes antigos, com TEST_START_ZONE, quem cai renasce no lugar) // morreu numa zona de combate: renasce na cidade
+      if (p.traveling || this.t < p.deadUntil) return;
+      if (!this.zone.safe && !(process.env.TEST_START_ZONE && process.env.NODE_ENV !== "production")) {
+        // morreu numa zona de combate: vai direto à cidade (o checkpoint). O corpo fica onde caiu (não volta ao ponto de nascimento da zona);
+        // a tela de load cobre a viagem e quem chega na cidade já nasce inteiro no ponto de nascimento dela.
+        void this.travel(id, p, { to: HUB_ZONE }, true);
+        return;
       }
+      p.dead = false; // cidade (ou testes antigos): renasce aqui mesmo, no ponto de nascimento
+      p.hp = p.maxHp;
+      p.manaF = p.maxMana;
+      p.mana = p.maxMana;
+      p.x = p.tx = this.zone.spawn.x;
+      p.y = p.ty = this.zone.spawn.y;
+      p.combatAt = -1e9;
+      p.invulnUntil = this.t + 2; // um respiro ao renascer
       return;
     }
     p.buff = this.t < p.buffUntil;
@@ -1376,6 +1391,16 @@ export class ZoneRoom extends Room<ZoneState> {
     if (e.hp >= e.maxHp) { e.contrib.clear(); e.fightStart = 0; }
   }
 
+  /** Chefe em luta sem nenhum alvo vivo por BOSS_RESET_GRACE_S: volta à vida cheia e esquece a luta. Devolve true quando resetou. */
+  private bossResetCheck(e: Enemy, hasTarget: boolean): boolean {
+    if (hasTarget) { e.noTargetSince = -1; return false; }
+    if (e.noTargetSince < 0) { e.noTargetSince = this.t; return false; }
+    if (this.t - e.noTargetSince < BOSS_RESET_GRACE_S) return false;
+    e.hp = e.maxHp; e.contrib.clear(); e.fightStart = 0; e.noTargetSince = -1; e.nextSlam = this.t + 6; e.slam = false;
+    if (e.st !== "idle" && e.st !== "evade") this.startEvade(e);
+    return true;
+  }
+
   /** "Evade": o inimigo desiste da luta e volta para casa SEM voltar a perseguir ninguém (nem provocação) até chegar. Dano recebido continua contando. */
   private startEvade(e: Enemy) {
     e.st = "evade";
@@ -1437,6 +1462,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const K = enemyKind(e.kind);
 
     if (e.st === "evade") { // voltando para casa: sem alvo, sem provocação; só regenera se ninguém o feriu há alguns segundos
+      if (K.boss && e.fightStart && this.bossResetCheck(e, !!this.nearestPlayer(e, K.aggro, this.leashOf(K)))) return; // evadindo e ninguém por perto: reseta
       this.moveToward(e, e.sx, e.sy, K.speed * 1.4, dt);
       this.regenEnemy(e, !!K.boss, dt);
       if (dist(e.x, e.y, e.sx, e.sy) < 0.2) { e.x = e.sx; e.y = e.sy; e.st = "idle"; }
@@ -1453,6 +1479,7 @@ export class ZoneRoom extends Room<ZoneState> {
       else target = this.nearestPlayer(e, K.aggro, this.leashOf(K));
     }
     e.targetId = target ? target[0] : "";
+    if (K.boss && e.fightStart && this.bossResetCheck(e, !!target)) return;
 
     const away = dist(e.x, e.y, e.sx, e.sy) > this.leashOf(K);
     // histerese: passou da coleira OU perdeu o alvo no meio da luta -> evade (volta inteiro para casa antes de agir de novo)

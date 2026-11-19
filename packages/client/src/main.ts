@@ -1,3 +1,4 @@
+import { mountWorldMap, type WorldMap } from "./worldmap";
 import { viewSize } from "./viewport";
 import { registerPwa } from "./pwa";
 registerPwa();
@@ -5,7 +6,7 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
+  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, WORLD_GATE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type VaultSnapshot,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
@@ -109,6 +110,7 @@ class WorldScene extends Phaser.Scene {
   private ground!: GroundLayer;
   private npcs!: NpcLayer;
   private town: TownLayer | null = null;
+  private worldMap!: WorldMap;
   private vault!: VaultUi;
   private pendingVault = false; // clicou no baú longe: abre quando chegar perto
   private econ!: EconomyUi;
@@ -257,6 +259,7 @@ class WorldScene extends Phaser.Scene {
     this.sprites.clear(); this.labels.clear(); this.levelTags.clear(); this.bubbles.clear(); this.prevSt.clear(); this.pvpTag.clear();
     this.projs.clear(); this.traps.clear(); this.floatFree.clear(); this.floatUsed = 0;
     this.town = null;
+    this.worldMap?.close();
     this.portalDefs = [];
     this.hitstopUntil = 0;
     this.deadUntil = 0;
@@ -280,6 +283,7 @@ class WorldScene extends Phaser.Scene {
     });
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
+    this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.room.send(Msg.Travel, { to }); });
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
       send: (text) => {
@@ -404,6 +408,7 @@ class WorldScene extends Phaser.Scene {
     st.items.onRemove((_: any, id: string) => this.ground.remove(id));
     if (this.cls === "cleric" && this.savedQMode() === 1) room.send(Msg.QMode, { mode: 1 }); // lembra a escolha entre sessões
     // travessia aprovada pelo servidor: sai desta sala e entra na da nova zona, sem recarregar a página
+    room.onMessage(Evt.WorldMap, () => { if (!this.busy && !this.entering) this.worldMap.open(); });
     room.onMessage(Evt.Travel, (m: TravelEvent) => this.travelTo(m.zone, room));
     room.onLeave((code) => {
       if (this.leaving || room !== this.room) return;
@@ -490,6 +495,8 @@ class WorldScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(th.bg);
     if (zone.theme === "town") this.town = drawTown(this, zone, toScreen, TILE_W, TILE_H); // a cidade tem arte própria (praça, casas, luzes)
     else this.drawGround(zone, th);
+    this.portalG = undefined as unknown as Phaser.GameObjects.Graphics;
+    if (zone.theme === "town") return; // o portão da cidade é cenário próprio (town.ts) e abre o mapa-mundo
     this.portalG = this.add.graphics().setDepth(0.5);
     this.portalDefs = zone.portals.map((p) => ({ x: p.x, y: p.y, r: p.r, color: THEMES[ZONES[p.to].theme].portal }));
     zone.portals.forEach((p) => {
@@ -570,6 +577,7 @@ class WorldScene extends Phaser.Scene {
     const me = this.me();
     if (this.busy || this.entering || !me || me.dead) return;
     for (const p of ZONES[this.zoneId]?.portals ?? []) {
+      if (p.to === WORLD_GATE) continue; // o portão abre o mapa-mundo (servidor avisa)
       if (Math.hypot(me.x - p.x, me.y - p.y) > p.r) continue;
       this.beginTravel(p.to);
       this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, 6000); // o servidor não confirmou: libera
@@ -1420,7 +1428,7 @@ class WorldScene extends Phaser.Scene {
       this.updateBubbles(time);
       if (me.dead) {
         if (!this.deadUntil) this.deadUntil = time + RESPAWN_S * 1000;
-        this.hud.setDead((this.deadUntil - time) / 1000);
+        this.hud.setDead((this.deadUntil - time) / 1000, ZONES[this.zoneId]?.safe ? undefined : "Brasalume");
       } else {
         this.deadUntil = 0;
         this.hud.setDead(null);
