@@ -33,6 +33,7 @@ import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
 import { mountParty, type PartyUi } from "./party";
+import { checkGpu } from "./gpucheck";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
 
@@ -1449,6 +1450,7 @@ class WorldScene extends Phaser.Scene {
 }
 
 // Primeiro o login; o Phaser só inicia depois que há um token válido.
+checkGpu(); // avisa se o navegador está desenhando por software (sem a placa de vídeo)
 const token = await ensureLogin();
 const character = await ensureCharacter(token); // sem personagem, mostra a criação antes de entrar no jogo
 const loader = mountLoading();
