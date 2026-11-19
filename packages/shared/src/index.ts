@@ -42,6 +42,12 @@ export const Msg = {
   TradeOffer: "trade_offer", // { items: [{ slot, qty }], iron, obols, seq }: define a minha oferta (reinicia as confirmações dos dois lados); seq = contador do cliente, devolvido em mine.seq
   TradeReady: "trade_ready", // { ready: boolean, rev }: aceita a versão `rev` da oferta (ou retira o aceite); executa quando os dois aceitaram a MESMA versão
   TradeCancel: "trade_cancel", // {}: cancela a troca
+  MarketBrowse: "market_browse", // { npc, filter }: pede uma página de listagens (Evt.MarketPage)
+  MarketMy: "market_my", // { npc }: pede as minhas listagens e vendas a recolher (Evt.MarketMine)
+  MarketList: "market_list", // { npc, slot, qty, price }: põe um item da mochila à venda (cobra a taxa de listagem)
+  MarketBuy: "market_buy", // { npc, id }: compra uma listagem
+  MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
+  MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
 } as const;
 
 /** Eventos enviados pelo servidor. */
@@ -72,6 +78,9 @@ export const Evt = {
   Trade: "trade", // TradeEvent: estado da janela de troca (aberta, ofertas, confirmações) ou fechamento
   TradeInvite: "trade_invite", // { from }: convite de troca recebido (expira em TRADE_INVITE_S)
   TradeInviteEnd: "trade_invite_end", // {}: o convite acabou
+  MarketPage: "market_page", // MarketPage: resposta a MarketBrowse
+  MarketMine: "market_mine", // MarketMineEvent: minhas listagens e vendas
+  MarketDone: "market_done", // MarketDoneEvent: resultado de listar, comprar, cancelar ou recolher
 } as const;
 
 // ------------------------------------------------------------ troca entre jogadores
@@ -375,4 +384,5 @@ export interface TravelEvent { zone: number }
 
 export * from "./items";
 export * from "./economy";
+export * from "./market";
 export * from "./zones";

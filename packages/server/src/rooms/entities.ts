@@ -42,6 +42,7 @@ export class Player extends Schema {
   invulnUntil = 0;
   buffUntil = 0;
   deadUntil = 0;
+  marketBusy = false; // uma operação do mercado está gravando: a mochila não muda por outros caminhos até acabar
   trading = false; // numa troca: a mochila fica travada (nada se move) até fechar a janela
   dropAt = 0; // último item solto no chão (limite de frequência)
   traveling = false; // travessia aprovada: o jogador não age nem é alvo até sair da sala

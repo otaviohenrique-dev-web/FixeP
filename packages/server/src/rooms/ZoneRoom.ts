@@ -8,11 +8,12 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  TRADE_INVITE_S, TRADE_RANGE, type NpcKind, type TradeEvent, type TradeOfferSide,
+  TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
+import { Market } from "../game/market.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, sortInventory, type Inventory } from "../game/inventory.js";
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
@@ -54,11 +55,14 @@ export class ZoneRoom extends Room<ZoneState> {
   private userIds = new Map<string, string>(); // sessionId -> accountId
   private t = 0; // relógio da simulação (s)
   private repo!: Repo;
+  private market!: Market;
   private saver?: ReturnType<typeof setInterval>;
   private zone!: ZoneDef;
 
   onCreate(options: { repo: Repo }) {
     this.repo = options.repo;
+    const ttl = Number(process.env.MARKET_TTL_S); // só para testes (fora de produção): listagens que vencem em segundos
+    this.market = new Market(options.repo.db, options.repo, Date.now, process.env.NODE_ENV !== "production" && ttl > 0 ? ttl * 1000 : undefined);
     // a zona vem do NOME da sala (definido no servidor), nunca de opções que o cliente mande
     const zid = ZONE_IDS.find((id) => zoneRoomName(id) === this.roomName) ?? 1;
     this.zone = ZONES[zid];
@@ -158,6 +162,13 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.TradeOffer, (client, p: unknown) => this.tradeOffer(client, p));
     this.onMessage(Msg.TradeReady, (client, p: { ready?: unknown; rev?: unknown }) => this.tradeReady(client, p?.ready === true, p?.rev));
     this.onMessage(Msg.TradeCancel, (client) => { const tr = this.trades.get(client.sessionId); if (tr && this.allow(client)) this.closeTrade(tr, "Troca cancelada."); });
+    // mercado dos jogadores (leiloeiro)
+    this.onMessage(Msg.MarketBrowse, (client, p: { npc?: unknown; filter?: unknown }) => this.marketRead(client, p?.npc, async (pl) => client.send(Evt.MarketPage, await this.market.browse(p?.filter, pl.charId))));
+    this.onMessage(Msg.MarketMy, (client, p: { npc?: unknown }) => this.marketRead(client, p?.npc, (pl) => this.sendMarketMine(client.sessionId, pl)));
+    this.onMessage(Msg.MarketList, (client, p: { npc?: unknown; slot?: unknown; qty?: unknown; price?: unknown }) => this.marketOp(client, p?.npc, "list", (pl) => this.market.list(pl, p?.slot, p?.qty, p?.price)));
+    this.onMessage(Msg.MarketBuy, (client, p: { npc?: unknown; id?: unknown }) => this.marketOp(client, p?.npc, "buy", (pl) => this.market.buy(pl, p?.id)));
+    this.onMessage(Msg.MarketCancel, (client, p: { npc?: unknown; id?: unknown }) => this.marketOp(client, p?.npc, "cancel", (pl) => this.market.cancel(pl, p?.id)));
+    this.onMessage(Msg.MarketClaim, (client, p: { npc?: unknown; id?: unknown }) => this.marketOp(client, p?.npc, "claim", (pl) => (p?.id === "all" ? this.market.claimAll(pl) : this.market.claim(pl, p?.id))));
     // ping: devolve o mesmo carimbo de tempo para o cliente medir a ida e volta. Só ecoa números (nada é interpretado).
     this.onMessage(Msg.Ping, (client, p: { t?: unknown }) => {
       if (!this.allow(client)) return;
@@ -344,12 +355,56 @@ export class ZoneRoom extends Room<ZoneState> {
     return n && dist(p.x, p.y, n.x, n.y) <= NPC_REACH ? n : null;
   }
 
+  // ------------------------------------------------------------------ mercado
+  private marketActor(p: Player) { return { charId: p.charId, name: p.name, inv: p.inv }; }
+
+  /** consultas do mercado: só pedem proximidade do leiloeiro e limite de taxa (não mudam nada) */
+  private marketRead(client: Client, npcId: unknown, fn: (p: Player) => unknown) {
+    if (!this.allow(client)) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || p.traveling || !p.charId) return;
+    if (!this.npcNear(p, npcId, "auctioneer")) return this.notify(client.sessionId, "Chegue mais perto do leiloeiro.");
+    Promise.resolve(fn(p)).catch((e) => console.error("[mercado] consulta falhou:", (e as Error).message));
+  }
+
+  private async sendMarketMine(sid: string, p: Player) {
+    const listings = await this.market.mine(p.charId);
+    this.clients.getById(sid)?.send(Evt.MarketMine, { listings, open: listings.length, max: MARKET_MAX_OPEN } satisfies MarketMineEvent);
+  }
+
+  /**
+   * Operação do mercado que mexe na mochila: roda na FILA DE SALVAMENTO do jogador (nada grava por cima) e com a mochila travada
+   * para os outros caminhos enquanto o banco decide. O resultado volta por Evt.MarketDone, mais a mochila e as minhas listagens.
+   */
+  private marketOp(client: Client, npcId: unknown, kind: MarketDoneEvent["kind"], op: (a: { charId: string; name: string; inv: Player["inv"] }) => Promise<{ ok: true; msg: string } | { ok: false; error: string }>) {
+    if (!this.allow(client)) return;
+    const sid = client.sessionId;
+    const p = this.state.players.get(sid);
+    if (!p || p.dead || p.traveling || !p.charId) return;
+    if (p.trading) return this.notify(sid, "Termine ou cancele a troca primeiro.");
+    if (p.marketBusy) return this.notify(sid, "Aguarde a operação anterior do mercado.");
+    if (!this.npcNear(p, npcId, "auctioneer")) return this.notify(sid, "Chegue mais perto do leiloeiro.");
+    p.marketBusy = true;
+    const res = p.saveChain.then(async () => {
+      if (!this.state.players.has(sid)) return; // saiu no meio: a operação não começa (nada mudou)
+      const r = await op(this.marketActor(p));
+      p.invDirty = true;
+      this.refreshStats(p);
+      this.sendInv(sid, p);
+      const c = this.clients.getById(sid);
+      c?.send(Evt.MarketDone, { ok: r.ok, text: r.ok ? r.msg : r.error, kind } satisfies MarketDoneEvent);
+      await this.sendMarketMine(sid, p);
+    }).catch((e) => console.error("[mercado] operação falhou:", (e as Error).message)).finally(() => { p.marketBusy = false; });
+    p.saveChain = res;
+  }
+
   /** Operação de economia: valida taxa, vida, viagem, troca em andamento e (se houver NPC) a distância; depois grava e devolve a fotografia. */
   private econOp(client: Client, npcId: unknown, kind: NpcKind | null, op: (p: Player) => { ok: true; msg: string } | { ok: false; error: string }) {
     if (!this.allow(client)) return;
     const p = this.state.players.get(client.sessionId);
     if (!p || p.dead || p.traveling) return;
     if (p.trading) return this.notify(client.sessionId, "Termine ou cancele a troca primeiro.");
+    if (p.marketBusy) return this.notify(client.sessionId, "Aguarde a operação do mercado.");
     if (kind && !this.npcNear(p, npcId, kind)) return this.notify(client.sessionId, "Chegue mais perto do NPC.");
     const r = op(p);
     if (!r.ok) return this.notify(client.sessionId, r.error);
@@ -404,6 +459,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (!this.allow(client)) return;
     const me = this.state.players.get(client.sessionId);
     if (!me || me.dead || me.traveling || typeof rawName !== "string") return;
+    if (me.marketBusy) return this.notify(client.sessionId, "Aguarde a operação do mercado.");
     if (this.trades.has(client.sessionId)) return this.notify(client.sessionId, "Você já está numa troca.");
     const want = rawName.normalize("NFC").trim().toLowerCase();
     let tid = "", target: Player | undefined;
@@ -423,7 +479,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.tradeInvites.delete(client.sessionId);
     client.send(Evt.TradeInviteEnd, {});
     const a = this.state.players.get(inv.from), b = this.state.players.get(client.sessionId);
-    if (!a || !b || a.dead || b.dead || a.traveling || b.traveling || this.trades.has(inv.from) || this.trades.has(client.sessionId)) return this.notify(client.sessionId, "A troca não está mais disponível.");
+    if (!a || !b || a.dead || b.dead || a.traveling || b.traveling || a.marketBusy || b.marketBusy || this.trades.has(inv.from) || this.trades.has(client.sessionId)) return this.notify(client.sessionId, "A troca não está mais disponível.");
     if (dist(a.x, a.y, b.x, b.y) > TRADE_RANGE) return this.notify(client.sessionId, "Longe demais para trocar.");
     const tr: Trade = { a: inv.from, b: client.sessionId, offer: { [inv.from]: emptyOffer(), [client.sessionId]: emptyOffer() }, ready: {}, rev: 1, seq: {} };
     this.trades.set(tr.a, tr);
@@ -513,7 +569,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (!this.allow(client)) return;
     const p = this.state.players.get(client.sessionId);
     if (!p || p.dead) return;
-    if (p.trading) return this.notify(client.sessionId, "Termine ou cancele a troca primeiro.");
+    if (p.trading || p.marketBusy) return this.notify(client.sessionId, p.trading ? "Termine ou cancele a troca primeiro." : "Aguarde a operação do mercado.");
     const r = op(p);
     if (!r.ok) return this.notify(client.sessionId, r.error);
     p.invDirty = true;

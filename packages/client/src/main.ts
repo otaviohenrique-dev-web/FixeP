@@ -4,7 +4,7 @@ import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef,
+  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -220,6 +220,9 @@ class WorldScene extends Phaser.Scene {
       sfx.pickup();
     });
     this.room.onMessage(Evt.Trade, (m: TradeEvent) => this.econ.setTrade(m));
+    this.room.onMessage(Evt.MarketPage, (m: MarketPage) => this.econ.setMarketPage(m));
+    this.room.onMessage(Evt.MarketMine, (m: MarketMineEvent) => this.econ.setMarketMine(m));
+    this.room.onMessage(Evt.MarketDone, (m: MarketDoneEvent) => this.econ.setMarketDone(m));
     this.room.onMessage(Evt.TradeInvite, (m: { from: string }) => this.econ.showTradeInvite(String(m.from)));
     this.room.onMessage(Evt.TradeInviteEnd, () => this.econ.endTradeInvite());
     this.room.onMessage(Evt.Inv, (s: InventorySnapshot) => {
