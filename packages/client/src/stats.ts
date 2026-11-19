@@ -19,6 +19,7 @@ const CSS = `
   background:rgba(6,12,20,.72);border:1px solid rgba(160,200,240,.22)}
 .st b{font-weight:700}
 .st.off{display:none}
+.st .sp{display:none;font-style:normal}
 `;
 const color = (v: number, good: number, ok: number, invert = false) => {
   const bad = invert ? v < ok : v > ok;
@@ -49,7 +50,7 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
     if (!on) return;
     const f = `<b style="color:${color(fps, 40, 25, true)}">${fps}</b> FPS`;
     const p = ping < 0 ? "<b>--</b> ms" : `<b style="color:${color(ping, 90, 180)}">${Math.round(ping)}</b> ms`;
-    el.innerHTML = `${f}<br>${p} ping`;
+    el.innerHTML = `${f}<i class="sp"> · </i><br>${p} ping`;
   };
 
   // FPS: média de 1 segundo
