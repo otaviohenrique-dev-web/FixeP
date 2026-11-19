@@ -68,7 +68,7 @@ console.log("\n== Chefe: reset sem ninguém lutando ==");
   };
   const go = async (P, via) => { for (const [x, y] of via) { P.r.send("move_to", { x, y }); await until(() => Math.hypot(P.me().x - x, P.me().y - y) < 0.8 || P.me().dead, 12_000); } };
   const obs = await toZone1(await account("Ob")); // observador: fica longe do chefe e dos esqueletos
-  await go(obs, [[10, 19], [18, 18], [20, 12]]);
+  await go(obs, [[10, 19], [16, 18.5]]);
   const fighter = await toZone1(await account("Ft", "archer")); // de longe: o chefe mata um guerreiro nível 1 de uma pancada antes de ser ferido
   await go(fighter, [[10, 19], [18, 18], [24.5, 8.5]]); // contorna esqueletos e o portal de volta; para a ~8,5 tiles do chefe (33, 7), dentro do alcance da flecha (9)
   let wounded = false;

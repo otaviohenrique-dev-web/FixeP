@@ -10,6 +10,11 @@ export type ZoneTheme = "ash" | "frost" | "crypt" | "town";
 /** Destino especial de um portal: o PORTÃO da cidade. Pisar nele abre o mapa-mundo (o jogador escolhe a zona de combate); não leva a uma zona fixa. */
 export const WORLD_GATE = 0;
 export interface PortalDef { x: number; y: number; r: number; to: number }
+/** Ponto de caça (estilo MU): `count` inimigos espalhados num círculo de raio `spread` em volta de (x, y). Sem `count` é um inimigo só, exatamente em (x, y).
+ *  `levelMax` faz o nível subir ao longo do grupo, de `level` até `levelMax`. A ordem da lista define os ids (e1, e2...): pontos novos vão sempre no FIM. */
+export interface EnemySpawn { kind: EnemyKind; x: number; y: number; level: number; count?: number; spread?: number; levelMax?: number }
+/** Um inimigo já posicionado (resultado de `expandSpawns`). */
+export interface EnemyPlacement { kind: EnemyKind; x: number; y: number; level: number }
 export interface ZoneDef {
   id: number;
   name: string;
@@ -19,7 +24,7 @@ export interface ZoneDef {
   spawn: { x: number; y: number }; // ponto de nascimento padrão (entrada, reconexão e renascimento)
   arrive: Record<number, { x: number; y: number }>; // onde se chega vindo de cada zona (fora do raio dos portais)
   portals: readonly PortalDef[]; // basta pisar neles: o servidor decide a travessia
-  enemies: readonly { kind: EnemyKind; x: number; y: number; level: number }[];
+  enemies: readonly EnemySpawn[]; // pontos de caça; use `expandSpawns(zone)` para a lista final de inimigos
   lootMult: number; // dificuldade relativa da zona (informativo; os números reais ficam em `drops` e `boss`)
   drops: ZoneDrops; // o que os inimigos comuns soltam
   boss?: ZoneBoss; // o chefe da zona (um por zona) e o baú que ele solta; a cidade não tem
@@ -54,6 +59,10 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "skeleton", x: 26, y: 30, level: 1 },
       { kind: "skeleton", x: 10, y: 26, level: 2 },
       { kind: "skeleton", x: 11, y: 12, level: 3 },
+      // pontos de caça (grupos): quanto mais fundo no mapa, mais nível. Todos a mais de 10 tiles dos pontos de chegada e longe dos portais.
+      { kind: "skeleton", x: 5, y: 4, level: 2, levelMax: 3, count: 5, spread: 2.5 },
+      { kind: "skeleton", x: 10, y: 38, level: 3, levelMax: 4, count: 5, spread: 3 },
+      { kind: "skeleton", x: 22, y: 6, level: 4, levelMax: 5, count: 6, spread: 4 },
     ],
     lootMult: 1,
     drops: { gear: 0.07, potion: 0.08, weights: { common: 85, uncommon: 15 } },
@@ -77,6 +86,11 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "skeleton", x: 14, y: 34, level: 8 },
       { kind: "wolf", x: 28, y: 34, level: 9 },
       { kind: "wolf", x: 38, y: 28, level: 10 },
+      { kind: "wolf", x: 16, y: 16, level: 6, levelMax: 7, count: 5, spread: 3.5 },
+      { kind: "skeleton", x: 36, y: 20, level: 8, levelMax: 9, count: 5, spread: 3 },
+      { kind: "wolf", x: 10, y: 38, level: 8, levelMax: 9, count: 6, spread: 4 },
+      { kind: "wolf", x: 24, y: 40, level: 9, levelMax: 10, count: 5, spread: 3.5 },
+      { kind: "wolf", x: 30, y: 4, level: 10, levelMax: 11, count: 4, spread: 3 },
     ],
     lootMult: 1.6,
     drops: { gear: 0.09, potion: 0.1, weights: { common: 62, uncommon: 30, rare: 8 } },
@@ -96,6 +110,12 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "wraith", x: 34, y: 14, level: 16 },
       { kind: "wraith", x: 36, y: 32, level: 18 },
       { kind: "wraith", x: 22, y: 38, level: 20 },
+      { kind: "wraith", x: 18, y: 18, level: 13, levelMax: 14, count: 4, spread: 3 },
+      { kind: "skeleton", x: 10, y: 28, level: 12, levelMax: 13, count: 6, spread: 3.5 },
+      { kind: "wraith", x: 36, y: 22, level: 16, levelMax: 17, count: 4, spread: 3 },
+      { kind: "skeleton", x: 24, y: 6, level: 12, levelMax: 14, count: 5, spread: 3.5 },
+      { kind: "wraith", x: 10, y: 40, level: 17, levelMax: 19, count: 5, spread: 4 },
+      { kind: "skeleton", x: 40, y: 38, level: 18, levelMax: 19, count: 5, spread: 3 },
     ],
     lootMult: 2.4,
     drops: { gear: 0.11, potion: 0.12, weights: { common: 50, uncommon: 35, rare: 13, epic: 2 } },
@@ -115,6 +135,25 @@ export const ZONES: Record<number, ZoneDef> = {
     vault: { x: 31, y: 30 },
   },
 };
+
+/** Lista final de inimigos da zona: cada ponto de caça vira `count` inimigos espalhados (posições determinísticas: servidor e cliente concordam, sem sorteio).
+ *  Os pontos de 1 inimigo ficam exatamente onde estão, então os ids antigos (e1, e2...) não mudam. */
+export function expandSpawns(zone: Pick<ZoneDef, "enemies" | "w" | "h">): EnemyPlacement[] {
+  const out: EnemyPlacement[] = [];
+  for (const s of zone.enemies) {
+    const n = Math.max(1, Math.floor(s.count ?? 1));
+    for (let i = 0; i < n; i++) {
+      if (n === 1) { out.push({ kind: s.kind, x: s.x, y: s.y, level: s.level }); continue; }
+      const ang = i * 2.399963; // ângulo áureo: espalha sem formar fileira
+      const rad = (s.spread ?? 3) * Math.sqrt((i + 0.5) / n); // raio crescente: preenche o círculo por igual
+      const x = Math.min(zone.w - 2, Math.max(1, s.x + Math.cos(ang) * rad));
+      const y = Math.min(zone.h - 2, Math.max(1, s.y + Math.sin(ang) * rad));
+      const level = s.levelMax && n > 1 ? Math.round(s.level + ((s.levelMax - s.level) * i) / (n - 1)) : s.level;
+      out.push({ kind: s.kind, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, level });
+    }
+  }
+  return out;
+}
 
 export const ZONE_IDS: readonly number[] = Object.keys(ZONES).map(Number);
 /** Sala antiga "zone" (zona 1). A zona inicial dos personagens novos é HUB_ZONE. */

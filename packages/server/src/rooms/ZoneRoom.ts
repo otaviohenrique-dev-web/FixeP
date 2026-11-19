@@ -8,7 +8,7 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  START_ZONE, HUB_ZONE, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
+  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
@@ -73,7 +73,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.saver = setInterval(() => void this.saveAll(), 30_000);
     this.setPatchRate(1000 / TICK_RATE);
 
-    this.zone.enemies.forEach((s, i) => {
+    expandSpawns(this.zone).forEach((s, i) => {
       const e = new Enemy();
       e.kind = s.kind;
       e.x = e.sx = s.x;
@@ -299,6 +299,13 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private async travel(id: string, p: Player, portal: Pick<PortalDef, "to">, fromDeath = false) {
     if (p.traveling || !ZONES[portal.to]) return;
+    if (!fromDeath) { // em combate não se atravessa nem se usa o portão (a morte leva à cidade normalmente)
+      const wait = TRAVEL_COMBAT_LOCK_S - (this.t - p.combatAt);
+      if (wait > 0) {
+        if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Em combate: espere ${Math.ceil(wait)}s para atravessar.`); }
+        return;
+      }
+    }
     p.traveling = true;
     p.tx = p.x;
     p.ty = p.y;
@@ -1384,6 +1391,16 @@ export class ZoneRoom extends Room<ZoneState> {
     if (e.hp >= e.maxHp) { e.contrib.clear(); e.fightStart = 0; }
   }
 
+  /** Chefe em luta sem nenhum alvo vivo por BOSS_RESET_GRACE_S: volta à vida cheia e esquece a luta. Devolve true quando resetou. */
+  private bossResetCheck(e: Enemy, hasTarget: boolean): boolean {
+    if (hasTarget) { e.noTargetSince = -1; return false; }
+    if (e.noTargetSince < 0) { e.noTargetSince = this.t; return false; }
+    if (this.t - e.noTargetSince < BOSS_RESET_GRACE_S) return false;
+    e.hp = e.maxHp; e.contrib.clear(); e.fightStart = 0; e.noTargetSince = -1; e.nextSlam = this.t + 6; e.slam = false;
+    if (e.st !== "idle" && e.st !== "evade") this.startEvade(e);
+    return true;
+  }
+
   /** "Evade": o inimigo desiste da luta e volta para casa SEM voltar a perseguir ninguém (nem provocação) até chegar. Dano recebido continua contando. */
   private startEvade(e: Enemy) {
     e.st = "evade";
@@ -1445,6 +1462,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const K = enemyKind(e.kind);
 
     if (e.st === "evade") { // voltando para casa: sem alvo, sem provocação; só regenera se ninguém o feriu há alguns segundos
+      if (K.boss && e.fightStart && this.bossResetCheck(e, !!this.nearestPlayer(e, K.aggro, this.leashOf(K)))) return; // evadindo e ninguém por perto: reseta
       this.moveToward(e, e.sx, e.sy, K.speed * 1.4, dt);
       this.regenEnemy(e, !!K.boss, dt);
       if (dist(e.x, e.y, e.sx, e.sy) < 0.2) { e.x = e.sx; e.y = e.sy; e.st = "idle"; }
@@ -1461,15 +1479,7 @@ export class ZoneRoom extends Room<ZoneState> {
       else target = this.nearestPlayer(e, K.aggro, this.leashOf(K));
     }
     e.targetId = target ? target[0] : "";
-    if (K.boss && e.fightStart) { // luta em andamento: se não sobrou NINGUÉM vivo lutando (morreram, saíram ou fugiram) por um instante, o chefe reseta
-      if (target) e.noTargetSince = -1;
-      else if (e.noTargetSince < 0) e.noTargetSince = this.t;
-      else if (this.t - e.noTargetSince >= BOSS_RESET_GRACE_S) {
-        e.hp = e.maxHp; e.contrib.clear(); e.fightStart = 0; e.noTargetSince = -1; e.nextSlam = this.t + 6; e.slam = false;
-        if (e.st !== "idle") this.startEvade(e);
-        return;
-      }
-    }
+    if (K.boss && e.fightStart && this.bossResetCheck(e, !!target)) return;
 
     const away = dist(e.x, e.y, e.sx, e.sy) > this.leashOf(K);
     // histerese: passou da coleira OU perdeu o alvo no meio da luta -> evade (volta inteiro para casa antes de agir de novo)
