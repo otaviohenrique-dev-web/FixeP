@@ -20,13 +20,54 @@ ficam em `packages/shared/src/index.ts` (`CLASS_DEFS`) e o servidor decide todos
 | Tecla | Guerreiro (120 vida, tanque) | Arqueiro (90 vida, dano à distância) | Clérigo (100 vida, suporte) | Mago (75 vida, dano explosivo) |
 |---|---|---|---|---|
 | ESPAÇO | Golpe corpo a corpo | Flecha | Raio sagrado | Dardo Arcano |
-| Q | Giro (área ao redor) | Perfurar (flecha que atravessa) | Cura (aliados num raio de 4) | Bola de Fogo (projétil que explode em área) |
-| W | Carga (avanço que machuca) | Cilada (armadilha no chão, até 3) | Compressor de Ar (puxa os inimigos de uma área para o ponto mirado e os atordoa por 1,2 s) | Relâmpago (raio do céu, quase instantâneo) |
-| E | Grito (reduz dano e provoca) | Chuva (área atingida após 0,8 s) | Julgamento (dano em área média, atinge após 0,6 s) | Chuva de Fogo (área grande, 0,9 s) |
-| R (ultimate) | Terremoto (área grande, 80 de Fúria, recarga 40 s) | Salva Final (chuva enorme, 80 de Foco, 40 s) | Luz Divina (cura forte num raio de 6, 90 de Mana, 45 s) | **Meteoro** (o maior dano do jogo: 230 base, raio 4,2, cai após 1,5 s, 100 de Mana, 45 s) |
+| Q | **Investida** (avanço com o escudo: fere e **atordoa 1,5 s** quem estiver no caminho) | Perfurar (flecha que atravessa) | **Dois Q à escolha** (tecla **Z** ou botão ⇄): **Cura em Área** (todos num raio de 4, pouca) ou **Cura Focada** (um aliado, bem mais forte) | Bola de Fogo (projétil que explode em área) |
+| W | **Correntes** (correntes e raízes brotam do chão e **enraízam** a área por 3,5 s) | Cilada (armadilha no chão, até 3) | Compressor de Ar (puxa os inimigos de uma área para o ponto mirado e os atordoa por 1,2 s) | Relâmpago (raio do céu, quase instantâneo) |
+| E | **Escudo Refletor** (provoca; -50% de dano; **devolve 75%** do golpe a quem o atacou, por 5 s) | Chuva (área atingida após 0,8 s) | Julgamento (dano em área média, atinge após 0,6 s) | Chuva de Fogo (área grande, 0,9 s) |
+| R (ultimate) | **Queda do Colosso** (uma espada gigante desaba do céu após 1,5 s: dano 120, raio 4,2 e **atordoa 2,2 s**; 80 de Fúria, recarga 40 s) | Salva Final (chuva enorme, 80 de Foco, 40 s) | Luz Divina (cura forte num raio de 6, 90 de Mana, 45 s) | **Meteoro** (o maior golpe do jogo: 140 base, raio 4,2, cai após 1,5 s, 100 de Mana, 45 s) |
 | SHIFT | Esquiva (3 tiles) | Rolamento longo (5 tiles) | Esquiva (3 tiles) | Passo arcano (4 tiles) |
 
-O **Mago** tem o maior dano e o menor sustain (75 de vida, nenhuma cura). Suas habilidades **descem do céu** (eixo Z, ideia do Diablo): o servidor manda `fx` no telégrafo (`meteor`, `lightning`, `firerain`; `holy` e `arrows` para Clérigo e Arqueiro) e o cliente anima a queda em diagonal e o impacto (`skyFx` em `main.ts`, genérico por enquanto).
+O **Mago** é a classe de dano explosivo e o menor sustain (75 de vida, nenhuma cura). Suas habilidades **descem do céu** (eixo Z, ideia do Diablo): o servidor manda `fx` no telégrafo (`meteor`, `lightning`, `firerain`; `holy` e `arrows` para Clérigo e Arqueiro; `chains` e `colossus` para o Guerreiro) e o cliente anima a queda em diagonal e o impacto (`skyFx` em `main.ts`).
+
+### Guerreiro: controle de grupo, reflexão e ultimate
+
+O Guerreiro é o **tanque** do grupo (120 de vida, mitigação alta, provoca) e agora também **controla** a luta. Tudo é decidido no servidor (`ZoneRoom`); o cliente só mostra:
+
+- **Atordoar** (Investida e Queda do Colosso): o inimigo atordoado **não age** (cancela o golpe que preparava) e mostra estrelas girando sobre a cabeça. Campo sincronizado `stunned`.
+- **Enraizar** (Correntes): o inimigo **não anda**, mas ainda ataca quem estiver ao alcance dele. Correntes e raízes brotam do chão na área e ficam em volta dos pés (`rooted`).
+- **Provocar + refletir** (Escudo Refletor, 5 s): inimigos num raio de 6 passam 3 s atacando você, o dano que você leva cai pela metade e **75% de cada golpe de inimigo volta** a quem o deu (evento `hit` com `refl`; raio azul do Guerreiro ao inimigo; cúpula de escudo pulsando em volta dele). O pulso sombrio dos chefes não é refletido.
+- **Chefes resistem**: atordoar e enraizar duram só 40% (`BOSS_CC_RESIST`).
+- **Queda do Colosso**: telégrafo no chão (sombra crescendo e anel pulsante), a espada cai do alto em diagonal (eixo Z) e, no impacto, tremor forte de câmera, clarão, ondas de choque, rachaduras no chão, destroços e coluna de luz.
+- Custos: Investida 25, Correntes 30, Escudo 35, Colosso 80 de Fúria (máx. 100, regenera 5/s). Armas: o Montante aumenta o Colosso; a Lâmina Rúnica reforça Investida e Correntes e barateia o resto.
+
+### Clérigo: escolha do Q
+
+O Clérigo tem **dois Q** e o jogador escolhe: **(A) Cura em Área** (16 de cura em todos num raio de 4; 26 de Mana, recarga 5 s) ou **(B) Cura Focada** (65 de cura em **um** jogador, alcance 9; 30 de Mana, recarga 4 s).
+A troca é pelo botão **⇄** sobre o Q (ou a tecla **Z**), **só fora de combate** (4 s sem causar nem receber dano; o servidor valida) e a HUD mostra qual está ativo (nome, ícone e custo do botão). A escolha fica salva neste navegador (`localStorage`) e é reenviada ao entrar.
+Alvo da Cura Focada, no servidor: o jogador vivo **mais próximo da mira** (até 2,2 tiles dela e a até 9 tiles de você, você incluído); sem ninguém ali, cura **você mesmo**. No cliente a mira vai para o jogador **selecionado** (clique nele); no celular, para o aliado mais ferido por perto.
+Mensagem do cliente: `q_mode { mode: 0 | 1 }`; estado sincronizado no jogador: `qMode`. O evento `heal` traz `from` (o raio verde vai do Clérigo ao alvo).
+Testes: `npm run test:curandeiro -w @frixep/server` (14 verificações).
+
+### Balanceamento de dano (Mago e Arqueiro)
+
+Mago e Arqueiro estavam fortes demais por causa das habilidades em área; Guerreiro e Clérigo ficaram como estavam. O dano **base de todas as formas** foi reduzido (ataque, skills, ultimate, kits de arma e bônus percentual de armas e mãos secundárias):
+
+| Dano base | Antes → depois |
+|---|---|
+| Mago | Dardo 15→13, Bola de Fogo 44→28, Relâmpago 40→26, Chuva de Fogo 62→38, Meteoro 230→140 |
+| Arqueiro | Flecha 10→9, Perfurar 18→15, Cilada 28→18, Chuva 15→10, Salva Final 40→26 |
+| Armas (% de dano) | Mago x0,70 e Arqueiro x0,75 do bônus da arma do Guerreiro/Clérigo; mãos secundárias: Tomo 40%→28%, Orbe Flutuante 30%→20%, Aljava 25%→18% |
+| Kits de arma | Cajado Arcano 1,2→1,1; Orbe Instável 1,35→1,2 (área 1,3→1,2) e Meteoro 1,3→1,15; Arco Longo 1,1→1,05; Besta 1,3→1,15 (Perfurar 1,15→1,1) |
+
+DPS estimado (`packages/shared/src/balance.ts`, nível 1 e sem equipamento; rotação ambiciosa com o recurso real de cada classe; "área" = 5 inimigos agrupados). Rode `npm run test:balance:unit -w @frixep/server` para ver a tabela:
+
+| Classe | Alvo único antes → depois | Área antes → depois |
+|---|---|---|
+| Guerreiro | 24,9 → 24,3 | 63,3 → 57,2 (kit novo) |
+| Arqueiro | 24,9 → 21,5 (-14%) | 43,4 → 34,7 (-20%) |
+| Clérigo | 12,0 → 12,0 | 17,2 → 17,2 |
+| Mago | 23,0 → 18,6 (-19%) | 45,3 → 32,8 (-28%) |
+
+O simulador assume o Guerreiro colado nos 5 inimigos (risco de corpo a corpo); Mago e Arqueiro mantêm a vantagem de bater **à distância e sem risco**, ainda com o dobro da área do Clérigo.
 
 **F** bebe uma poção. Mouse: clique no chão para andar e a mira segue o ponteiro.
 
@@ -41,9 +82,9 @@ Cada classe tem um **recurso** que as habilidades gastam e que regenera sozinho 
 
 | Classe | Recurso | Máx. | Regen./s | Custos |
 |---|---|---|---|---|
-| Guerreiro | Fúria | 100 | 5 | Giro 25, Carga 30, Grito 35 |
+| Guerreiro | Fúria | 100 | 5 | Investida 25, Correntes 30, Escudo Refletor 35, Queda do Colosso 80 |
 | Arqueiro | Foco | 100 | 6 | Perfurar 20, Cilada 25, Chuva 35 |
-| Clérigo | Mana | 120 | 6 | Raio 4, Cura 30, Compressor de Ar 30, Julgamento 30 |
+| Clérigo | Mana | 120 | 6 | Raio 4, Cura em Área 26 / Cura Focada 30, Compressor de Ar 30, Julgamento 30 |
 | Mago | Mana (violeta) | 140 | 7 | Dardo 4, Bola de Fogo 30, Relâmpago 28, Chuva de Fogo 45, Meteoro 100 |
 
 A Esquiva e os ataques básicos do Guerreiro e do Arqueiro são de graça. O máximo cresce a cada nível (`maxManaFor`).
@@ -77,13 +118,14 @@ Painel em `packages/client/src/chat.ts`. Teste: `SERVER=http://localhost:2999 np
 
 ### Modo PvP
 
-Botão **PvP** sob o retrato (também no celular). Clicar inicia uma **canalização de 5 s** (barra no centro da tela); só ao terminar sem dano você entra no modo.
-**Qualquer dano recebido cancela a canalização na hora** (golpe de inimigo, projétil, habilidade de outro jogador, área, armadilha) e aparece "Canalização interrompida".
-Clicar de novo durante a canalização a cancela. Para sair, o botão canaliza 5 s do mesmo jeito. Quem está em PvP tem o nome em vermelho com ⚔ e o botão "PvP ativo".
+Botão **PvP** sob o retrato (também no celular). Clicar inicia uma **canalização de 5 s** (barra no centro da tela); só ao terminar você entra no modo. Para sair, o botão canaliza 5 s do mesmo jeito.
+**Entrar ou sair só começa com você PARADO e sem ter tomado dano nos últimos 5 s** (`PVP_NO_DAMAGE_S`); senão o servidor recusa e avisa o motivo ("Fique parado para canalizar o PvP." ou "Você tomou dano há pouco: aguarde Ns...").
+Durante a canalização, **mover-se, agir (atacar ou usar habilidade) ou tomar dano cancela na hora** (golpe de inimigo, projétil, habilidade de outro jogador, área, armadilha) e o aviso diz qual foi o motivo.
+Clicar de novo durante a canalização também a cancela. Quem está em PvP tem o nome em vermelho com ⚔ e o botão "PvP ativo".
 Regras (decididas no servidor, `ZoneRoom`): é todos contra todos na mesma zona, mas o dano entre jogadores só acontece se **ambos** estão em PvP;
 quem está fora nunca é ferido por outro jogador (a cura continua valendo para todos). Morrer em PvP usa o respawn normal (8 s, com 2 s de proteção ao renascer), sem perder XP nem itens.
 Estado sincronizado no jogador: `pvp` e `pvpChan` (0 nenhuma, 1 entrando, 2 saindo); mensagem do cliente: `pvp { on: boolean }` (validada e com limite de taxa).
-Teste: `SERVER=http://localhost:2999 npm run test:pvp -w @frixep/server` (29 verificações).
+Teste: `SERVER=http://localhost:2999 npm run test:pvp -w @frixep/server` (38 verificações).
 
 ### Grupo (party)
 
@@ -138,7 +180,7 @@ O botão discreto no topo da mochila (setas) **organiza**: junta pilhas e ordena
 
 | Classe | Tipos (mãos) | Foco |
 |---|---|---|
-| Guerreiro | Montante (2), Espada Larga (2), Lâmina Rúnica (2), Espada de Uma Mão (1, com escudo ou adaga) | golpes pesados / equilíbrio e crítico / habilidades baratas / rapidez |
+| Guerreiro | Montante (2), Espada Larga (2), Lâmina Rúnica (2), Espada de Uma Mão (1, com escudo ou adaga) | golpes pesados e Colosso maior / equilíbrio e crítico / Investida e Correntes fortes e habilidades baratas / rapidez |
 | Arqueiro | Arco Longo (2), Arco Curto (1), Besta (1); mão secundária: Aljava | alcance / velocidade / dano e crítico |
 | Clérigo | Cajado Sagrado (2), Cetro (1), Maça (1); mão secundária: Escudo Sagrado ou Relicário | cura / dano e velocidade / misto |
 | Mago | Cajado Arcano (2), Varinha (1), Orbe Instável (2); mão secundária: Tomo Arcano ou Orbe Flutuante | explosões maiores / conjuração rápida e barata / Bola de Fogo e Meteoro |
@@ -164,7 +206,7 @@ Tudo é decidido pelo servidor (`ZoneRoom.ts`); as constantes e fórmulas ficam 
 **Regeneração de vida (jogadores)**: sem causar nem receber dano por **6 s** (`PLAYER_REGEN_DELAY_S`), o personagem recupera **2% da vida máxima por segundo** (`PLAYER_REGEN_PCT_S`; vida cheia em ~50 s). Qualquer dano dado ou recebido (inclusive PvP) zera a espera.
 
 **IA dos inimigos (correção do "vai e volta")**: antes, o inimigo que passava da coleira (`leash`) ou perdia o alvo voltava para casa **se curando 20%/s** e, ao entrar de novo na coleira com o jogador por perto, voltava a persegui-lo: oscilava e a cura anulava o dano. Agora:
-- Estados: `idle → chase → windup → recover` e o novo **`evade`**. Passou da coleira ou perdeu o alvo no meio da luta: entra em `evade`, ignora jogadores e provocação (Grito) e **só volta a agir ao chegar em casa**. Não oscila.
+- Estados: `idle → chase → windup → recover` e o novo **`evade`**. Passou da coleira ou perdeu o alvo no meio da luta: entra em `evade`, ignora jogadores e provocação (Escudo Refletor) e **só volta a agir ao chegar em casa**. Não oscila.
 - **O dano recebido sempre conta**: em `evade` o inimigo continua apanhando e **não recupera vida** enquanto for ferido.
 - Cura: só **parado em casa ou voltando (`evade`) e sem apanhar há 5 s** (`ENEMY_REGEN`): 10% da vida máxima por segundo; chefe 8 s e 3%/s. Nada de cura durante a perseguição.
 - Quem está além da coleira do ponto de origem do inimigo não vira alvo dele (evita "puxar" e perder o alvo em seguida).
@@ -181,7 +223,7 @@ Jogador **fora de grupo** e sem dano relevante **não ganha nada**; quem luta so
 **Chefes exigem grupo (tanque + curandeiro + dano)**: um jogador solo com build convencional não consegue vencer. Fórmula (`shared/src/index.ts`; `n` = jogadores elegíveis vivos a até 24 tiles do chefe):
 - **Vida**: 15 a 18 vezes a de um inimigo do mesmo nível (antes 5 a 6): Rei Ossudo 3.240, Lobo Alfa 4.500, Soberano 9.720. O trio mata em ~1 a 2 min; o solo, não.
 - **Dano do chefe** (golpe, pancada e pulso) `x bossDmgMult(n) = 1 + 0,75 x max(0, 3 - n)`: solo **x2,5**, dupla **x1,75**, trio ou mais **x1** (`BOSS_GROUP_MIN = 3`).
-- **Pulso Sombrio**: a cada 6 s (telégrafo de 1,5 s) atinge **todos** a até 24 tiles com **40% da vida máxima** de cada um (x o multiplicador do grupo), **ignorando a esquiva**. Só se aguenta com **curandeiro** (Cura/Luz Divina); o **tanque** (Grito: -50% de dano e provocação) segura os golpes e pancadas para os que têm pouca vida; poções sozinhas (40 de vida a cada 6 s) não sustentam.
+- **Pulso Sombrio**: a cada 6 s (telégrafo de 1,5 s) atinge **todos** a até 24 tiles com **40% da vida máxima** de cada um (x o multiplicador do grupo), **ignorando a esquiva**. Só se aguenta com **curandeiro** (Cura Focada ou em Área/Luz Divina); o **tanque** (Escudo Refletor: -50% de dano, provocação e reflexão) segura os golpes e pancadas para os que têm pouca vida; poções sozinhas (40 de vida a cada 6 s) não sustentam.
 - **Fúria por tempo**: depois de 150 s de luta (`BOSS_ENRAGE_S`) o dano cresce +50% a cada 30 s, até x4 (`bossEnrageMult`). A fúria por vida baixa (<30%) continua.
 - O contador de luta e o pulso começam no primeiro dano e zeram quando o chefe volta a se curar por inteiro, e ele só se cura depois de 8 s sem apanhar.
 - Testes: `npm run test:boss:unit -w @frixep/server` (21 verificações, sem servidor) simula, com as constantes reais, que o solo (mesmo com todas as habilidades sem custo e armadura boa) morre antes de matar, que o trio com curandeiro aguenta o pulso e mata antes da fúria, e que o trio sem curandeiro não aguenta.
@@ -220,6 +262,7 @@ PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 npm run start        # terminal 1 
 SERVER=http://localhost:2999 npm run test:cheat                    # terminal 2: anti-trapaça (25 verificações)
 SERVER=http://localhost:2999 npm run test:persist                  # terminal 2: contas, personagem e XP (34 verificações)
 npm run test:inv:unit                                              # regras de itens, drops, chefes, classes e banco, sem servidor (109 verificações)
+npm run test:balance:unit -w @frixep/server                        # DPS por classe e regras do kit novo, sem servidor (36 verificações)
 ```
 
 Os testes de ponta a ponta do inventário e das classes exigem loot garantido (`LOOT_TEST=1`, ignorado em produção):
@@ -229,6 +272,8 @@ PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 LOOT_TEST=1 npm run start   # term
 SERVER=http://localhost:2999 npm run test:inv                              # terminal 2 (17 verificações)
 SERVER=http://localhost:2999 npm run test:mago                             # terminal 2 (Mago: 16 verificações)
 SERVER=http://localhost:2999 npm run test:classes                          # terminal 2 (Arqueiro + Clérigo juntos, 33-34 verificações)
+SERVER=http://localhost:2999 npm run test:guerreiro                        # terminal 2 (Guerreiro: atordoar, enraizar, refletir e a ultimate; 24 verificações)
+SERVER=http://localhost:2999 npm run test:curandeiro                       # terminal 2 (Q do Clérigo: área x focada; 14 verificações)
 ```
 
 Itens no chão e chefe (servidor com `LOOT_LOCK_S=3 BOSS_TEST=1`: reserva de 3 s e chefe de 1 de vida, só fora de produção):

@@ -2,7 +2,7 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, CLASS_DEFS, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
+  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
@@ -162,7 +162,8 @@ class WorldScene extends Phaser.Scene {
     st.items.onRemove((_: any, id: string) => this.ground.remove(id));
 
     // HUD, menu e entrada
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }) });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m) });
+    if (this.cls === "cleric" && this.savedQMode() === 1) this.room.send(Msg.QMode, { mode: 1 }); // lembra a escolha entre sessões
     this.joy = mountJoystick();
     this.applyTouch();
     this.paintPortrait();
@@ -197,7 +198,7 @@ class WorldScene extends Phaser.Scene {
         if (m.id !== this.room.sessionId) actor.trigger(animFor(m.a), this.time.now); // a própria já tocou em act()
       }
       // a própria ação já foi mostrada na hora; as dos outros usam a classe de quem agiu
-      if (m.id !== this.room.sessionId) this.playSwing((this.state.players.get(m.id)?.cls as CharClass) ?? "warrior", m.a, m.x, m.y, m.dir, false);
+      if (m.id !== this.room.sessionId) this.playSwing((this.state.players.get(m.id)?.cls as CharClass) ?? "warrior", m.a, m.x, m.y, m.dir, false, Number(this.state.players.get(m.id)?.qMode) || 0);
     });
     this.room.onMessage(Evt.Proj, (m: ProjEvent) => this.onProj(m));
     this.room.onMessage(Evt.ProjEnd, (m: ProjEndEvent) => this.onProjEnd(m));
@@ -244,7 +245,7 @@ class WorldScene extends Phaser.Scene {
       };
       const t = say[m.s];
       if (!t) return;
-      if (m.s === "cancel") this.hud.alert(t[0]);
+      if (m.s === "cancel") this.hud.alert({ move: "Canalização cancelada: você se moveu", act: "Canalização cancelada: você agiu", damage: "Canalização interrompida: dano recebido" }[m.why ?? "damage"] ?? t[0]);
       else this.inv.toast(t[0], t[1]);
     });
     this.room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"));
@@ -328,6 +329,7 @@ class WorldScene extends Phaser.Scene {
     window.addEventListener("keydown", (e) => {
       if (isTypingTarget()) return; // digitando no chat
       if (e.code === "Escape" && this.selId) this.deselect();
+      if (e.code === "KeyZ" && !e.repeat && !menuOpen() && this.cls === "cleric") { this.hud.toggleQ(); return; } // Z: alterna o Q do Clérigo
       if (e.code === "KeyF" && !e.repeat && !menuOpen()) { // F: bebe a primeira poção
         this.drinkPotion();
         return;
@@ -573,8 +575,8 @@ class WorldScene extends Phaser.Scene {
   }
 
   /** visual de uma ação, escolhido pelo TIPO da ação; `mine` = ação do próprio jogador (toca o som) */
-  private playSwing(cls: CharClass, a: ActionId, gx: number, gy: number, dir: number, mine: boolean) {
-    const def = CLASS_DEFS[cls].actions[a];
+  private playSwing(cls: CharClass, a: ActionId, gx: number, gy: number, dir: number, mine: boolean, qMode = 0) {
+    const def = classAction(cls, a, qMode);
     const dx = Math.cos(dir), dy = Math.sin(dir);
     switch (def.kind) {
       case "melee":
@@ -592,7 +594,19 @@ class WorldScene extends Phaser.Scene {
           this.emitters.orange.explode(3, sx, sy);
         }
         this.ring(gx + dx * (def.dash ?? 0), gy + dy * (def.dash ?? 0), def.radius ?? 1, 0xffa040, 260, 0.5);
+        if (def.stunS) this.shockwave(gx + dx * (def.dash ?? 0), gy + dy * (def.dash ?? 0), (def.radius ?? 1) * 2.4, 0xffe9b0, 0.012);
         if (mine) sfx.dash();
+        break;
+      case "reflectBuff": { // cúpula de escudo: anel de provocação + brilho azul-aço
+        this.ring(gx, gy, def.tauntRadius ?? 5, 0x8fd0ff, 650, 0.2, false);
+        this.ring(gx, gy, 1.5, 0xcfeaff, 450, 0.3);
+        this.shockwave(gx, gy, 2.6, 0x8fd0ff, 0.004);
+        if (mine) sfx.shout();
+        break;
+      }
+      case "healFocus": // o raio até o alvo vem no Evt.Heal
+        this.ring(gx, gy, 1.2, 0xc8ffd4, 360, 0.4);
+        if (mine) sfx.heal();
         break;
       case "tauntBuff":
         this.ring(gx, gy, def.tauntRadius ?? 5, 0xff9a4d, 650, 0.2, false);
@@ -638,6 +652,27 @@ class WorldScene extends Phaser.Scene {
         if (mine) sfx.heal();
         break;
     }
+  }
+
+  /** onda de choque: três anéis que crescem rápido e somem, com um leve tremor */
+  private shockwave(gx: number, gy: number, r: number, color: number, shake = 0.008) {
+    for (let i = 0; i < 3; i++) {
+      this.time.delayedCall(i * 90, () => {
+        const { sx, sy } = toScreen(gx, gy);
+        const e = this.add.ellipse(sx, sy, r * ELL_W * 0.5, r * ELL_H * 0.5, color, 0).setStrokeStyle(4 - i, color, 0.9 - i * 0.2).setDepth(0.7);
+        this.tweens.add({ targets: e, scale: 2.4, alpha: 0, duration: 520, ease: "Cubic.easeOut", onComplete: () => e.destroy() });
+      });
+    }
+    if (shake > 0) this.cameras.main.shake(180, shake);
+  }
+
+  /** raio entre dois pontos da grade (cura focada, reflexão): linha que brilha e some */
+  private beam(ax: number, ay: number, bx: number, by: number, color: number, ms = 260) {
+    const a = toScreen(ax, ay), b = toScreen(bx, by);
+    const g = this.add.graphics().setDepth(1e6).setBlendMode(Phaser.BlendModes.ADD);
+    g.lineStyle(7, color, 0.35).lineBetween(a.sx, a.sy - 22, b.sx, b.sy - 22);
+    g.lineStyle(3, 0xffffff, 0.95).lineBetween(a.sx, a.sy - 22, b.sx, b.sy - 22);
+    this.tweens.add({ targets: g, alpha: 0, duration: ms, onComplete: () => g.destroy() });
   }
 
   // ---------------------------------------------------------------- projéteis, armadilhas e cura
@@ -690,6 +725,11 @@ class WorldScene extends Phaser.Scene {
 
   private onHeal(m: HealEvent) {
     const { sx, sy } = toScreen(m.x, m.y);
+    if (m.from) { // cura focada: raio do curandeiro até o alvo
+      const caster = this.state.players.get(m.from);
+      if (caster && m.from !== m.id) this.beam(caster.x, caster.y, m.x, m.y, 0x7dff9a);
+      else if (caster) this.ring(m.x, m.y, 1.1, 0x7dff9a, 420, 0.3);
+    }
     this.emitters.green.explode(m.revive ? 28 : 12, sx, sy - 10);
     if (m.revive) {
       this.emitters.gold.explode(20, sx, sy - 10);
@@ -785,6 +825,82 @@ class WorldScene extends Phaser.Scene {
         }
         break;
       }
+      case "chains": { // correntes e raízes brotam do chão na área quando o servidor aplica o efeito
+        ground(0x6a8a5a, 0.5);
+        this.time.delayedCall(ms, () => {
+          const n = Math.round(6 + r * 3);
+          for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2 + Math.random() * 0.5, d = (i % 2 ? 0.95 : 0.45) * r * Math.sqrt(Math.random() * 0.6 + 0.4);
+            const x = sx + Math.cos(a) * d * ELL_W / 2, y = sy + Math.sin(a) * d * ELL_H / 2;
+            const g = this.add.graphics({ x, y }).setDepth(y + 2).setScale(1, 0.05);
+            const links = 4 + Math.floor(Math.random() * 3);
+            for (let k = 0; k < links; k++) {
+              g.lineStyle(3, 0xc4cbd4, 1).strokeEllipse(0, -8 - k * 11, k % 2 ? 11 : 5, 14);
+              g.lineStyle(1, 0x4a525c, 1).strokeEllipse(0, -8 - k * 11, k % 2 ? 11 : 5, 14);
+            }
+            g.fillStyle(0xe8edf3, 1).fillTriangle(-5, -8 - links * 11, 5, -8 - links * 11, 0, -26 - links * 11); // ponta do gancho
+            g.fillStyle(0x4a3a22, 1).fillTriangle(-9, 0, -3, 0, -6, -12).fillTriangle(3, 0, 9, 0, 6, -14); // raízes na base
+            this.tweens.add({ targets: g, scaleY: 1, duration: 170, ease: "Back.easeOut", delay: Math.random() * 120 });
+            this.tweens.add({ targets: g, alpha: 0, duration: 400, delay: 1300 + Math.random() * 300, onComplete: () => g.destroy() });
+          }
+          ground(0x9aa6b2, 1);
+          this.emitters.gold.explode(14, sx, sy - 6); this.emitters.orange.explode(10, sx, sy - 6);
+          this.cameras.main.shake(160, 0.006); sfx.boom();
+        });
+        break;
+      }
+      case "colossus": { // Queda do Colosso: uma espada gigante desaba do alto (eixo Z), com sombra crescendo no chão
+        const k = r / 4;
+        // aviso no chão: sombra que cresce e anel pulsante
+        const shadow = this.add.ellipse(sx, sy, r * ELL_W * 0.2, r * ELL_H * 0.2, 0x000000, 0.1).setDepth(0.6);
+        this.tweens.add({ targets: shadow, scale: 5, alpha: 0.55, duration: ms, ease: "Quad.easeIn", onComplete: () => shadow.destroy() });
+        const warn = this.add.ellipse(sx, sy, r * ELL_W, r * ELL_H, 0xffa040, 0).setStrokeStyle(3, 0xffc070, 1).setDepth(0.7);
+        this.tweens.add({ targets: warn, alpha: { from: 1, to: 0.35 }, duration: 160, yoyo: true, repeat: Math.max(1, Math.floor(ms / 320)), onComplete: () => warn.destroy() });
+        // a espada: lâmina de aço com brilho, guarda e cabo; cai inclinada
+        const sw = this.add.graphics();
+        const glow = this.add.circle(0, -300 * k, 120 * k, 0xffb060, 0.28).setBlendMode(Phaser.BlendModes.ADD);
+        sw.fillStyle(0xcfd6df, 1).fillPoints([{ x: -26 * k, y: -520 * k }, { x: 26 * k, y: -520 * k }, { x: 20 * k, y: -60 * k }, { x: 0, y: 0 }, { x: -20 * k, y: -60 * k }], true);
+        sw.fillStyle(0xffffff, 0.55).fillPoints([{ x: -6 * k, y: -520 * k }, { x: 6 * k, y: -520 * k }, { x: 3 * k, y: -70 * k }, { x: 0, y: -20 * k }], true);
+        sw.fillStyle(0x6b4a2e, 1).fillRect(-70 * k, -548 * k, 140 * k, 30 * k); // guarda
+        sw.fillStyle(0xf0c34a, 1).fillRect(-70 * k, -548 * k, 140 * k, 7 * k);
+        sw.fillStyle(0x3a2a18, 1).fillRect(-12 * k, -700 * k, 24 * k, 152 * k); // cabo
+        sw.fillStyle(0xf0c34a, 1).fillCircle(0, -712 * k, 20 * k);
+        const sword = this.add.container(sx + 40, sy - 1100, [glow, sw]).setDepth(1e6).setRotation(-0.12);
+        this.tweens.add({
+          targets: sword, x: sx, y: sy, duration: ms, ease: "Cubic.easeIn",
+          onUpdate: () => { this.emitters.gold.explode(1, sword.x, sword.y - 200 * k); this.emitters.orange.explode(1, sword.x, sword.y - 80 * k); },
+          onComplete: () => {
+            sword.setRotation(0);
+            // impacto: tremor forte, clarão, ondas de choque, rachaduras, poeira e destroços
+            this.cameras.main.shake(650, 0.03); this.cameras.main.flash(220, 255, 220, 160); sfx.boom();
+            this.time.delayedCall(120, () => sfx.boom());
+            ground(0xff8a2a, 1); ground(0xffe0a0, 0.6);
+            this.shockwave(gx, gy, r * 1.1, 0xffc070, 0); this.shockwave(gx, gy, r * 1.8, 0xffe9c8, 0);
+            this.emitters.orange.explode(90, sx, sy - 6); this.emitters.gold.explode(50, sx, sy - 6);
+            const cr = this.add.graphics().setDepth(0.65);
+            cr.lineStyle(4, 0x1a1008, 0.9);
+            for (let i = 0; i < 11; i++) {
+              const a = (i / 11) * Math.PI * 2 + Math.random() * 0.4;
+              let x = sx, y = sy;
+              cr.beginPath().moveTo(x, y);
+              for (let j = 0; j < 4; j++) { x += Math.cos(a + (Math.random() - 0.5) * 0.7) * (r * 18 + 10); y += Math.sin(a + (Math.random() - 0.5) * 0.7) * (r * 9 + 5); cr.lineTo(x, y); }
+              cr.strokePath();
+            }
+            this.tweens.add({ targets: cr, alpha: 0, duration: 1400, delay: 900, onComplete: () => cr.destroy() });
+            const pillar = this.add.rectangle(sx, sy - 260, 50 + r * 16, 520, 0xffd9a0, 0.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(1e6);
+            this.tweens.add({ targets: pillar, alpha: 0, scaleX: 2.2, duration: 520, onComplete: () => pillar.destroy() });
+            for (let i = 0; i < 14; i++) { // destroços que sobem e caem
+              const rock = this.add.rectangle(sx, sy - 6, 6 + Math.random() * 8, 6 + Math.random() * 6, i % 2 ? 0x4a4258 : 0x7a6f66).setDepth(1e6);
+              const dx = (Math.random() - 0.5) * r * 120, up = 90 + Math.random() * 160;
+              this.tweens.add({ targets: rock, x: sx + dx, y: sy - up, angle: Math.random() * 360, duration: 320, ease: "Quad.easeOut",
+                onComplete: () => this.tweens.add({ targets: rock, y: sy + (Math.random() - 0.5) * 20, alpha: 0, duration: 360, ease: "Quad.easeIn", onComplete: () => rock.destroy() }) });
+            }
+            // a espada fica cravada um instante e some
+            this.tweens.add({ targets: sword, alpha: 0, duration: 500, delay: 650, onComplete: () => sword.destroy() });
+          },
+        });
+        break;
+      }
     }
   }
 
@@ -802,6 +918,13 @@ class WorldScene extends Phaser.Scene {
     const toMe = m.k === "p" && m.id === this.room.sessionId;
     const { sx, sy } = toScreen(m.x, m.y);
     this.sprites.get(m.k === "e" ? `e:${m.id}` : `p:${m.id}`)?.trigger("hit", this.time.now);
+    if (m.k === "e" && m.refl) { // dano devolvido pelo Escudo Refletor: raio azul do guerreiro ao inimigo
+      const w = this.state.players.get(String(m.by));
+      if (w) { this.beam(w.x, w.y, m.x, m.y, 0x8fd0ff, 200); this.ring(w.x, w.y, 1.2, 0x8fd0ff, 260, 0.5); }
+      this.emitters.gold.explode(8, sx, sy - 10);
+      this.floatText(m.x, m.y, String(m.dmg), "#8fd0ff", 18, true);
+      return;
+    }
     if (m.k === "e") {
       (m.crit ? this.emitters.gold : this.emitters.orange).explode(m.crit ? 16 : 9, sx, sy - 10);
       this.floatText(m.x, m.y, String(m.dmg) + (m.crit ? "!" : ""), m.crit ? "#ffd45e" : "#ffffff", m.crit ? 24 : 17, m.crit);
@@ -867,6 +990,15 @@ class WorldScene extends Phaser.Scene {
   private aim(a: ActionId): { x: number; y: number } {
     const me = this.me();
     if (!me) return { x: 0, y: 0 };
+    if (a === "skill1" && this.cls === "cleric" && Number(me.qMode) === 1) { // Cura Focada: o jogador selecionado; no celular, o aliado mais ferido por perto; senão o próprio
+      const sel = this.selId ? this.state.players.get(this.selId) : undefined;
+      if (sel && !sel.dead) return { x: sel.x, y: sel.y };
+      if (this.touchMode) {
+        let best: any = me, bestRatio = me.hp / me.maxHp;
+        this.state.players.forEach((p: any, id: string) => { if (id !== this.room.sessionId && !p.dead && Math.hypot(p.x - me.x, p.y - me.y) <= 9 && p.hp / p.maxHp < bestRatio) { best = p; bestRatio = p.hp / p.maxHp; } });
+        return { x: best.x, y: best.y };
+      }
+    }
     if (!this.touchMode) {
       const p = this.input.activePointer;
       p.updateWorldPoint(this.cameras.main);
@@ -887,7 +1019,7 @@ class WorldScene extends Phaser.Scene {
 
   /** até onde a ação alcança um alvo (tiles); 0 = ação sem alvo (esquiva, buffs, curas em área) */
   private reach(a: ActionId): number {
-    const d = CLASS_DEFS[this.cls].actions[a];
+    const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0);
     switch (d.kind) {
       case "melee": return (d.offset ?? 0) + (d.radius ?? 1) + 1;
       case "dashHit": return (d.dash ?? 0) + (d.radius ?? 1);
@@ -954,6 +1086,14 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
+  private savedQMode(): 0 | 1 { try { return localStorage.getItem("frixep.qmode") === "1" ? 1 : 0; } catch { return 0; } }
+  /** Clérigo: pede ao servidor a troca do Q (ele só aceita fora de combate); a escolha fica salva neste navegador */
+  private setQMode(mode: 0 | 1) {
+    if (this.cls !== "cleric" || !this.room) return;
+    this.room.send(Msg.QMode, { mode });
+    try { localStorage.setItem("frixep.qmode", String(mode)); } catch { /* sem armazenamento */ }
+  }
+
   private act(a: ActionId) {
     const me = this.me();
     if (!me || me.dead || !this.room) return;
@@ -962,7 +1102,7 @@ class WorldScene extends Phaser.Scene {
     this.room.send(Msg.Act, payload);
     // resposta imediata no cliente (o servidor continua sendo quem decide o resultado)
     const angle = Math.atan2(y - me.y, x - me.x);
-    this.playSwing(this.cls, a, me.x, me.y, angle, true);
+    this.playSwing(this.cls, a, me.x, me.y, angle, true, Number(me.qMode) || 0);
     const mine = this.sprites.get(`p:${this.room.sessionId}`);
     mine?.setFace(angle);
     mine?.trigger(animFor(a), this.time.now);
@@ -1001,7 +1141,7 @@ class WorldScene extends Phaser.Scene {
     }
 
     this.shadows.clear();
-    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean }) => {
+    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean; reflect?: boolean; stun?: boolean; root?: boolean }) => {
       const v = this.sprites.get(key);
       if (!v) return;
       const s = v.obj;
@@ -1034,6 +1174,25 @@ class WorldScene extends Phaser.Scene {
         this.bars.lineStyle(3, 0xffffff, 0.85).lineBetween(s.x, s.y, s.x + d.x * 16, s.y + d.y * 16);
       }
       if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, 18); // Brasa ativa
+      if (o.reflect) { // Escudo Refletor: cúpula azul-aço que pulsa em volta do guerreiro
+        const k = 1 + 0.05 * Math.sin(time / 160), cy = s.y - 16;
+        this.bars.fillStyle(0x8fd0ff, 0.13).fillEllipse(s.x, cy, 54 * k, 66 * k).lineStyle(2, 0xcfeaff, 0.85).strokeEllipse(s.x, cy, 54 * k, 66 * k);
+        this.bars.lineStyle(2, 0xffffff, 0.5).beginPath().arc(s.x, cy, 24 * k, Math.PI * 1.15, Math.PI * 1.55).strokePath();
+        this.bars.lineStyle(2, 0x8fd0ff, 0.7).strokeEllipse(s.x, s.y + 2, 46 * k, 20 * k);
+      }
+      if (o.root) { // enraizado: elos de corrente e raízes em volta dos pés
+        this.bars.lineStyle(2, 0x9aa3ad, 0.95).strokeEllipse(s.x, s.y + 2, 44, 20);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2, x = s.x + Math.cos(a) * 22, y = s.y + 2 + Math.sin(a) * 10;
+          this.bars.fillStyle(0xc4cbd4, 1).fillEllipse(x, y, i % 2 ? 8 : 5, 5).lineStyle(2, 0x4a3a22, 1).lineBetween(x, y, x + Math.cos(a) * 3, y - 9);
+        }
+      }
+      if (o.stun) { // atordoado: estrelas girando sobre a cabeça
+        for (let i = 0; i < 3; i++) {
+          const a = time / 200 + (i * Math.PI * 2) / 3;
+          this.bars.fillStyle(0xffe27a, 1).fillCircle(s.x + Math.cos(a) * 14, s.y - v.headY - 30 + Math.sin(a) * 4, 3.2);
+        }
+      }
     };
 
     const myParty = String(this.me()?.party ?? "");
@@ -1048,14 +1207,14 @@ class WorldScene extends Phaser.Scene {
       }
     });
     st.players.forEach((p: any, id: string) => {
-      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember, level: Number(p.level) || 1, kind: id === this.room.sessionId ? (p.pvp ? "pvp" : "me") : mateOf(p, id) ? "party" : p.pvp ? "pvp" : "ally" });
+      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { dead: p.dead, ember: p.ember, reflect: !!p.reflect, level: Number(p.level) || 1, kind: id === this.room.sessionId ? (p.pvp ? "pvp" : "me") : mateOf(p, id) ? "party" : p.pvp ? "pvp" : "ally" });
     });
     st.enemies.forEach((e: any, id: string) => {
       const key = `e:${id}`;
       // o golpe cai quando o aviso (windup) termina: dispara a animação de ataque nessa virada
       if (this.prevSt.get(key) === "windup" && e.st === "recover") this.sprites.get(key)?.trigger("attack", time);
       this.prevSt.set(key, e.st);
-      place(key, e.x, e.y, e.face, e.hp, e.maxHp, { dead: e.st === "dead", hideWhenDead: true, windup: e.st === "windup", level: Number(e.level) || 1, kind: "enemy" });
+      place(key, e.x, e.y, e.face, e.hp, e.maxHp, { dead: e.st === "dead", hideWhenDead: true, windup: e.st === "windup", stun: !!e.stunned, root: !!e.rooted, level: Number(e.level) || 1, kind: "enemy" });
     });
 
     const me = this.me();
@@ -1063,7 +1222,8 @@ class WorldScene extends Phaser.Scene {
       this.hud.setPvp(!!me.pvp, Number(me.pvpChan) || 0);
       this.hud.setHp(me.hp, me.maxHp);
       this.hud.setMana(me.mana, me.maxMana);
-      this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Grito ativo" : "Brasa ativa");
+      this.hud.setQMode(Number(me.qMode) === 1 ? 1 : 0);
+      this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Escudo ativo" : "Brasa ativa");
       this.hud.setProgress(me.level, me.xp, xpToNext(me.level));
       this.updateBubbles(time);
       if (me.dead) {

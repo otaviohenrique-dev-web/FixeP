@@ -23,7 +23,10 @@
     "test:boss:unit": "tsx test/boss.unit.ts",
     "test:combate": "node test/combate.mjs",
     "test:econ:unit": "tsx test/economy.unit.ts",
-    "test:econ": "node test/economy.mjs"
+    "test:econ": "node test/economy.mjs",
+    "test:guerreiro": "node test/guerreiro.mjs",
+    "test:curandeiro": "node test/curandeiro.mjs",
+    "test:balance:unit": "tsx test/balance.unit.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.0",

@@ -154,10 +154,10 @@ console.log("\n== Kit da arma ==");
 
 console.log("\n== Classes ==");
 {
-  const kinds = new Set(["melee", "ring", "dashHit", "tauntBuff", "dodge", "projectile", "blast", "trap", "rain", "pull", "healAoe", "emberBuff", "revive"]);
+  const kinds = new Set(["melee", "ring", "dashHit", "tauntBuff", "dodge", "projectile", "blast", "trap", "rain", "pull", "healAoe", "emberBuff", "revive", "reflectBuff", "healFocus"]);
   for (const cls of PLAYABLE_CLASSES) {
     const d = CLASS_DEFS[cls];
-    const acts = ACTION_IDS.map((a) => d.actions[a]);
+    const acts = [...ACTION_IDS.map((a) => d.actions[a]), ...(d.skill1Alt ? [d.skill1Alt] : [])];
     check(`${d.name}: 5 ações com tipo válido e recarga positiva`, acts.every((x) => x && kinds.has(x.kind) && x.cd > 0));
   }
   check("vida base por classe: 120 / 90 / 100 / 75 (o Mago tem o menor sustain)", maxHpFor("warrior", 1) === 120 && maxHpFor("archer", 1) === 90 && maxHpFor("cleric", 1) === 100 && maxHpFor("mage", 1) === 75);

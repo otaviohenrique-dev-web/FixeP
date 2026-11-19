@@ -51,7 +51,8 @@ for (const zid of ZONE_IDS) {
   check(`TRIO possível: mata em ~${ttk3.toFixed(0)} s (dano real = 50% do teto), antes da fúria de ${BOSS_ENRAGE_S} s`, ttk3 < BOSS_ENRAGE_S, `teto ${dps3.toFixed(0)}/s`);
 
   // o pulso (dano x1 no trio) por segundo em cada um tem de caber na Cura do Clérigo (alcance 4: o grupo se junta)
-  const healer = CLASS_DEFS.cleric.actions.skill1;
+  // o Clérigo escolhe o Q: cura em área (pouca, em todos) ou cura focada (forte, em um); para segurar o pulso em quem está em risco vale a melhor das duas
+  const healer = [CLASS_DEFS.cleric.actions.skill1, CLASS_DEFS.cleric.skill1Alt!].reduce((best, q) => ((q.heal ?? 0) / q.cd > (best.heal ?? 0) / best.cd ? q : best));
   const cura = (healer.heal ?? 0) * dmgMult(b.level, 0) / healer.cd;
   const luz = (CLASS_DEFS.cleric.actions.ultimate.heal ?? 0) * dmgMult(b.level, 0) / CLASS_DEFS.cleric.actions.ultimate.cd;
   const pulseTrio = maxHpFor("archer", b.level, 0) * B.pulsePct / B.pulseEveryS; // alvo mais frágil, sem redução
