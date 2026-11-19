@@ -1,3 +1,4 @@
+import { installMode, onInstallChange, runInstall } from "./pwa";
 import { isTypingTarget } from "./keys";
 import { cycleHudScale, hudScaleLabel } from "./mobile";
 /** Menu simples dentro do jogo: continuar ou desconectar (volta para a tela de login). */
@@ -74,7 +75,19 @@ export function mountGameMenu(opts: GameMenuOptions) {
   hs.textContent = `HUD: ${hudScaleLabel()}`;
   hs.onclick = () => { hs.textContent = `HUD: ${cycleHudScale()}`; };
 
-  card.append(title, who, resume, hs, logout);
+  const inst = document.createElement("button"); // "Instalar app" (some quando já está instalado)
+  inst.type = "button";
+  inst.className = "gm-item";
+  const hint = document.createElement("p");
+  hint.className = "gm-who";
+  hint.hidden = true;
+  hint.textContent = "No iPhone/iPad: toque em Compartilhar e depois em \"Adicionar à Tela de Início\".";
+  const syncInst = () => { const m = installMode(); inst.hidden = m === null; if (m === null) hint.hidden = true; inst.textContent = "Instalar app"; };
+  syncInst();
+  onInstallChange(syncInst);
+  inst.onclick = async () => { if (installMode() === "ios") hint.hidden = !hint.hidden; else await runInstall(); };
+
+  card.append(title, who, resume, hs, inst, hint, logout);
   back.append(card);
   document.body.append(btn, back);
 

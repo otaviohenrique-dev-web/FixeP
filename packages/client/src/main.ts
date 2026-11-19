@@ -1,3 +1,6 @@
+import { viewSize } from "./viewport";
+import { registerPwa } from "./pwa";
+registerPwa();
 import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
@@ -1275,12 +1278,12 @@ new Phaser.Game({
   parent: "game",
   backgroundColor: "#0b0b10",
   // canvas em resolução nativa: tamanho em pixels de dispositivo, exibido em CSS por 1/DPR (sem borrão); sprites sem suavização e posições arredondadas
-  scale: { mode: Phaser.Scale.NONE, width: Math.round(innerWidth * DPR), height: Math.round(innerHeight * DPR), zoom: 1 / DPR },
+  scale: { mode: Phaser.Scale.NONE, width: Math.round(viewSize().w * DPR), height: Math.round(viewSize().h * DPR), zoom: 1 / DPR },
   render: { roundPixels: true, powerPreference: "high-performance" },
   scene: [],
   callbacks: {
     postBoot: (game) => {
-      const fit = () => game.scale.resize(Math.round(innerWidth * DPR), Math.round(innerHeight * DPR));
+      const fit = () => { const v = viewSize(); game.scale.resize(Math.round(v.w * DPR), Math.round(v.h * DPR)); };
       window.addEventListener("resize", fit);
       window.addEventListener("orientationchange", () => setTimeout(fit, 200));
       window.visualViewport?.addEventListener("resize", fit);

@@ -42,6 +42,17 @@ services:
     runtime: static
     buildCommand: npm ci --include=dev && npm run build -w @frixep/client
     staticPublishPath: packages/client/dist
+    # sw.js e o manifest precisam de cache curto: assim o PWA atualiza sem prender versões antigas.
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /manifest.webmanifest
+        name: Cache-Control
+        value: public, max-age=300
+      - path: /assets/_manifest.json
+        name: Cache-Control
+        value: no-cache
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
