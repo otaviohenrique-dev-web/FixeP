@@ -337,13 +337,15 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
 
 /** Chefes resistem a atordoar e enraizar: a duração cai para esta fração. */
 export const BOSS_CC_RESIST = 0.4;
+/** Quem causou ou recebeu dano há menos de tantos segundos está em combate: não atravessa portais nem o portão (a morte leva à cidade normalmente). */
+export const TRAVEL_COMBAT_LOCK_S = 8;
 
 export const SKELETON = {
   name: "Esqueleto",
   maxHp: 60,
   speed: 2.4,
   aggro: 7,
-  leash: 14,
+  leash: 24, // até onde o inimigo persegue a partir do seu ponto de origem (maior alcance = grupos de caça maiores sem fugir do ponto)
   engage: 1.7, // distância para iniciar o ataque
   windupS: 0.7, // tempo do telégrafo (dá para esquivar)
   strikeOffset: 1.0,
@@ -368,7 +370,7 @@ const base = { aggro: SKELETON.aggro, leash: SKELETON.leash, engage: SKELETON.en
 export const ENEMY_KINDS = {
   skeleton: { ...base, name: SKELETON.name, hpMul: 1, dmgMul: 1, color: 0xd8d2c0 },
   wolf: { ...base, name: "Lobo Gélido", hpMul: 0.8, dmgMul: 0.9, speed: 3.6, aggro: 8, engage: 1.5, windupS: 0.5, strikeOffset: 0.9, strikeRadius: 1.1, recoverS: 0.8, radius: 0.4, color: 0x8fb3d9 },
-  wraith: { ...base, name: "Espectro", hpMul: 1.3, dmgMul: 1.4, speed: 2.0, aggro: 9, leash: 16, engage: 2.2, windupS: 0.9, strikeOffset: 1.4, strikeRadius: 1.6, recoverS: 1.2, radius: 0.5, color: 0x9a7ad0 },
+  wraith: { ...base, name: "Espectro", hpMul: 1.3, dmgMul: 1.4, speed: 2.0, aggro: 9, leash: 26, engage: 2.2, windupS: 0.9, strikeOffset: 1.4, strikeRadius: 1.6, recoverS: 1.2, radius: 0.5, color: 0x9a7ad0 },
 } as Record<EnemyKind, EnemyKindDef>;
 // pulso sombrio: a cada pulseEveryS atinge TODOS a até pulseRadius (ignora esquiva) com pulsePct da vida máxima de cada um: sem curandeiro não se aguenta
 const bossBase: Pick<BossDef, "slamWindupS" | "enrageAt" | "enrageSpeed" | "pulseEveryS" | "pulsePct" | "pulseRadius"> = { slamWindupS: 1.3, enrageAt: 0.3, enrageSpeed: 1.3, pulseEveryS: 6, pulsePct: 0.4, pulseRadius: 24 };

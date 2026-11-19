@@ -57,6 +57,7 @@ export class Player extends Schema {
   dropAt = 0; // último item solto no chão (limite de frequência)
   traveling = false; // travessia aprovada: o jogador não age nem é alvo até sair da sala
   pvpChanUntil = 0; // fim da canalização (relógio da simulação)
+  travelNoteAt = -1e9; // último aviso "em combate" ao tentar atravessar (para não repetir a cada tick)
   combatAt = -1e9; // último instante em que causou ou recebeu dano (a regeneração de vida espera PLAYER_REGEN_DELAY_S)
   regenAcc = 0; // fração de vida regenerada ainda não aplicada (hp é inteiro)
 }
