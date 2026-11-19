@@ -3,12 +3,13 @@ import { isTypingTarget } from "./keys";
  * Painel de desenvolvimento no canto superior direito: FPS e ping.
  * - FPS: contado aqui mesmo (quadros que o navegador realmente desenhou por segundo).
  * - Ping: ida e volta até o servidor (mensagem "ping" com carimbo de tempo, devolvida em "pong"), medido a cada 2 s.
+ * - Online: quantos jogadores estão no jogo agora (o servidor manda junto com o pong).
  * Liga/desliga com a tecla F3 (a escolha fica salva). Na URL: ?stats=0 esconde e ?stats=1 mostra.
  * Para publicar sem o painel por padrão, defina VITE_SHOW_STATS=0 na montagem do site.
  */
 export interface Stats {
-  /** chame quando chegar a resposta do servidor (Evt.Pong), com o mesmo t enviado */
-  onPong(t: number): void;
+  /** chame quando chegar a resposta do servidor (Evt.Pong), com o mesmo t enviado e a contagem de online */
+  onPong(t: number, online?: number): void;
   destroy(): void;
 }
 
@@ -44,13 +45,15 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
 
   let fps = 0;
   let ping = -1;
+  let online = -1;
   let best = Infinity;
   const render = () => {
     el.classList.toggle("off", !on);
     if (!on) return;
     const f = `<b style="color:${color(fps, 40, 25, true)}">${fps}</b> FPS`;
     const p = ping < 0 ? "<b>--</b> ms" : `<b style="color:${color(ping, 90, 180)}">${Math.round(ping)}</b> ms`;
-    el.innerHTML = `${f}<i class="sp"> · </i><br>${p} ping`;
+    const o = online < 0 ? "" : `<br><b>${online}</b> online`;
+    el.innerHTML = `${f}<i class="sp"> · </i><br>${p} ping${o}`;
   };
 
   // FPS: média de 1 segundo
@@ -85,9 +88,10 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
   render();
 
   return {
-    onPong(t) {
+    onPong(t, n) {
       const rtt = performance.now() - t;
       if (!Number.isFinite(rtt) || rtt < 0 || rtt > 60_000) return; // resposta atrasada ou inválida
+      if (typeof n === "number" && Number.isFinite(n) && n >= 0) online = Math.floor(n);
       // suaviza um pouco (média móvel) para o número não pular a cada medição
       ping = ping < 0 ? rtt : ping * 0.6 + rtt * 0.4;
       best = Math.min(best, rtt);

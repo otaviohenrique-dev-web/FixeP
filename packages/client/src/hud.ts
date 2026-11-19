@@ -14,6 +14,8 @@ export interface HudOptions {
   onAction(a: ActionId): void;
   /** botão de poção (no celular, onde não há tecla) */
   onPotion?(): void;
+  /** o jogador ligou ou desligou a auto-poção (o botão "Auto" da barra) */
+  onAutoPotion?(on: boolean): void;
   /** botão PvP: `true` pede para entrar, `false` para sair (o servidor canaliza e decide) */
   onPvp?(on: boolean): void;
   /** Clérigo: pede a troca do Q (0 = cura em área, 1 = cura focada); o servidor só aceita fora de combate */
@@ -39,6 +41,8 @@ export interface Hud {
   setPotion(count: number): void;
   /** a poção não está em recarga? */
   potionReady(): boolean;
+  /** mostra o estado salvo da auto-poção (botão "Auto") */
+  setAutoPotion(on: boolean): void;
   /** aviso curto em destaque no alto da tela (ex.: "Canalização interrompida") */
   alert(text: string): void;
   /** Q ativo do Clérigo (vindo do servidor): troca nome, custo, recarga e ícone do botão */
@@ -170,6 +174,9 @@ const CSS = `
 .hd-dead p{margin:0;font-size:14px;letter-spacing:.3em;text-transform:uppercase;color:#cfdcec}
 /* ---------- layout de toque: botões em arco no canto direito (polegar), a esquerda fica livre para o joystick ---------- */
 .hd-pot{margin-left:14px;border-color:#5f9a6a}
+.hd-auto{margin-left:6px;width:44px;font-size:10px;color:#9fb3c8;border-color:#4a5a6a}
+.hd-auto .hd-sn{position:static;font-size:10px;letter-spacing:.04em}
+.hd-auto.on{color:#7dff9a;border-color:#7dff9a;box-shadow:0 0 8px rgba(125,255,154,.55)}
 .hd-pot svg{position:absolute;left:50%;top:7px;margin-left:-9px;pointer-events:none}
 .hd-pot .hd-sn{position:absolute;left:0;right:0;bottom:3px;font-size:7px}
 .hd-qty{position:absolute;right:4px;top:2px;font:900 12px/1 "Cinzel",Georgia,serif;color:#b8f0c4;text-shadow:0 0 3px #000,0 1px 3px #000;pointer-events:none}
@@ -404,6 +411,21 @@ export function mountHud(opts: HudOptions): Hud {
     return tipHtml({ name: "Poção de Vida", key: "F", type: "Cura", stats: [`Cura: ${heal} de vida`, `Estoque: ${potCount}`, `Recarga: ${POTION_COOLDOWN_S} s`], desc: "Bebe uma poção do inventário e recupera vida na hora.", tip: "Compartilha a recarga com todas as poções: não desperdice com a vida cheia." });
   });
   bar.append(pb);
+  // auto-poção: com ela ligada, a poção é bebida sozinha quando a vida cai abaixo do limite (o botão mostra o estado)
+  let autoOn = false;
+  const ab = document.createElement("button");
+  ab.type = "button";
+  ab.className = "hd-btn hd-auto";
+  ab.innerHTML = `<span class="hd-sn">Auto</span>`;
+  const paintAuto = () => {
+    ab.classList.toggle("on", autoOn);
+    ab.setAttribute("aria-pressed", String(autoOn));
+    ab.setAttribute("aria-label", autoOn ? "Auto-poção ligada: clique para desligar" : "Auto-poção desligada: clique para ligar");
+    ab.title = autoOn ? "Auto-poção ligada (bebe sozinho com pouca vida)" : "Auto-poção desligada";
+  };
+  ab.addEventListener("click", () => { autoOn = !autoOn; paintAuto(); opts.onAutoPotion?.(autoOn); });
+  bar.append(ab);
+  paintAuto();
   const potCd = pb.querySelector<HTMLElement>(".hd-cd")!;
   const potN = pb.querySelector<HTMLElement>(".hd-cdn")!;
   const potQty = pb.querySelector<HTMLElement>(".hd-qty")!;
@@ -534,6 +556,7 @@ export function mountHud(opts: HudOptions): Hud {
       pb.classList.toggle("empty", count <= 0);
     },
     potionReady: () => performance.now() >= potUntil,
+    setAutoPotion(on) { autoOn = on; paintAuto(); },
     setQMode(mode) {
       if (mode === qMode) return;
       qMode = mode;

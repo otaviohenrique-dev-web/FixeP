@@ -399,8 +399,8 @@ export const enemyKind = (k: string): EnemyKindDef => ENEMY_KINDS[k as EnemyKind
 /** Spawns da zona 1 (compatibilidade): os de cada zona ficam em ZONES. */
 export const ENEMY_SPAWNS = ZONES[1].enemies;
 
-/** Vida, dano e XP do inimigo por nível (o nível 1 é o Esqueleto base). */
-export const enemyHp = (level: number, kind: string = "skeleton") => Math.round(SKELETON.maxHp * enemyKind(kind).hpMul * (1 + 0.4 * (level - 1)));
+/** Vida, dano e XP do inimigo por nível (o nível 1 é o Esqueleto base). Vida cresce 25% por nível (antes 40%). */
+export const enemyHp = (level: number, kind: string = "skeleton") => Math.round(SKELETON.maxHp * enemyKind(kind).hpMul * (1 + ENEMY_HP_PER_LEVEL * (level - 1)));
 export const enemyDmg = (level: number, kind: string = "skeleton") => Math.round(SKELETON.dmg * enemyKind(kind).dmgMul * (1 + 0.3 * (level - 1)));
 export const enemyXp = (level: number) => Math.round(XP_PER_KILL * Math.pow(1.45, level - 1));
 
@@ -417,8 +417,18 @@ export const LEVEL_TIER_COLORS = [0x9a8460, 0xc9d3df, 0xf0c34a, 0x4cc3ee, 0xb575
 export const maxHpFor = (cls: CharClass, level: number, armorHp = 0) => CLASS_DEFS[cls].maxHp + 10 * (level - 1) + armorHp;
 /** Máximo do recurso (Fúria/Foco/Mana): base da classe + bônus por nível. */
 export const maxManaFor = (cls: CharClass, level: number) => CLASS_DEFS[cls].resource.max + CLASS_DEFS[cls].resource.perLevel * (level - 1);
-/** Multiplicador de poder (dano e cura): +5% por nível, multiplicado pelo bônus percentual da arma. */
-export const dmgMult = (level: number, weaponPct = 0) => (1 + 0.05 * (level - 1)) * (1 + weaponPct / 100);
+/**
+ * Atributos por nível (tabela única para servidor e cliente):
+ * - Poder (dano e cura): +8% por nível (antes 5%), multiplicado pelo bônus percentual da arma.
+ * - Defesa: divide o dano recebido por 1 + 6% por nível. Um nível 46 leva ~1/3,7 do dano bruto de um mob nível 13
+ *   (antes levava o dano cheio); a vida já cresce 10 por nível.
+ */
+export const PLAYER_POWER_PER_LEVEL = 0.08;
+export const PLAYER_DEFENSE_PER_LEVEL = 0.06;
+export const ENEMY_HP_PER_LEVEL = 0.25;
+export const dmgMult = (level: number, weaponPct = 0) => (1 + PLAYER_POWER_PER_LEVEL * (level - 1)) * (1 + weaponPct / 100);
+/** Divisor do dano recebido pelo jogador (>= 1): cresce com o nível. */
+export const defenseMult = (level: number) => 1 + PLAYER_DEFENSE_PER_LEVEL * (Math.max(1, level) - 1);
 
 // ------------------------------------------------------------ personagem
 /** Classes jogáveis. */

@@ -4,13 +4,18 @@ import {
   TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, TRADE_CHAT_MAX_LEN, ZONES, ZONE_IDS, WORLD_GATE, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   PLAYER_RADIUS, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, BOSS_CC_RESIST, classAction, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
-  LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
+  LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, defenseMult, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
   START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
+
+/** Salas de zona vivas (para contar os jogadores online do jogo inteiro). */
+const liveRooms = new Set<ZoneRoom>();
+/** Jogadores online em todas as zonas (o cliente mostra no painel de FPS/ping). */
+export const onlineCount = () => { let n = 0; for (const r of liveRooms) n += r.state.players.size; return n; };
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
 import { Market } from "../game/market.js";
@@ -62,6 +67,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   onCreate(options: { repo: Repo }) {
     this.repo = options.repo;
+    liveRooms.add(this);
     const ttl = Number(process.env.MARKET_TTL_S); // só para testes (fora de produção): listagens que vencem em segundos
     this.market = new Market(options.repo.db, options.repo, Date.now, process.env.NODE_ENV !== "production" && ttl > 0 ? ttl * 1000 : undefined);
     // a zona vem do NOME da sala (definido no servidor), nunca de opções que o cliente mande
@@ -200,7 +206,7 @@ export class ZoneRoom extends Room<ZoneState> {
     // ping: devolve o mesmo carimbo de tempo para o cliente medir a ida e volta. Só ecoa números (nada é interpretado).
     this.onMessage(Msg.Ping, (client, p: { t?: unknown }) => {
       if (!this.allow(client)) return;
-      if (typeof p?.t === "number" && Number.isFinite(p.t)) client.send(Evt.Pong, { t: p.t });
+      if (typeof p?.t === "number" && Number.isFinite(p.t)) client.send(Evt.Pong, { t: p.t, online: onlineCount() });
     });
     // chat da zona: o servidor limpa o texto, limita a taxa e usa o NOME DO PERSONAGEM (o cliente não manda nome)
     this.onMessage(Msg.Chat, (client, p: { text?: unknown }) => {
@@ -883,6 +889,7 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   async onDispose() {
+    liveRooms.delete(this);
     clearInterval(this.saver);
     await this.saveAll();
   }
@@ -1603,7 +1610,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.interruptPvp(id, p, "damage"); // qualquer dano (inimigo, projétil, habilidade, área) cancela a canalização do PvP
     const reduction = Math.min(0.8, (this.t < p.buffUntil ? p.buffRed : 0) + p.gear.dr / 100);
     if (src && this.t < p.reflectUntil && p.reflectPct > 0) this.damageEnemy(id, src.id, src.e, Math.max(1, baseDmg * p.reflectPct), true); // Escudo Refletor: parte do golpe volta ao atacante
-    const dmg = Math.max(1, Math.round(baseDmg * (1 - reduction)));
+    const dmg = Math.max(1, Math.round((baseDmg * (1 - reduction)) / defenseMult(p.level))); // defesa por nível: quem está mais alto leva menos de cada golpe
     p.hp = Math.max(0, p.hp - dmg);
     this.broadcast(Evt.Hit, { k: "p", id, dmg, crit, x: p.x, y: p.y, by });
     if (p.hp <= 0) {

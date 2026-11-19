@@ -32,6 +32,7 @@ import { mountEconomy, type EconomyUi } from "./economy";
 import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
+import { showLevelUpBanner, levelUpGlow } from "./levelup-fx";
 import { mountParty, type PartyUi } from "./party";
 import { checkGpu } from "./gpucheck";
 
@@ -64,6 +65,10 @@ const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number
 const tileHash = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
 /** densidade de pixels do canvas: nítido em telas retina, mas limitado (3) para não pesar em celular fraco */
 const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+/** auto-poção: limite de vida (fração do máximo) para beber sozinho, e a chave da escolha salva */
+const AUTO_POT_AT = 0.35;
+const AUTO_POT_KEY = "frixep_autopot";
+const readAutoPot = () => { try { return localStorage.getItem(AUTO_POT_KEY) === "on"; } catch { return false; } };
 const DPR = Math.max(1, Math.min(COARSE ? 2 : 3, window.devicePixelRatio || 1)); // celular: no máximo 2x (menos pixels = mais FPS)
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
 const menuOpen = () => !!document.querySelector(".gm-back.open");
@@ -137,6 +142,9 @@ class WorldScene extends Phaser.Scene {
   private stats!: ReturnType<typeof mountStats>;
   private chatUi!: ChatUi;
   private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "" };
+  /** auto-poção: bebe sozinho com a vida abaixo de AUTO_POT_AT (escolha salva neste navegador) */
+  private autoPot = readAutoPot();
+  private autoPotNext = 0; // próximo instante (ms) em que o auto pode beber, para não mandar várias de uma vez
   private travelWatch = 0;
   private gateBlock = false; // a travessia foi recusada (em combate): não mostra a tela de load de novo enquanto o jogador continuar em cima do portão
   private enterSeq = 0;
@@ -278,7 +286,8 @@ class WorldScene extends Phaser.Scene {
   /** interface do DOM (HUD, mochila, loja, baú, chat, grupo, FPS) e entradas: montada UMA vez; as salas só trocam os receptores */
   private mountUi() {
     this.lowHp = mountLowHp();
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m) });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
+    this.hud.setAutoPotion(this.autoPot);
     this.joy = mountJoystick();
     this.applyTouch();
     this.paintPortrait();
@@ -501,7 +510,7 @@ class WorldScene extends Phaser.Scene {
     room.onMessage(Evt.PartyInviteEnd, () => this.party.endInvite());
     room.onMessage(Evt.PartyChat, (m: PartyChatEvent) => this.chatUi.addGroup(String(m.name), String(m.text), String(m.name) === String(this.me()?.name)));
     room.send(Msg.PartySync, {});
-    room.onMessage(Evt.Pong, (m: { t: number }) => this.stats.onPong(m.t));
+    room.onMessage(Evt.Pong, (m: { t: number; online?: number }) => this.stats.onPong(m.t, m.online));
   }
 
 
@@ -585,6 +594,13 @@ class WorldScene extends Phaser.Scene {
     if (this.gateBlock) return;
     this.beginTravel(on.to);
     this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, 6000); // o servidor não confirmou: libera
+  }
+
+  /** liga ou desliga a auto-poção e guarda a escolha */
+  private setAutoPot(on: boolean) {
+    this.autoPot = on;
+    try { localStorage.setItem(AUTO_POT_KEY, on ? "on" : "off"); } catch { /* sem armazenamento: vale só nesta sessão */ }
+    this.inv.toast(on ? "Auto-poção ligada" : "Auto-poção desligada", on ? "#7dff9a" : "#9fb3c8");
   }
 
   private drinkPotion() {
@@ -1154,7 +1170,11 @@ class WorldScene extends Phaser.Scene {
     this.emitters.gold.explode(30, s.x, s.y - 8);
     const g = toGrid(s.x, s.y);
     this.floatText(g.x, g.y - 1.2, `NÍVEL ${m.level}!`, "#ffd45e", 26, true);
-    if (m.id === this.room.sessionId) sfx.levelUp();
+    levelUpGlow(this, s, m.level); // brilho na cor da faixa do nível, em todos que estão na tela
+    if (m.id === this.room.sessionId) {
+      sfx.levelUp();
+      showLevelUpBanner(m.level);
+    }
   }
 
   private onDied(m: DiedEvent) {
@@ -1300,6 +1320,10 @@ class WorldScene extends Phaser.Scene {
     this.watchPortals();
     this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
     const meNow = this.me();
+    if (this.autoPot && meNow && !meNow.dead && meNow.hp / Math.max(1, meNow.maxHp) <= AUTO_POT_AT && time >= this.autoPotNext) {
+      this.autoPotNext = time + 400;
+      if (this.inv.firstPotionSlot() >= 0) this.drinkPotion(); // sem poção na bolsa, não faz nada (sem aviso repetido)
+    }
     if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
       this.npcs.update(time, meNow.x, meNow.y);
       const near = this.npcs.inReach(meNow.x, meNow.y);
