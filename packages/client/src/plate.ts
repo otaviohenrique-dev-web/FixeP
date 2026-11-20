@@ -12,7 +12,8 @@ export type PlateKind = "me" | "ally" | "enemy" | "pvp" | "party";
 /** Paleta das barras de vida. O vermelho vivo do jogador (o MESMO da barra de vida da HUD, ver hud.ts) é inequívoco: o inimigo usa um tijolo escuro e
  *  fosco, o PvP um laranja de alerta, o aliado verde e o colega de grupo azul (com filete claro em volta). */
 export const PLAYER_RED = 0xe5202e;
-const FILL: Record<PlateKind, number> = { me: PLAYER_RED, ally: 0x4cc26a, enemy: 0x8a3226, pvp: 0xff8a1f, party: 0x4aa8ff };
+// jogadores são sempre vermelhos; só o grupo (colegas de PT) fica verde
+const FILL: Record<PlateKind, number> = { me: PLAYER_RED, ally: PLAYER_RED, enemy: 0x8a3226, pvp: PLAYER_RED, party: 0x4cc26a };
 
 export interface PlateGeom {
   /** centro do número do nível */
