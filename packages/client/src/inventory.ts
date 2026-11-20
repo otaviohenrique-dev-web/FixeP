@@ -1,5 +1,6 @@
 import { isTypingTarget } from "./keys";
 import { silhouetteSvg } from "./silhouette";
+import { bindItemTip, hideItemTip, setItemTipContext, compareStats, STAT_DEFS, type ItemTipData } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
@@ -159,21 +160,6 @@ function statLines(d: ItemDef): string[] {
   return o;
 }
 
-const STAT_DEFS: { k: keyof ItemDef; name: string; unit: string; line: (v: number) => string }[] = [
-  { k: "dmgPct", name: "poder", unit: "%", line: (v) => `+${v}% de poder` }, { k: "hp", name: "vida", unit: "", line: (v) => `+${v} de vida` },
-  { k: "crit", name: "crítico", unit: "%", line: (v) => `+${v}% de crítico` }, { k: "dr", name: "defesa", unit: "%", line: (v) => `−${v}% de dano recebido` },
-  { k: "cdr", name: "recarga menor", unit: "%", line: (v) => `−${v}% de recarga` }, { k: "mana", name: "recurso", unit: "", line: (v) => `+${v} de recurso máx.` },
-  { k: "regen", name: "regen.", unit: "/s", line: (v) => `+${v}/s de recurso` },
-];
-/** diferença de atributos entre o item novo e o equipado (só o que muda) */
-function compareStats(a: ItemDef, b: ItemDef): { text: string; delta: number }[] {
-  const out: { text: string; delta: number }[] = [];
-  for (const st of STAT_DEFS) {
-    const d = Math.round((((a[st.k] as number) ?? 0) - ((b[st.k] as number) ?? 0)) * 100) / 100;
-    if (d) out.push({ text: `${d > 0 ? "+" : "−"}${Math.abs(d)}${st.unit} ${st.name}`, delta: d });
-  }
-  return out;
-}
 /** 0 = sem brilho; épico pulsa leve, lendário médio, mítico forte */
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
 const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
@@ -257,57 +243,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
 
   const equippedDef = (k: EquipSlot): ItemDef | null => (snap.equip[k] ? ITEMS[snap.equip[k]!] ?? null : null);
 
-  // ---- dica flutuante (passar o mouse): atributos e comparação com o equipado
-  const tip = document.createElement("div");
-  tip.className = "iv-tip";
-  tip.style.display = "none";
-  document.body.append(tip);
-  const hideTip = () => { tip.style.display = "none"; };
-  function showTip(e: MouseEvent, data: { def: ItemDef; cmp?: ItemDef | null; extra?: string }) {
-    const d = data.def;
-    tip.replaceChildren();
-    tip.style.setProperty("--rc", RARITY_COLOR[d.rarity]);
-    const h = document.createElement("h4"); h.textContent = d.name; h.style.color = RARITY_COLOR[d.rarity];
-    const sm = document.createElement("small");
-    sm.textContent = `${RARITY_NAME[d.rarity]}${d.kind !== "potion" ? ` · ${EQUIP_SLOT_NAME[d.kind as EquipSlot]}` : ""}${d.hands ? ` · ${d.hands === 2 ? "duas mãos" : "uma mão"}` : ""}`;
-    tip.append(h, sm);
-    const cmp = data.cmp && data.cmp.id !== d.id ? data.cmp : null;
-    for (const st of STAT_DEFS) {
-      const v = (d[st.k] as number) ?? 0;
-      if (!v && !(cmp && (cmp[st.k] as number))) continue;
-      const row = document.createElement("div"); row.className = "row";
-      const l = document.createElement("span"); l.textContent = v ? st.line(v) : `— ${st.name}`;
-      row.append(l);
-      if (cmp) {
-        const diff = v - (((cmp[st.k] as number) ?? 0));
-        const r = document.createElement("span");
-        r.className = diff > 0 ? "up" : diff < 0 ? "dn" : "eq";
-        r.textContent = diff > 0 ? `▲ ${diff}` : diff < 0 ? `▼ ${-diff}` : "=";
-        row.append(r);
-      }
-      tip.append(row);
-    }
-    if (d.heal) { const r = document.createElement("div"); r.textContent = `Cura ${d.heal} de vida`; tip.append(r); }
-    const wtd = d.wtype ? WEAPON_TYPES[d.wtype] : null;
-    if (wtd) { const r = document.createElement("div"); r.className = "eq"; r.textContent = wtd.name; tip.append(r); }
-    if (d.cls && d.cls !== opts.getClass()) { const r = document.createElement("div"); r.className = "bad"; r.textContent = `Exclusivo: ${CLASS_DEFS[d.cls].name}`; tip.append(document.createElement("hr"), r); }
-    else if (d.minLevel > opts.getLevel()) { const r = document.createElement("div"); r.className = "bad"; r.textContent = `Requer nível ${d.minLevel}`; tip.append(document.createElement("hr"), r); }
-    if (cmp) { const r = document.createElement("div"); r.className = "eq"; r.textContent = `vs. equipado: ${cmp.name}`; tip.append(r); }
-    if (data.extra) { const r = document.createElement("div"); r.className = "eq"; r.textContent = data.extra; tip.append(r); }
-    tip.style.display = "block";
-    moveTip(e);
-  }
-  function moveTip(e: MouseEvent) {
-    const w = tip.offsetWidth, h = tip.offsetHeight;
-    tip.style.left = `${Math.max(6, Math.min(innerWidth - w - 6, e.clientX + 14))}px`;
-    tip.style.top = `${Math.max(6, Math.min(innerHeight - h - 6, e.clientY + 14))}px`;
-  }
-  /** só com mouse: no toque o painel de detalhes (com a mesma comparação) faz esse papel e a tela não se polui */
-  function attachTip(b: HTMLElement, get: () => { def: ItemDef; cmp?: ItemDef | null; extra?: string }) {
-    b.onmouseenter = (e) => showTip(e, get());
-    b.onmousemove = moveTip;
-    b.onmouseleave = hideTip;
-  }
+  // ---- dica flutuante (mouse e toque): a ficha fica em itemtip.ts, igual em todo lugar
+  setItemTipContext({ getClass: () => opts.getClass(), getLevel: () => opts.getLevel() });
+  const hideTip = hideItemTip;
+  const attachTip = (b: HTMLElement, get: () => ItemTipData) => bindItemTip(b, get);
 
   // ---- arrastar e soltar (mouse): destaca os espaços compatíveis
   type Drag = { from: "slot"; i: number } | { from: "equip"; s: EquipSlot };
