@@ -33,7 +33,6 @@ import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
 import { showLevelUpBanner, levelUpGlow } from "./levelup-fx";
-import { WeaponAuras } from "./weapon-aura";
 import { mountParty, type PartyUi } from "./party";
 import { checkGpu } from "./gpucheck";
 
@@ -105,7 +104,6 @@ class WorldScene extends Phaser.Scene {
   private levelTags = new Map<string, Phaser.GameObjects.Text>();
   private bubbles = new Map<string, { t: Phaser.GameObjects.Text; until: number }>();
   private bars!: Phaser.GameObjects.Graphics;
-  private weaponAuras?: WeaponAuras;
   private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter; green: Phaser.GameObjects.Particles.ParticleEmitter };
   private hitstopUntil = 0;
   private touchMode = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -731,7 +729,6 @@ class WorldScene extends Phaser.Scene {
   // ---------------------------------------------------------------- efeitos
   private makeEffects() {
     this.bars = this.add.graphics().setDepth(1e5);
-    this.weaponAuras = new WeaponAuras(this); // brilho público da arma equipada
     this.shadows = this.add.graphics().setDepth(0.3); // sombra no chão dos sprites
     if (!this.textures.exists("spark")) {
       const tex = this.make.graphics({ x: 0, y: 0 }, false);
@@ -1322,7 +1319,6 @@ class WorldScene extends Phaser.Scene {
     if (!this.busy) this.driveJoystick(time);
     this.watchPortals();
     this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
-    this.weaponAuras?.update(time, st.players, this.sprites);
     const meNow = this.me();
     if (this.autoPot && meNow && !meNow.dead && meNow.hp / Math.max(1, meNow.maxHp) <= AUTO_POT_AT && time >= this.autoPotNext) {
       this.autoPotNext = time + 400;
