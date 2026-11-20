@@ -3,31 +3,64 @@ import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, t
  * Dica de item: a MESMA ficha em todo lugar (mochila, trocas, mercado, baú).
  * - PC: aparece ao passar o mouse e segue o ponteiro.
  * - Celular: aparece ao tocar no item, logo acima dele; some ao tocar fora.
- * A comparação com o equipado mostra ▲ (mais forte) e ▼ (mais fraco) em cada atributo.
+ * Atributos da arma incluem o kit do tipo (ex.: crítico da besta). Na comparação com o equipado,
+ * ▲ é melhor, ▼ é pior e = é igual. Para recarga e custo, valor menor é melhor.
  */
 
 export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string }
 export interface ItemTipCtx { getClass(): CharClass; getLevel(): number }
 
-export const STAT_DEFS: { k: keyof ItemDef; name: string; unit: string; line: (v: number) => string }[] = [
-  { k: "dmgPct", name: "poder", unit: "%", line: (v) => `+${v}% de poder` }, { k: "hp", name: "vida", unit: "", line: (v) => `+${v} de vida` },
-  { k: "crit", name: "crítico", unit: "%", line: (v) => `+${v}% de crítico` }, { k: "dr", name: "defesa", unit: "%", line: (v) => `−${v}% de dano recebido` },
-  { k: "cdr", name: "recarga menor", unit: "%", line: (v) => `−${v}% de recarga` }, { k: "mana", name: "recurso", unit: "", line: (v) => `+${v} de recurso máx.` },
-  { k: "regen", name: "regen.", unit: "/s", line: (v) => `+${v}/s de recurso` },
-];
+/** Uma linha de atributo: valor efetivo do item, rótulo, unidade e se "mais" é melhor. */
+interface StatRow { label: string; unit: string; value: number; up: boolean }
 
-/** diferença de atributos entre o item novo e o equipado (só o que muda); ▲ = mais forte, ▼ = mais fraco */
+/** Kit do tipo de arma (multiplicadores em torno de 1 e pontos de crítico). Só armas têm kit. */
+function kitOf(d: ItemDef): Record<string, number> {
+  if (d.kind !== "weapon" || !d.wtype) return {};
+  return (WEAPON_TYPES[d.wtype]?.kit as unknown as Record<string, number>) ?? {};
+}
+
+/** Todos os atributos do item, já com o kit da arma. Multiplicadores viram % (ex.: recarga 0,9 → −10%). */
+function rowsOf(d: ItemDef): StatRow[] {
+  const k = kitOf(d);
+  const pct = (m: number | undefined) => Math.round(((m ?? 1) - 1) * 100);
+  return [
+    { label: "poder", unit: "%", value: d.dmgPct ?? 0, up: true },
+    { label: "vida", unit: "", value: d.hp ?? 0, up: true },
+    { label: "crítico", unit: "%", value: (d.crit ?? 0) + (k.crit ?? 0), up: true },
+    { label: "redução de dano recebido", unit: "%", value: d.dr ?? 0, up: true },
+    { label: "recarga menor", unit: "%", value: d.cdr ?? 0, up: true },
+    { label: "recurso máx.", unit: "", value: d.mana ?? 0, up: true },
+    { label: "regen. de recurso", unit: "/s", value: d.regen ?? 0, up: true },
+    { label: "dano das habilidades", unit: "%", value: pct(k.dmg), up: true },
+    { label: "recarga das habilidades", unit: "%", value: pct(k.cd), up: false },
+    { label: "custo das habilidades", unit: "%", value: pct(k.cost), up: false },
+    { label: "área das habilidades", unit: "%", value: pct(k.radius), up: true },
+    { label: "alcance", unit: "%", value: pct(k.range), up: true },
+    { label: "cura", unit: "%", value: pct(k.heal), up: true },
+  ];
+}
+
+const signed = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}`;
+const valueText = (r: StatRow) => `${signed(r.value)}${r.unit} ${r.label}`;
+
+/**
+ * Diferença de atributos entre o item novo (`a`) e o equipado (`b`): só o que muda ou existe em um dos dois.
+ * `delta` é 1 (melhor), −1 (pior) ou 0 (igual). Usado no painel de detalhes do celular.
+ */
 export function compareStats(a: ItemDef, b: ItemDef): { text: string; delta: number }[] {
   const out: { text: string; delta: number }[] = [];
-  for (const st of STAT_DEFS) {
-    const d = Math.round((((a[st.k] as number) ?? 0) - ((b[st.k] as number) ?? 0)) * 100) / 100;
-    if (d) out.push({ text: `${d > 0 ? "▲" : "▼"} ${Math.abs(d)}${st.unit} ${st.name}`, delta: d });
-  }
+  const rb = rowsOf(b);
+  rowsOf(a).forEach((ra, i) => {
+    const diff = ra.value - rb[i].value;
+    if (!diff) { if (ra.value) out.push({ text: `= ${valueText(ra)}`, delta: 0 }); return; }
+    const better = ra.up ? diff > 0 : diff < 0;
+    out.push({ text: `${better ? "▲" : "▼"} ${signed(diff)}${ra.unit} ${ra.label}`, delta: better ? 1 : -1 });
+  });
   return out;
 }
 
 const CSS = `
-.iv-tip{position:fixed;z-index:60;max-width:260px;padding:9px 11px;border-radius:6px;pointer-events:none;color:#dbeaff;font:400 12px/1.4 Georgia,serif;
+.iv-tip{position:fixed;z-index:60;max-width:270px;padding:9px 11px;border-radius:6px;pointer-events:none;color:#dbeaff;font:400 12px/1.4 Georgia,serif;
   background:linear-gradient(180deg,rgba(14,22,34,.97),rgba(6,10,16,.97));border:1px solid var(--rc,#6b7d92);box-shadow:0 6px 18px rgba(0,0,0,.6)}
 .iv-tip h4{margin:0 0 1px;font:700 13px/1.2 "Cinzel",Georgia,serif}
 .iv-tip small{display:block;color:#8fb0cf;margin-bottom:4px}
@@ -68,21 +101,22 @@ function build(data: ItemTipData): void {
   sm.textContent = `${RARITY_NAME[d.rarity]}${d.kind !== "potion" ? ` · ${EQUIP_SLOT_NAME[d.kind as EquipSlot]}` : ""}${d.hands ? ` · ${d.hands === 2 ? "duas mãos" : "uma mão"}` : ""}`;
   t.append(h, sm);
   const cmp = data.cmp && data.cmp.id !== d.id ? data.cmp : null;
-  for (const st of STAT_DEFS) {
-    const v = (d[st.k] as number) ?? 0;
-    if (!v && !(cmp && (cmp[st.k] as number))) continue;
+  const rb = cmp ? rowsOf(cmp) : null;
+  rowsOf(d).forEach((r, i) => {
+    if (!r.value && !(rb && rb[i].value)) return;
     const row = document.createElement("div"); row.className = "row";
-    const l = document.createElement("span"); l.textContent = v ? st.line(v) : `— ${st.name}`;
+    const l = document.createElement("span"); l.textContent = r.value ? valueText(r) : `— ${r.label}`;
     row.append(l);
-    if (cmp) {
-      const diff = v - ((cmp[st.k] as number) ?? 0);
-      const r = document.createElement("span");
-      r.className = diff > 0 ? "up" : diff < 0 ? "dn" : "eq";
-      r.textContent = diff > 0 ? `▲ ${diff}` : diff < 0 ? `▼ ${-diff}` : "=";
-      row.append(r);
+    if (rb) {
+      const diff = r.value - rb[i].value;
+      const better = r.up ? diff > 0 : diff < 0;
+      const sp = document.createElement("span");
+      sp.className = !diff ? "eq" : better ? "up" : "dn";
+      sp.textContent = !diff ? "=" : `${better ? "▲" : "▼"} ${Math.abs(diff)}${r.unit}`;
+      row.append(sp);
     }
     t.append(row);
-  }
+  });
   if (d.heal) { const r = document.createElement("div"); r.textContent = `Cura ${d.heal} de vida`; t.append(r); }
   const wtd = d.wtype ? WEAPON_TYPES[d.wtype] : null;
   if (wtd) { const r = document.createElement("div"); r.className = "eq"; r.textContent = wtd.name; t.append(r); }
