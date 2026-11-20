@@ -6,7 +6,7 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, HEAL_BLOCK_AFTER_HIT_S, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, WORLD_GATE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
+  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, WORLD_GATE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type VaultSnapshot,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
@@ -144,7 +144,6 @@ class WorldScene extends Phaser.Scene {
   private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "" };
   /** auto-poção: bebe sozinho com a vida abaixo de AUTO_POT_AT (escolha salva neste navegador) */
   private autoPot = readAutoPot();
-  private lastHurtMs = -1e9; // último golpe que EU levei (a auto-poção espera o bloqueio de cura do servidor)
   private autoPotNext = 0; // próximo instante (ms) em que o auto pode beber, para não mandar várias de uma vez
   private travelWatch = 0;
   private gateBlock = false; // a travessia foi recusada (em combate): não mostra a tela de load de novo enquanto o jogador continuar em cima do portão
@@ -1117,7 +1116,6 @@ class WorldScene extends Phaser.Scene {
   private onHit(m: HitEvent) {
     const mine = m.by === this.room.sessionId;
     const toMe = m.k === "p" && m.id === this.room.sessionId;
-    if (toMe) this.lastHurtMs = performance.now();
     const { sx, sy } = toScreen(m.x, m.y);
     this.sprites.get(m.k === "e" ? `e:${m.id}` : `p:${m.id}`)?.trigger("hit", this.time.now);
     if (m.k === "e" && m.refl) { // dano devolvido pelo Escudo Refletor: raio azul do guerreiro ao inimigo
@@ -1322,7 +1320,7 @@ class WorldScene extends Phaser.Scene {
     this.watchPortals();
     this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
     const meNow = this.me();
-    if (this.autoPot && meNow && !meNow.dead && meNow.hp / Math.max(1, meNow.maxHp) <= AUTO_POT_AT && time >= this.autoPotNext && performance.now() - this.lastHurtMs >= HEAL_BLOCK_AFTER_HIT_S * 1000) {
+    if (this.autoPot && meNow && !meNow.dead && meNow.hp / Math.max(1, meNow.maxHp) <= AUTO_POT_AT && time >= this.autoPotNext) {
       this.autoPotNext = time + 400;
       if (this.inv.firstPotionSlot() >= 0) this.drinkPotion(); // sem poção na bolsa, não faz nada (sem aviso repetido)
     }
