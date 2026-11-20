@@ -25,6 +25,7 @@ export class Player extends Schema {
   @type("boolean") pvp = false; // modo PvP ativo (só entre quem também está nele)
   @type("number") pvpChan = 0; // canalização: 0 nenhuma, 1 entrando, 2 saindo (o cliente conta os segundos)
   @type("string") party = ""; // id do grupo ("" = sem grupo); o cliente marca a placa de quem é do seu grupo
+  @type("string") weaponRarity = ""; // raridade da arma equipada ("" = sem arma): o cliente desenha o brilho público no personagem
 
   // --- só no servidor (não sincronizado) ---
   charId = ""; // linha em `characters`

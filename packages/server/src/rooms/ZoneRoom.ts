@@ -463,6 +463,8 @@ export class ZoneRoom extends Room<ZoneState> {
   /** vida máxima e dano dependem do nível E do equipamento */
   private refreshStats(p: Player, fill = false) {
     p.gear = bonuses(p.inv, this.classOf(p).id);
+    const wId = p.inv.equip.weapon;
+    p.weaponRarity = (wId ? ITEMS[wId]?.rarity : undefined) ?? "";
     p.maxHp = maxHpFor(this.classOf(p).id, p.level, p.gear.hp);
     p.hp = fill ? p.maxHp : Math.min(p.hp, p.maxHp);
     p.maxMana = maxManaFor(this.classOf(p).id, p.level) + p.gear.mana;
