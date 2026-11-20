@@ -122,18 +122,19 @@ export class ZoneRoom extends Room<ZoneState> {
 
     // Travessia: basta pisar no portal (checado a cada tick); este pedido explícito passa pela MESMA validação de distância
     this.onMessage(Msg.Travel, (client, p: { to?: unknown }) => {
-      if (!this.allow(client)) return;
+      if (!this.allow(client)) return void client.send(Evt.TravelDenied, {});
       const pl = this.state.players.get(client.sessionId);
-      if (!pl || pl.dead || pl.traveling || typeof p?.to !== "number") return;
+      if (!pl || pl.dead || typeof p?.to !== "number") return void client.send(Evt.TravelDenied, {});
+      if (pl.traveling) return; // já atravessando: a resposta Travel está a caminho
       if (this.zone.safe) { // cidade: o pedido vem do mapa-mundo do portão; vale qualquer zona de combate, mas só junto do portão
         const gate = this.zone.portals.find((q) => q.to === WORLD_GATE);
         const dest = ZONES[p.to as number];
-        if (!gate || !dest || dest.safe) return;
-        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5) return this.notify(client.sessionId, "Você está longe demais do portão.");
+        if (!gate || !dest || dest.safe) return void client.send(Evt.TravelDenied, {});
+        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
         return void this.travel(client.sessionId, pl, { to: dest.id });
       }
       const portal = this.zone.portals.find((q) => q.to === p.to);
-      if (!portal || dist(pl.x, pl.y, portal.x, portal.y) > portal.r + 0.5) return this.notify(client.sessionId, "Você está longe demais do portal.");
+      if (!portal || dist(pl.x, pl.y, portal.x, portal.y) > portal.r + 0.5) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portal."); }
       void this.travel(client.sessionId, pl, portal);
     });
 
@@ -357,6 +358,7 @@ export class ZoneRoom extends Room<ZoneState> {
       p.traveling = false; // não atravessa sem gravar: tenta de novo quando pisar no portal outra vez
       p.invulnUntil = 0;
       if (fromDeath) p.deadUntil = this.t + 2; // morto: tenta de novo em 2 s
+      this.clients.getById(id)?.send(Evt.TravelDenied, {}); // o cliente tira a tela de load
       return this.notify(id, "A passagem falhou. Tente de novo.");
     }
     arrivals.set(p.charId, fromDeath ? 0 : this.zone.id); // 0 = sem portal de origem: nasce no ponto de nascimento da cidade

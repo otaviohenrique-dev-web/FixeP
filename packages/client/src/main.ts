@@ -166,6 +166,12 @@ class WorldScene extends Phaser.Scene {
     this.loader.show({ zone: z.name, theme: z.theme, verb });
   }
 
+  /** o servidor não respondeu à travessia (recusou sem avisar, mensagem perdida): solta o jogador em vez de deixar o load preso */
+  private armTravelWatch(ms = 6000) {
+    window.clearTimeout(this.travelWatch);
+    this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, ms);
+  }
+
   /** travessia aprovada pelo servidor: sai da sala antiga e entra na da nova zona em paralelo ao fade (mesmo token, sem recarregar) */
   private travelTo(zoneId: number, from: Room) {
     if (this.leaving || from !== this.room || this.entering) return;
@@ -177,7 +183,10 @@ class WorldScene extends Phaser.Scene {
 
   private async enterZone(zoneId: number, why: "boot" | "travel" | "reconnect") {
     this.entering = true;
-    try { await this.enterZoneInner(zoneId, why); } finally { this.entering = false; }
+    // rede de segurança: se a entrada não terminar em 20 s (sala que não responde, estado que não chega), recarrega a página
+    // mantendo o token; a zona já foi gravada, então o jogador volta ao jogo sozinho, sem precisar apertar F5
+    const guard = window.setTimeout(() => { console.warn("[viagem] entrada travada; recarregando"); location.reload(); }, 20000);
+    try { await this.enterZoneInner(zoneId, why); } finally { window.clearTimeout(guard); this.entering = false; }
   }
 
   async create() {
@@ -205,7 +214,12 @@ class WorldScene extends Phaser.Scene {
     const token = (this.sys.settings.data as { token: string }).token;
     const gone = this.room; // sala anterior (já saindo)
     // 1) começa a entrar na sala JÁ: roda junto do desenho do mapa e da arte
-    const joinP: Promise<Room | null> = new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token, load: true }).then((r) => r, () => null);
+    const joinP: Promise<Room | null> = (async () => { // a sala nova às vezes recusa de primeira (a sessão antiga ainda não soltou o personagem): tenta de novo
+      for (let i = 0; i < 3; i++) {
+        try { return await new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token, load: true }); } catch { await new Promise((r) => setTimeout(r, 400 + i * 500)); }
+      }
+      return null;
+    })();
     if (gone) this.room = undefined as unknown as Room; // as mensagens da sala antiga são ignoradas
     // 2) mundo anterior fora, mapa novo
     this.resetWorld();
@@ -303,7 +317,7 @@ class WorldScene extends Phaser.Scene {
     });
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
-    this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.room.send(Msg.Travel, { to }); });
+    this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.armTravelWatch(); this.room.send(Msg.Travel, { to }); });
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
       send: (text) => {
@@ -595,7 +609,7 @@ class WorldScene extends Phaser.Scene {
     if (!on) { this.gateBlock = false; return; }
     if (this.gateBlock) return;
     this.beginTravel(on.to);
-    this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, 6000); // o servidor não confirmou: libera
+    this.armTravelWatch(); // o servidor não confirmou: libera
   }
 
   /** liga ou desliga a auto-poção e guarda a escolha */
