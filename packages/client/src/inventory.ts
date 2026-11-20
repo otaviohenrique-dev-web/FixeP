@@ -64,6 +64,18 @@ const CSS = `
 .iv-es.p1,.iv-slot.p1{animation:iv-pulse 3.2s ease-in-out infinite}
 .iv-es.p2,.iv-slot.p2{animation:iv-pulse 2.2s ease-in-out infinite}
 .iv-es.p3,.iv-slot.p3{animation:iv-pulse 1.5s ease-in-out infinite}
+/* arma equipada: brilho pela raridade (comum sem brilho; a cada raridade o halo cresce e pulsa mais rápido) */
+@keyframes iv-w1{0%,100%{box-shadow:0 0 6px var(--rc),inset 0 0 8px rgba(0,0,0,.7)}50%{box-shadow:0 0 12px var(--rc),inset 0 0 8px rgba(0,0,0,.7)}}
+@keyframes iv-w2{0%,100%{box-shadow:0 0 10px var(--rc),0 0 2px var(--rc),inset 0 0 10px rgba(0,0,0,.7)}50%{box-shadow:0 0 22px var(--rc),0 0 6px var(--rc),inset 0 0 10px rgba(0,0,0,.7)}}
+@keyframes iv-w3{0%,100%{box-shadow:0 0 14px var(--rc),0 0 4px #fff,inset 0 0 12px rgba(0,0,0,.7)}50%{box-shadow:0 0 34px var(--rc),0 0 10px var(--rc),inset 0 0 12px rgba(0,0,0,.7)}}
+.iv-es.wglow.w1{animation:iv-w1 3.2s ease-in-out infinite}
+.iv-es.wglow.w2{animation:iv-w1 2.4s ease-in-out infinite}
+.iv-es.wglow.w3{animation:iv-w2 2.0s ease-in-out infinite}
+.iv-es.wglow.w4{animation:iv-w2 1.5s ease-in-out infinite}
+.iv-es.wglow.w5{animation:iv-w3 1.1s ease-in-out infinite}
+.iv-es.wglow .iv-ic{filter:drop-shadow(0 0 3px var(--rc))}
+.iv-es.wglow.w3 .iv-ic,.iv-es.wglow.w4 .iv-ic{filter:drop-shadow(0 0 6px var(--rc))}
+.iv-es.wglow.w5 .iv-ic{filter:drop-shadow(0 0 10px var(--rc)) brightness(1.15)}
 .iv-es.can,.iv-es.no{animation-name:iv-can}
 @media (prefers-reduced-motion:reduce){.iv-es,.iv-slot,.iv-sil .em{animation:none!important}}
 .iv-acc{display:flex;gap:18px;justify-content:center;padding:12px 0 2px}
@@ -161,16 +173,27 @@ function compareStats(a: ItemDef, b: ItemDef): { text: string; delta: number }[]
   return out;
 }
 /** 0 = sem brilho; épico pulsa leve, lendário médio, mítico forte */
-const pulse = (d: ItemDef): string[] => { const r = ["common", "uncommon", "rare", "epic", "legendary", "mythic"].indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
+const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
 
 const SILHOUETTE = `<svg class="iv-sil" viewBox="0 0 262 330" aria-hidden="true" shape-rendering="geometricPrecision"><defs>
-  <linearGradient id="ivg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34476a"/><stop offset=".5" stop-color="#1b2a42"/><stop offset="1" stop-color="#0b1320"/></linearGradient>
-  <radialGradient id="ivh" cx=".5" cy=".42" r=".5"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".2"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient></defs>
-  <ellipse cx="131" cy="160" rx="118" ry="150" fill="url(#ivh)"/>
-  <ellipse cx="131" cy="318" rx="52" ry="6" fill="#000" opacity=".4"/>
-  <path d="M131 22C134.7 22.0 139.5 22.7 142 25C144.5 27.3 145.7 32.2 146 36C146.3 39.8 145.0 44.3 144 48C143.0 51.7 141.2 55.0 140 58C138.8 61.0 137.5 63.3 137 66C136.5 68.7 134.3 71.5 137 74C139.7 76.5 146.7 79.0 153 81C159.3 83.0 169.7 83.7 175 86C180.3 88.3 182.8 90.7 185 95C187.2 99.3 187.2 105.8 188 112C188.8 118.2 189.5 126.3 190 132C190.5 137.7 190.0 139.7 191 146C192.0 152.3 194.5 162.7 196 170C197.5 177.3 198.7 184.2 200 190C201.3 195.8 204.0 201.0 204 205C204.0 209.0 201.8 213.8 200 214C198.2 214.2 195.0 210.0 193 206C191.0 202.0 189.8 196.0 188 190C186.2 184.0 183.8 177.0 182 170C180.2 163.0 178.5 155.3 177 148C175.5 140.7 174.0 132.7 173 126C172.0 119.3 171.8 107.7 171 108C170.2 108.3 169.5 120.7 168 128C166.5 135.3 162.5 143.7 162 152C161.5 160.3 163.5 170.3 165 178C166.5 185.7 170.2 190.0 171 198C171.8 206.0 171.5 217.3 170 226C168.5 234.7 163.0 242.3 162 250C161.0 257.7 164.7 264.3 164 272C163.3 279.7 158.3 289.5 158 296C157.7 302.5 163.7 307.7 162 311C160.3 314.3 151.8 316.0 148 316C144.2 316.0 140.2 314.3 139 311C137.8 307.7 140.8 302.5 141 296C141.2 289.5 140.3 279.7 140 272C139.7 264.3 139.5 259.3 139 250C138.5 240.7 138.3 224.7 137 216C135.7 207.3 133.0 198.0 131 198C129.0 198.0 126.3 207.3 125 216C123.7 224.7 123.5 240.7 123 250C122.5 259.3 122.3 264.3 122 272C121.7 279.7 120.8 289.5 121 296C121.2 302.5 124.2 307.7 123 311C121.8 314.3 117.8 316.0 114 316C110.2 316.0 101.7 314.3 100 311C98.3 307.7 104.3 302.5 104 296C103.7 289.5 98.7 279.7 98 272C97.3 264.3 101.0 257.7 100 250C99.0 242.3 93.5 234.7 92 226C90.5 217.3 90.2 206.0 91 198C91.8 190.0 95.5 185.7 97 178C98.5 170.3 100.5 160.3 100 152C99.5 143.7 95.5 135.3 94 128C92.5 120.7 91.8 108.3 91 108C90.2 107.7 90.0 119.3 89 126C88.0 132.7 86.5 140.7 85 148C83.5 155.3 81.8 163.0 80 170C78.2 177.0 75.8 184.0 74 190C72.2 196.0 71.0 202.0 69 206C67.0 210.0 63.8 214.2 62 214C60.2 213.8 58.0 209.0 58 205C58.0 201.0 60.7 195.8 62 190C63.3 184.2 64.5 177.3 66 170C67.5 162.7 70.0 152.3 71 146C72.0 139.7 71.5 137.7 72 132C72.5 126.3 73.2 118.2 74 112C74.8 105.8 74.8 99.3 77 95C79.2 90.7 81.7 88.3 87 86C92.3 83.7 102.7 83.0 109 81C115.3 79.0 122.3 76.5 125 74C127.7 71.5 125.5 68.7 125 66C124.5 63.3 123.2 61.0 122 58C120.8 55.0 119.0 51.7 118 48C117.0 44.3 115.7 39.8 116 36C116.3 32.2 117.5 27.3 120 25C122.5 22.7 127.3 22.0 131 22Z" fill="url(#ivg)" stroke="rgba(150,190,235,.55)" stroke-width="1.4" stroke-linejoin="round"/>
-  <g fill="none" stroke="rgba(150,190,235,.2)" stroke-width="1.1" stroke-linecap="round"><path d="M131 84v100M100 104q31 14 62 0M110 172q21 10 42 0M131 198v30M117 250q-4 14-2 30M145 250q4 14 2 30"/></g>
-  <g class="em" fill="#ff8a3d"><circle cx="131" cy="100" r="2.6"/></g></svg>`;
+  <linearGradient id="ivg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3d5e"/><stop offset="1" stop-color="#101b2d"/></linearGradient>
+  <linearGradient id="ivr" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9fc2ea" stop-opacity=".0"/><stop offset=".5" stop-color="#9fc2ea" stop-opacity=".35"/><stop offset="1" stop-color="#9fc2ea" stop-opacity="0"/></linearGradient>
+  <radialGradient id="ivh" cx=".5" cy=".4" r=".55"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".16"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="131" cy="165" r="150" fill="url(#ivh)"/>
+  <ellipse cx="131" cy="316" rx="60" ry="7" fill="#000" opacity=".35"/>
+  <g fill="url(#ivg)" stroke="#5c7aa3" stroke-opacity=".55" stroke-width="1.2">
+    <ellipse cx="131" cy="58" rx="23" ry="27"/>
+    <path d="M119 80h24v14a12 12 0 0 1-24 0z"/>
+    <path d="M131 112c-30 0-52 4-62 14c-6 6-8 18-8 30v40c0 12 6 24 14 30c10 8 20 10 30 10h72c10 0 20-2 30-10c8-6 14-18 14-30v-40c0-12-2-24-8-30c-10-10-32-14-62-14z"/>
+    <path d="M90 124c-12 6-20 20-26 46c-6 26-10 52-10 66c0 8 6 12 12 9c6-3 8-12 10-22c3-18 8-42 14-62z"/>
+    <path d="M172 124c12 6 20 20 26 46c6 26 10 52 10 66c0 8-6 12-12 9c-6-3-8-12-10-22c-3-18-8-42-14-62z"/>
+    <path d="M104 214h54l6 30c2 14 0 32-4 52c-2 10-6 16-12 16s-8-6-10-16l-7-40h-2l-7 40c-2 10-4 16-10 16s-10-6-12-16c-4-20-6-38-4-52z"/>
+    <path d="M158 214h-54l-6 30c-2 14 0 32 4 52c2 10 6 16 12 16s8-6 10-16l7-40h2l7 40c2 10 4 16 10 16s10-6 12-16c4-20 6-38 4-52z"/>
+  </g>
+  <g fill="url(#ivr)"><rect x="66" y="150" width="130" height="2"/><rect x="66" y="204" width="130" height="2"/></g>
+  <g fill="none" stroke="rgba(150,190,235,.18)" stroke-width="1" stroke-linecap="round"><path d="M131 124v90M104 180q27 8 54 0"/></g>
+  <g class="em" fill="#ff8a3d"><circle cx="131" cy="222" r="2.2"/></g></svg>`;
 
 /** posições (em % do boneco) de cada espaço */
 const EQ_POS: Record<EquipSlot | "potion", [number, number]> = {
@@ -351,6 +374,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       b.insertAdjacentHTML("afterbegin", icon(def));
       b.classList.add("full", ...pulse(def));
       b.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
+      if (s === "weapon") b.classList.add("wglow", `w${RARITY_ORDER.indexOf(def.rarity)}`); // a arma brilha pela raridade: mais forte a cada nível
       b.draggable = true;
       b.ondragstart = (e) => startDrag(e, { from: "equip", s });
       b.ondragend = endDrag;

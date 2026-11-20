@@ -44,7 +44,7 @@ Não é preciso Google, Discord nem Supabase para desenvolver.
 
 ## Git
 - A branch **`main` é protegida**: ninguém envia direto. Todo trabalho vai por **branch própria + Pull Request**.
-- Nomes de branch: `feat/...` (código), `art/...` (arte), `docs/...` (documentação).
+- Nomes de branch: `feat/...` (código e arte), `docs/...` (documentação).
 - Nunca use `git push --force`, `git reset --hard` ou `git clean` sem explicar o risco e pedir confirmação.
 - Arquivos de arte pesados (`.psd`, `.aseprite`, PNG em `assets/`, `.wav`...) ficam no **Git LFS** (`git lfs install` uma vez por máquina).
 
@@ -54,8 +54,7 @@ Não é preciso Google, Discord nem Supabase para desenvolver.
 - O login no GitHub é feito pela própria pessoa, no navegador.
 
 ## Papéis
-- **Dev principal:** código em `packages/`, banco, deploy e a integração da arte no jogo.
-- **Dev de arte:** toda a arte em `assets/` (e `docs/ART_GUIDE.md`). Não altera `packages/`; se precisar de mudança no código, abre uma Issue.
+Projeto solo: uma pessoa cuida de código (`packages/`), arte (`assets/`, `docs/ART_GUIDE.md`), banco, deploy e integração. Não há mais dev de arte nem divisão de papéis.
 
 ## Especificações de arte (resumo; completo em `docs/ART_GUIDE.md`)
 - Pixel art. Tile isométrico **64 x 32 px**. Personagens em quadro de **64 x 64 px**.

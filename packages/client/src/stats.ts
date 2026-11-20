@@ -21,6 +21,9 @@ const CSS = `
 .st b{font-weight:700}
 .st.off{display:none}
 .st .sp{display:none;font-style:normal}
+.st .dot{display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;vertical-align:middle;background:#3ddc6b;animation:st-pulse 1.8s ease-out infinite}
+@keyframes st-pulse{0%{box-shadow:0 0 0 0 rgba(61,220,107,.75)}70%,100%{box-shadow:0 0 0 7px rgba(61,220,107,0)}}
+@media (prefers-reduced-motion: reduce){.st .dot{animation:none}}
 `;
 const color = (v: number, good: number, ok: number, invert = false) => {
   const bad = invert ? v < ok : v > ok;
@@ -52,7 +55,7 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
     if (!on) return;
     const f = `<b style="color:${color(fps, 40, 25, true)}">${fps}</b> FPS`;
     const p = ping < 0 ? "<b>--</b> ms" : `<b style="color:${color(ping, 90, 180)}">${Math.round(ping)}</b> ms`;
-    const o = online < 0 ? "" : `<br><b>${online}</b> online`;
+    const o = online < 0 ? "" : `<br><i class="dot"></i><b>${online}</b> online`;
     el.innerHTML = `${f}<i class="sp"> · </i><br>${p} ping${o}`;
   };
 

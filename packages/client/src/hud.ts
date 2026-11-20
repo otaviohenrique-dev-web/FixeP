@@ -1,4 +1,4 @@
-import { LEVEL_TIER_COLORS, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -68,7 +68,6 @@ const ICON: Record<string, string> = {
   healFocus: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M7 0h2v3H7zM7 13h2v3H7zM0 7h3v2H0zM13 7h3v2h-3zM7 5h2v2h2v2H9v2H7V9H5V7h2z"/></svg>`,
 };
 
-const TIER_NAMES = ["Bronze", "Prata", "Ouro", "Gelo", "Violeta", "Brasa"];
 const TIER_VARS = [["#9a8460", "#dccfb0"], ["#c9d3df", "#f4f8ff"], ["#f0c34a", "#fff0b8"], ["#4cc3ee", "#d4f4ff"], ["#b575f5", "#ecd7ff"], ["#ff6a3d", "#ffd9b8"]]; // as mesmas cores das molduras (.hd-pwrap.tN)
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 
@@ -512,8 +511,8 @@ export function mountHud(opts: HudOptions): Hud {
       const start = tier === 0 ? 1 : tier * 10;
       const next = (tier + 1) * 10;
       const rr = need > 0 ? Math.min(1, xp / need) : 1;
-      if (tier >= 5) { trFill.style.transform = "scaleX(1)"; trTxt.textContent = `${TIER_NAMES[tier]} · máx`; }
-      else { trFill.style.transform = `scaleX(${Math.min(1, (level - start + rr) / (next - start))})`; trTxt.textContent = `${TIER_NAMES[tier]} ${level}/${next}`; }
+      if (tier >= 5) { trFill.style.transform = "scaleX(1)"; trTxt.textContent = `${LEVEL_TIER_TITLES[tier]} · máx`; }
+      else { trFill.style.transform = `scaleX(${Math.min(1, (level - start + rr) / (next - start))})`; trTxt.textContent = `${LEVEL_TIER_TITLES[tier]} ${level}/${next}`; }
       const r = need > 0 ? Math.min(1, xp / need) : 1;
       lvTxt.textContent = need > 0 ? `NV ${level}  ·  ${Math.floor(xp)} / ${need}` : `NV ${level}  ·  MÁX`;
       xpFill.style.transform = `scaleX(${r})`;

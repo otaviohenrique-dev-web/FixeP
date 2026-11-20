@@ -1,9 +1,9 @@
 import Phaser from "phaser";
-import { LEVEL_TIER_COLORS, levelTier } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier } from "@frixep/shared";
 /**
  * Efeitos de subir de nível:
  * - banner "Level Up!" no centro da tela (só para quem subiu), no mesmo estilo do aviso de item raro;
- * - brilho no personagem na cor da sua faixa de borda (bronze, prata, ouro, gelo, violeta, brasa): anel, coluna de luz
+ * - brilho no personagem na cor da sua faixa de borda (cinzas, sombra, abismo, gelo, trevas, ruína): anel, coluna de luz
  *   e um halo que pulsa sob os pés por alguns segundos. Vale para todos que estão na tela, não só para você.
  */
 
@@ -47,7 +47,7 @@ export function showLevelUpBanner(level: number): void {
   big.textContent = "Level Up!";
   const lv = document.createElement("div");
   lv.className = "lvb-lv";
-  lv.textContent = `Nível ${level}`; // textContent: nunca interpretar HTML
+  lv.textContent = `Nível ${level} · ${LEVEL_TIER_TITLES[levelTier(level)]}`; // textContent: nunca interpretar HTML
   txt.append(big, lv);
   el.append(rays, txt);
   document.body.append(el);

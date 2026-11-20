@@ -172,7 +172,7 @@ Até **4 jogadores**. O grupo vive no servidor (`packages/server/src/game/party.
 ### Corpos provisórios
 
 Sem arte final em `assets/characters` e `assets/monsters`, o jogo usa os corpos de `assets/placeholder/`. Guerreiro, Arqueiro, Clérigo e Mago (chapéu pontudo e cristal violeta) têm desenho dark fantasy (aço escuro e capa carmesim; capuz e arco longo; manto de cinzas com cajado de brasa) em `tools/gen_heroes.py`; o Esqueleto continua simples. Gerados por
-`python tools/gen_placeholder_bodies.py`, precisa de Pillow). Quando o dev de arte entregar um atlas, ele passa na frente
+`python tools/gen_placeholder_bodies.py`, precisa de Pillow). Quando um atlas final entrar em `assets/characters` ou `assets/monsters`, ele passa na frente
 automaticamente. Esses PNGs ficam **fora do Git LFS** de propósito (`.gitattributes`).
 
 ## Ícones dos itens
