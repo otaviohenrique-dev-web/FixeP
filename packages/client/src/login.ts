@@ -29,7 +29,7 @@ export interface ScreenHandle extends LoginHandle {
 // ---------------------------------------------------------------- utilidades
 const VB_W = 1600;
 const VB_H = 900;
-const FIRE = { x: 800, y: 600 }; // base da fogueira, em unidades do SVG
+const FIRE = { x: 640, y: 598 }; // lanterna do viajante, em unidades do SVG (luz quente da cena)
 const PAD = 40; // folga das camadas para o parallax não revelar bordas
 const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
@@ -43,172 +43,154 @@ function rng(seed: number) {
   };
 }
 
-function ridge(base: number, amp: number, seed: number, fill: string, edge?: string): string {
+// ---------------------------------------------------------------- cena (SVG)
+/** relevo suave: soma de senoides (sem ruído), com preenchimento e fio de luz fria no topo */
+function hills(base: number, amp: number, seed: number, fill: string, edge?: string): string {
   const r = rng(seed);
-  const p1 = r() * 6, p2 = r() * 6;
+  const p1 = r() * 6, p2 = r() * 6, p3 = r() * 6;
   let d = `M-20,${VB_H}`;
-  for (let x = -20; x <= VB_W + 20; x += 16) {
-    const y = base - amp * (0.5 * Math.sin(x * 0.0042 + p1) + 0.32 * Math.sin(x * 0.011 + p2) + 0.18 * r());
+  for (let x = -20; x <= VB_W + 20; x += 10) {
+    const y = base - amp * (0.55 * Math.sin(x * 0.0031 + p1) + 0.3 * Math.sin(x * 0.0074 + p2) + 0.15 * Math.sin(x * 0.0152 + p3));
     d += ` L${x},${y.toFixed(1)}`;
   }
   d += ` L${VB_W + 20},${VB_H} Z`;
-  const line = edge ? `<path d="${d}" fill="none" stroke="${edge}" stroke-width="1.4"/>` : "";
+  const line = edge ? `<path d="${d}" fill="none" stroke="${edge}" stroke-width="1.6"/>` : "";
   return `<path d="${d}" fill="${fill}"/>${line}`;
 }
 
-function tree(r: () => number, x: number, y: number, len: number, ang: number, depth: number, w: number, out: string[]) {
+/** árvore retorcida: galhos curvos e grossos que afinam, sem gravetos pontudos */
+function gnarl(r: () => number, x: number, y: number, len: number, ang: number, depth: number, w: number, out: string[]) {
   const x2 = x + Math.sin(ang) * len;
   const y2 = y - Math.cos(ang) * len;
-  out.push(`<line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke-width="${w.toFixed(1)}"/>`);
+  const bend = (r() - 0.5) * len * 0.55;
+  const mx = (x + x2) / 2 + Math.cos(ang) * bend, my = (y + y2) / 2 + Math.sin(ang) * bend;
+  out.push(`<path d="M${x.toFixed(1)},${y.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" stroke-width="${w.toFixed(1)}"/>`);
   if (depth <= 0) return;
-  const n = depth > 2 && r() < 0.35 ? 3 : 2;
+  const n = depth > 2 ? 2 : r() < 0.5 ? 2 : 1;
   for (let i = 0; i < n; i++) {
-    const da = (r() - 0.5) * 1.0 + (i - (n - 1) / 2) * 0.4;
-    tree(r, x2, y2, len * (0.66 + r() * 0.16), ang + da, depth - 1, Math.max(0.7, w * 0.66), out);
+    const da = (i === 0 ? -1 : 1) * (0.35 + r() * 0.5) * (n === 1 ? (r() < 0.5 ? -1 : 1) : 1);
+    gnarl(r, x2, y2, len * (0.7 + r() * 0.1), ang + da, depth - 1, Math.max(2.6, w * 0.7), out);
   }
 }
-const treeSvg = (seed: number, x: number, y: number, len: number, depth: number, w: number, color: string, tilt = 0) => {
+const gnarlSvg = (seed: number, x: number, y: number, len: number, depth: number, w: number, color: string, lean = 0) => {
   const out: string[] = [];
-  tree(rng(seed), x, y, len, tilt, depth, w, out);
-  return `<g stroke="${color}" stroke-linecap="round" fill="none">${out.join("")}</g>`;
+  gnarl(rng(seed), x, y, len, lean, depth, w, out);
+  return `<g stroke="${color}" stroke-linecap="round" stroke-linejoin="round" fill="none">${out.join("")}</g>`;
 };
 
-// ---------------------------------------------------------------- cena (SVG)
 function skyLayer(): string {
   const r = rng(7);
   let stars = "";
-  for (let i = 0; i < 230; i++) {
-    const x = r() * VB_W, y = Math.pow(r(), 1.5) * 470, rad = 0.4 + r() * 1.1, o = 0.25 + r() * 0.75;
+  for (let i = 0; i < 260; i++) {
+    const x = r() * VB_W, y = Math.pow(r(), 1.6) * 480, rad = 0.35 + r() * 1.0, o = 0.2 + r() * 0.7;
     const tw = r() < 0.12 ? ` class="fx-tw" style="animation-delay:${(r() * 4).toFixed(2)}s"` : "";
-    stars += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rad.toFixed(2)}" fill="#cfe6ff" opacity="${o.toFixed(2)}"${tw}/>`;
+    stars += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rad.toFixed(2)}" fill="#d6e4ff" opacity="${o.toFixed(2)}"${tw}/>`;
   }
   return `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
   <defs>
     <linearGradient id="fxSky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#02050b"/><stop offset=".45" stop-color="#0a1830"/>
-      <stop offset=".78" stop-color="#16395a"/><stop offset="1" stop-color="#1d4a6b"/>
+      <stop offset="0" stop-color="#02030a"/><stop offset=".38" stop-color="#0a0f26"/>
+      <stop offset=".7" stop-color="#1b2347"/><stop offset=".9" stop-color="#3a3156"/><stop offset="1" stop-color="#4a3a5c"/>
     </linearGradient>
-    <radialGradient id="fxMoonGlow"><stop offset="0" stop-color="#b9dcff" stop-opacity=".45"/><stop offset="1" stop-color="#b9dcff" stop-opacity="0"/></radialGradient>
-    <radialGradient id="fxMoon" cx=".38" cy=".35"><stop offset="0" stop-color="#f4fbff"/><stop offset="1" stop-color="#a9c8e4"/></radialGradient>
+    <radialGradient id="fxMoonGlow"><stop offset="0" stop-color="#c9d8ff" stop-opacity=".5"/><stop offset=".35" stop-color="#8fa6e6" stop-opacity=".16"/><stop offset="1" stop-color="#8fa6e6" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fxMoon" cx=".38" cy=".35"><stop offset="0" stop-color="#fbfcff"/><stop offset=".7" stop-color="#cfd9ee"/><stop offset="1" stop-color="#97a8c9"/></radialGradient>
+    <radialGradient id="fxAur" cx=".5" cy=".5"><stop offset="0" stop-color="#4fe0c0" stop-opacity=".16"/><stop offset="1" stop-color="#4fe0c0" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fxVio" cx=".5" cy=".5"><stop offset="0" stop-color="#8a5bd6" stop-opacity=".18"/><stop offset="1" stop-color="#8a5bd6" stop-opacity="0"/></radialGradient>
+    <filter id="fxSoft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="26"/></filter>
   </defs>
   <rect width="${VB_W}" height="${VB_H}" fill="url(#fxSky)"/>
+  <ellipse cx="420" cy="250" rx="520" ry="120" fill="url(#fxVio)" transform="rotate(-8 420 250)"/>
+  <ellipse cx="760" cy="150" rx="460" ry="70" fill="url(#fxAur)" transform="rotate(6 760 150)"/>
   ${stars}
-  <circle cx="1190" cy="200" r="230" fill="url(#fxMoonGlow)"/>
-  <circle cx="1190" cy="200" r="52" fill="url(#fxMoon)"/>
-  <g fill="#8fb0cf" opacity=".35"><circle cx="1174" cy="188" r="9"/><circle cx="1204" cy="214" r="6"/><circle cx="1196" cy="176" r="4"/></g>
+  <circle cx="1190" cy="230" r="330" fill="url(#fxMoonGlow)"/>
+  <g filter="url(#fxSoft)" fill="#1a2040" opacity=".75"><ellipse cx="1000" cy="300" rx="320" ry="30"/><ellipse cx="1390" cy="210" rx="260" ry="22"/><ellipse cx="560" cy="330" rx="380" ry="26"/></g>
+  <circle cx="1190" cy="230" r="66" fill="url(#fxMoon)"/>
+  <g fill="#7f90b4" opacity=".32"><circle cx="1172" cy="216" r="11"/><circle cx="1208" cy="246" r="7"/><circle cx="1198" cy="204" r="5"/><circle cx="1166" cy="248" r="5"/></g>
 </svg>`;
 }
 
 function farLayer(): string {
   return `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-  ${ridge(500, 150, 11, "#102640", "rgba(170,210,245,.28)")}
-  ${ridge(560, 110, 23, "#0b1c31", "rgba(150,195,235,.22)")}
+  <defs><linearGradient id="fxMtn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27325a"/><stop offset=".55" stop-color="#141b36"/><stop offset="1" stop-color="#0c1124"/></linearGradient></defs>
+  ${hills(520, 150, 11, "url(#fxMtn)", "rgba(190,205,255,.30)")}
+  ${hills(585, 105, 23, "#0e1428", "rgba(160,180,240,.20)")}
 </svg>`;
+}
+
+/** fortaleza-catedral em ruínas: torres com ameias, arcos ogivais com luz fraca, rosácea fria */
+function castle(): string {
+  const body = "#070a16";
+  const win = (x: number, y: number, w: number, h: number) =>
+    `<path d="M${x},${y + h} L${x},${y + w * 0.55} Q${x},${y} ${x + w / 2},${y - w * 0.2} Q${x + w},${y} ${x + w},${y + w * 0.55} L${x + w},${y + h} Z" fill="#e0933c" opacity=".55"/>`;
+  const crenel = (x: number, y: number, w: number) => {
+    let c = "";
+    for (let i = 0; i < w; i += 14) c += `<rect x="${x + i}" y="${y - 9}" width="8" height="10"/>`;
+    return c;
+  };
+  return `
+  <g fill="${body}">
+    <rect x="1010" y="470" width="470" height="200"/>
+    <rect x="1086" y="372" width="130" height="120"/>
+    <path d="M1076,372 L1076,352 Q1151,296 1226,352 L1226,372 Z"/>
+    <rect x="1038" y="338" width="64" height="334"/>${crenel(1034, 338, 72)}
+    <rect x="1298" y="300" width="86" height="372"/>${crenel(1292, 300, 98)}
+    <path d="M1304,300 L1304,260 Q1341,222 1378,260 L1378,300 Z"/>
+    <rect x="1410" y="404" width="56" height="268"/>${crenel(1406, 404, 64)}
+    <path d="M1230,430 L1236,402 L1252,414 L1262,388 L1280,408 L1292,396 L1298,470 L1230,470 Z"/>
+    <ellipse cx="1250" cy="672" rx="320" ry="24"/>
+  </g>
+  <circle cx="1151" cy="420" r="22" fill="#8fb0ff" opacity=".28"/>
+  <circle cx="1151" cy="420" r="22" fill="none" stroke="#02040a" stroke-width="3"/>
+  <path d="M1129,420H1173M1151,398V442M1135,404L1167,436M1167,404L1135,436" stroke="#02040a" stroke-width="2"/>
+  ${win(1052, 400, 14, 34)}${win(1074, 480, 12, 30)}${win(1320, 340, 16, 42)}${win(1342, 430, 14, 36)}
+  ${win(1110, 500, 14, 34)}${win(1170, 500, 14, 34)}${win(1226, 520, 14, 34)}${win(1422, 450, 12, 30)}`;
 }
 
 function midLayer(): string {
-  const ruin = `
-  <g fill="#060e19">
-    <path d="M1040,640 L1040,430 L1062,426 L1066,398 L1092,402 L1098,360 L1130,352 L1150,372 L1190,344 L1226,352 L1240,390 L1272,384 L1282,430 L1318,436 L1320,640 Z"/>
-    <rect x="1018" y="360" width="30" height="290"/>
-    <path d="M1018,360 L1018,338 L1033,326 L1048,338 L1048,360 Z"/>
-    <rect x="1300" y="410" width="28" height="240"/>
-    <path d="M1300,410 L1306,398 L1316,404 L1322,392 L1328,410 Z"/>
-  </g>
-  <g fill="#143556" opacity=".9">
-    <path d="M1108,520 L1108,462 Q1108,432 1130,416 Q1152,432 1152,462 L1152,520 Z"/>
-    <path d="M1190,540 L1190,490 Q1190,466 1208,452 Q1226,466 1226,490 L1226,540 Z"/>
-  </g>`;
-  const t1 = treeSvg(31, 260, 700, 120, 5, 7, "#050c16", -0.05);
-  const t2 = treeSvg(47, 560, 690, 90, 5, 5, "#060e19", 0.08);
-  const t3 = treeSvg(59, 1430, 700, 110, 5, 6, "#050c16", 0.04);
-  return `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-  ${ridge(660, 70, 37, "#08121f", "rgba(130,180,225,.18)")}
-  ${ruin}${t1}${t2}${t3}
-  ${ridge(700, 40, 41, "#060d18")}
-</svg>`;
-}
-
-/** pedra arredondada, iluminada pelo fogo do lado de dentro */
-function stone(x: number, y: number, rx: number, ry: number, tone: number, id: string): string {
-  const base = Math.round(22 + tone * 16);
-  return `<g>
-    <ellipse cx="${x}" cy="${(y + ry * 0.55).toFixed(1)}" rx="${(rx * 1.05).toFixed(1)}" ry="${(ry * 0.45).toFixed(1)}" fill="#000" opacity=".5"/>
-    <ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#${id})" stroke="#05080d" stroke-width="1.4"/>
-    <ellipse cx="${(x - rx * 0.25).toFixed(1)}" cy="${(y - ry * 0.4).toFixed(1)}" rx="${(rx * 0.5).toFixed(1)}" ry="${(ry * 0.28).toFixed(1)}" fill="rgb(${base + 40},${base + 48},${base + 64})" opacity=".35"/>
-  </g>`;
-}
-
-/** tora: cilindro arredondado com casca, anéis na ponta e brilho de brasa no lado voltado ao fogo */
-function log(x1: number, y1: number, x2: number, y2: number, r: number, seed: number): string {
-  const rr = rng(seed);
-  const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
-  const ux = dx / L, uy = dy / L, nx = -uy, ny = ux; // eixo e normal
-  const up = ny > 0 ? -1 : 1; // normal apontando para cima
-  let bark = "";
-  for (let k = 0; k < 7; k++) {
-    const t0 = 0.06 + rr() * 0.8, t1 = Math.min(0.97, t0 + 0.1 + rr() * 0.16), off = (rr() - 0.5) * r * 1.3;
-    bark += `<line x1="${(x1 + dx * t0 + nx * off).toFixed(1)}" y1="${(y1 + dy * t0 + ny * off).toFixed(1)}" x2="${(x1 + dx * t1 + nx * off).toFixed(1)}" y2="${(y1 + dy * t1 + ny * off).toFixed(1)}" stroke="#120a05" stroke-width="1.4" opacity=".75"/>`;
-  }
-  const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const cap = (x: number, y: number) => `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(1)})">
-      <ellipse rx="${(r * 0.42).toFixed(1)}" ry="${r}" fill="#3b2412" stroke="#0e0703" stroke-width="1.2"/>
-      <ellipse rx="${(r * 0.3).toFixed(1)}" ry="${(r * 0.72).toFixed(1)}" fill="none" stroke="#6b4423" stroke-width="1"/>
-      <ellipse rx="${(r * 0.17).toFixed(1)}" ry="${(r * 0.4).toFixed(1)}" fill="none" stroke="#7d5230" stroke-width=".9"/></g>`;
-  const sx = nx * up * r * 0.45, sy = ny * up * r * 0.45;
-  return `<g stroke-linecap="round">
-    <line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#0d0704" stroke-width="${(r * 2 + 3).toFixed(1)}"/>
-    <line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#2b1a0d" stroke-width="${(r * 2).toFixed(1)}"/>
-    <line x1="${(x1 + sx).toFixed(1)}" y1="${(y1 + sy).toFixed(1)}" x2="${(x2 + sx).toFixed(1)}" y2="${(y2 + sy).toFixed(1)}" stroke="#4a2c15" stroke-width="${(r * 1.05).toFixed(1)}" opacity=".9"/>
-    <line x1="${(x1 + sx * 1.2).toFixed(1)}" y1="${(y1 + sy * 1.2).toFixed(1)}" x2="${(x2 + sx * 1.2).toFixed(1)}" y2="${(y2 + sy * 1.2).toFixed(1)}" stroke="#ff7a28" stroke-width="${(r * 0.35).toFixed(1)}" opacity=".5"/>
-  </g>${bark}${cap(x1, y1)}${cap(x2, y2)}`;
-}
-
-const STONE_DEFS = `<radialGradient id="fxStone" cx=".5" cy=".12" r=".95"><stop offset="0" stop-color="#ff9a52" stop-opacity=".85"/><stop offset=".3" stop-color="#6b4a3a"/><stop offset=".62" stop-color="#2a3240"/><stop offset="1" stop-color="#0b1119"/></radialGradient>`;
-
-function nearLayer(): string {
-  const r = rng(91);
-  const left = treeSvg(101, 120, 910, 250, 6, 16, "#02050a", 0.07);
-  const right = treeSvg(131, 1490, 910, 280, 6, 18, "#02050a", -0.08);
-  // pedras de trás (menores, mais escuras) fecham o círculo
-  let back = "";
-  for (let i = 0; i < 7; i++) {
-    const a = Math.PI * (1.08 + (i / 6) * 0.84);
-    back += stone(Math.round(FIRE.x + Math.cos(a) * 96), Math.round(FIRE.y + 14 + Math.sin(a) * 15), 15 + r() * 6, 9 + r() * 3, r(), "fxStone");
-  }
-  const F = FIRE;
   return `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
   <defs>
-    <linearGradient id="fxGround" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d1a2a"/><stop offset=".25" stop-color="#050b14"/><stop offset="1" stop-color="#02050a"/></linearGradient>
-    <radialGradient id="fxLit" cx=".5" cy=".5"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".6"/><stop offset=".5" stop-color="#ff6a20" stop-opacity=".2"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient>
-    <radialGradient id="fxAsh" cx=".5" cy=".5"><stop offset="0" stop-color="#ffb060" stop-opacity=".9"/><stop offset=".45" stop-color="#d4501a" stop-opacity=".55"/><stop offset="1" stop-color="#3a0f05" stop-opacity="0"/></radialGradient>
-    ${STONE_DEFS}
+    <linearGradient id="fxMist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7f8fcf" stop-opacity="0"/><stop offset="1" stop-color="#7f8fcf" stop-opacity=".34"/></linearGradient>
+    <filter id="fxSoft2" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="14"/></filter>
   </defs>
-  ${ridge(630, 26, 53, "url(#fxGround)", "rgba(190,225,255,.45)")}
-  <ellipse cx="${F.x}" cy="${F.y + 36}" rx="330" ry="44" fill="url(#fxLit)"/>
-  ${left}${right}
-  <ellipse cx="${F.x}" cy="${F.y + 16}" rx="104" ry="24" fill="#0a0604"/>
-  ${back}
-  <ellipse cx="${F.x}" cy="${F.y + 12}" rx="82" ry="15" fill="url(#fxAsh)"/>
-  ${log(F.x - 50, F.y + 12, F.x + 30, F.y - 24, 8, 301)}
-  ${log(F.x + 52, F.y + 12, F.x - 28, F.y - 22, 8, 302)}
+  ${hills(655, 60, 37, "#090d1c", "rgba(140,160,225,.20)")}
+  ${castle()}
+  <rect x="900" y="560" width="700" height="130" fill="url(#fxMist)" filter="url(#fxSoft2)"/>
+  ${gnarlSvg(31, 250, 706, 110, 4, 12, "#05070f", -0.06)}
+  ${gnarlSvg(47, 600, 696, 80, 4, 8, "#060913", 0.08)}
+  ${hills(704, 36, 41, "#050710")}
 </svg>`;
 }
 
-/** primeiro plano da fogueira: toras da frente e pedras (desenhado POR CIMA do fogo, para a chama nascer atrás da lenha) */
-function campFront(): string {
-  const F = FIRE;
-  const r = rng(177);
-  let front = "";
-  for (let i = 0; i < 7; i++) {
-    const a = Math.PI * (0.06 + (i / 6) * 0.88);
-    front += stone(Math.round(F.x + Math.cos(a) * 112), Math.round(F.y + 30 + Math.sin(a) * 22), 18 + r() * 8, 11 + r() * 4, r(), "fxStoneF");
-  }
+/** viajante encapuzado com lanterna (a única luz quente da cena) */
+function wanderer(): string {
+  const { x, y } = FIRE; // topo da lanterna
+  const bx = x - 34, by = y + 70; // pés
+  return `
+  <g transform="translate(${bx} ${by}) scale(1.3) translate(${-bx} ${-by})">
+    <path d="M${bx - 20},${by} Q${bx - 22},${by - 34} ${bx - 8},${by - 54} Q${bx},${by - 62} ${bx + 8},${by - 54} Q${bx + 22},${by - 34} ${bx + 20},${by} Q${bx},${by + 5} ${bx - 20},${by} Z" fill="#05070e"/>
+    <circle cx="${bx}" cy="${by - 62}" r="10" fill="#05070e"/>
+    <path d="M${bx - 9},${by - 60} Q${bx},${by - 78} ${bx + 9},${by - 60} Q${bx},${by - 66} ${bx - 9},${by - 60} Z" fill="#05070e"/>
+    <path d="M${bx + 12},${by - 40} L${x - 6},${y + 8}" stroke="#05070e" stroke-width="4" stroke-linecap="round"/>
+    <line x1="${x - 6}" y1="${y + 4}" x2="${x - 6}" y2="${by + 2}" stroke="#05070e" stroke-width="3" stroke-linecap="round"/>
+    <rect x="${x - 14}" y="${y - 6}" width="16" height="20" rx="3" fill="#2a1608" stroke="#0a0604" stroke-width="2"/>
+    <rect x="${x - 11}" y="${y - 3}" width="10" height="14" rx="2" fill="#ffb55a"/>
+  </g>`;
+}
+
+function nearLayer(): string {
+  const left = gnarlSvg(101, 90, 930, 200, 5, 20, "#02040a", 0.1);
+  const right = gnarlSvg(131, 1540, 930, 190, 5, 22, "#02040a", -0.12);
   return `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-  <defs>${STONE_DEFS.replace('id="fxStone"', 'id="fxStoneF"')}</defs>
-  ${log(F.x - 78, F.y + 30, F.x + 56, F.y + 2, 10, 311)}
-  ${log(F.x + 80, F.y + 32, F.x - 54, F.y + 4, 10, 312)}
-  ${front}
+  <defs>
+    <linearGradient id="fxGround" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a2240"/><stop offset=".22" stop-color="#0a0e1f"/><stop offset="1" stop-color="#03040a"/></linearGradient>
+    <radialGradient id="fxLit" cx=".5" cy=".5"><stop offset="0" stop-color="#ff9a4a" stop-opacity=".42"/><stop offset=".5" stop-color="#ff7a30" stop-opacity=".12"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient>
+    <linearGradient id="fxPath" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fa0d8" stop-opacity=".2"/><stop offset="1" stop-color="#8fa0d8" stop-opacity=".05"/></linearGradient>
+  </defs>
+  ${hills(655, 22, 53, "url(#fxGround)", "rgba(200,215,255,.5)")}
+  <path d="M640,900 Q700,760 760,700 Q900,650 1180,664 L1180,676 Q930,672 800,716 Q760,780 760,900 Z" fill="url(#fxPath)"/>
+  <ellipse cx="${FIRE.x - 20}" cy="${FIRE.y + 70}" rx="190" ry="26" fill="url(#fxLit)"/>
+  ${left}${right}
+  ${wanderer()}
 </svg>`;
 }
 
@@ -326,12 +308,15 @@ const CSS = `
 .fx-ui{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:clamp(20px,6vh,64px) 16px clamp(22px,6vh,56px)}
 .fx-logo{text-align:center;animation:fx-rise 1.6s .35s cubic-bezier(.2,.7,.2,1) both}
 .fx-pre{display:block;font-weight:400;font-size:clamp(10px,1.5vw,13px);letter-spacing:.5em;text-transform:uppercase;color:#7fa6cc;opacity:.85;margin-bottom:6px;text-indent:.5em}
-.fx-logo h1{margin:0;font-weight:900;font-size:clamp(58px,12vw,142px);line-height:1;letter-spacing:.07em;text-indent:.07em;
+.fx-logo h1{margin:0;font-weight:900;font-size:clamp(54px,10vw,124px);line-height:1;letter-spacing:.07em;text-indent:.07em;
   background:linear-gradient(180deg,#ffffff 0%,#bfe3ff 38%,#6fb0e6 62%,#ff9a4d 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 18px rgba(120,190,255,.35)) drop-shadow(0 4px 22px rgba(255,120,40,.28))}
 .fx-logo h1 b{font-weight:900;background:linear-gradient(180deg,#fff2c9 0%,#ffb35c 45%,#ff5a1a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;animation:fx-flick 2.6s infinite}
-.fx-logo h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;filter:none}
-.fx-emb{display:block;margin:0 auto 10px;width:clamp(150px,34vh,300px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
+.fx-emb{display:block;margin:0 auto 10px;width:clamp(110px,24vh,210px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
+.fx-orn{display:flex;align-items:center;justify-content:center;gap:12px;margin:10px auto 0;width:min(340px,70vw)}
+.fx-orn::before,.fx-orn::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(230,190,120,.7))}
+.fx-orn::after{transform:scaleX(-1)}
+.fx-orn i{width:7px;height:7px;transform:rotate(45deg);background:#e6be78;box-shadow:0 0 10px rgba(255,170,70,.7)}
 .fx-tag{margin:10px 0 0;font-weight:400;font-size:clamp(11px,1.7vw,16px);letter-spacing:.32em;text-transform:uppercase;color:#a9c7e6;text-indent:.32em;text-shadow:0 2px 12px #000}
 .fx-panel{width:min(360px,100%);display:flex;flex-direction:column;align-items:stretch;gap:12px;animation:fx-rise 1.6s .9s cubic-bezier(.2,.7,.2,1) both}
 .fx-head{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:700;letter-spacing:.4em;text-transform:uppercase;color:#ffb072;margin-bottom:2px;text-shadow:0 0 14px rgba(255,120,40,.5);justify-content:center;text-indent:.4em}
@@ -364,7 +349,7 @@ const CSS = `
 @keyframes fx-tw{0%,100%{opacity:.25}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.fx-root,.fx-logo,.fx-panel{animation:none}.fx-logo h1 b,.fx-tw{animation:none}}
 @media (max-width:520px){.fx-logo{margin-top:30px}.fx-pre{letter-spacing:.32em;text-indent:.32em}.fx-tag{letter-spacing:.2em;text-indent:.2em}}
-@media (max-height:620px){.fx-pre,.fx-tag{display:none}.fx-emb{width:clamp(96px,26vh,150px)}.fx-btn{min-height:46px}}
+@media (max-height:620px){.fx-pre,.fx-tag,.fx-orn{display:none}.fx-emb{width:clamp(56px,15vh,96px)}.fx-logo h1{font-size:clamp(40px,9vw,72px)}.fx-btn{min-height:46px}}
 `;
 
 const ICON_ON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></svg>`;
@@ -395,13 +380,13 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
     <div class="fx-layer" data-d="18">${midLayer()}</div>
     <div class="fx-layer" data-d="34">${nearLayer()}</div>
     <canvas class="fx-fx"></canvas>
-    <div class="fx-layer fx-front" data-d="34">${campFront()}</div>
     <div class="fx-vig"></div>
     <div class="fx-ui">
       <header class="fx-logo">
-        <img class="fx-emb" src="/icon-512.png?v=4" alt="FrixeP" width="200" height="200" draggable="false">
+        <img class="fx-emb" src="/icon-512.png?v=4" alt="" width="200" height="200" draggable="false">
         <span class="fx-pre">A Geada Negra consome Vael</span>
         <h1 aria-label="FrixeP">Frixe<b>P</b></h1>
+        <div class="fx-orn" aria-hidden="true"><i></i></div>
         <p class="fx-tag">Acenda a Brasa &middot; Desperte o mundo</p>
       </header>
       <section class="fx-panel">
@@ -500,8 +485,6 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
   const snow = Array.from({ length: motion ? Math.min(150, Math.round((innerWidth * innerHeight) / 9500)) : 0 }, () => ({
     x: rnd() * innerWidth, y: rnd() * innerHeight, r: 0.6 + rnd() * 1.7, v: 14 + rnd() * 34, ph: rnd() * 6.28, a: 0.25 + rnd() * 0.55,
   }));
-  type Ember = { x: number; y: number; vx: number; vy: number; life: number; max: number; r: number; ph: number };
-  const embers: Ember[] = [];
   const blob = document.createElement("canvas");
   blob.width = blob.height = 256;
   {
@@ -516,73 +499,21 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
     x: rnd() * innerWidth, y: 0.5 + rnd() * 0.45, s: 380 + rnd() * 420, v: (i % 2 ? 1 : -1) * (5 + rnd() * 10), a: 0.07 + rnd() * 0.09,
   }));
 
-  // fogo: partículas macias que nascem na base, sobem estreitando e esfriam (branco-amarelo, laranja, vermelho).
-  // Sem polígonos: tudo são gradientes radiais, então a chama é redonda e orgânica, sem pontas.
-  type Fp = { x: number; y: number; vx: number; vy: number; age: number; max: number; r: number; ph: number };
-  const flames: Fp[] = [];
-  let fspawn = 0;
-  const flameStep = (x: number, y: number, s: number, t: number, dt: number) => {
+  // lanterna: brilho quente que respira (única luz quente da cena)
+  const lanternStep = (x: number, y: number, sc: number, t: number) => {
     g.globalCompositeOperation = "lighter";
-    const flick = 0.88 + 0.08 * Math.sin(t * 7.3) + 0.05 * Math.sin(t * 19 + 1);
-    const R = 420 * s * flick;
-    const glow = g.createRadialGradient(x, y - 60 * s, 0, x, y - 60 * s, R);
-    glow.addColorStop(0, "rgba(255,150,60,.40)");
-    glow.addColorStop(0.35, "rgba(255,100,30,.15)");
-    glow.addColorStop(1, "rgba(255,80,20,0)");
-    g.fillStyle = glow;
-    g.fillRect(x - R, y - 60 * s - R, R * 2, R * 2);
-    // leito de brasas pulsando
-    const bed = g.createRadialGradient(x, y + 6 * s, 0, x, y + 6 * s, 78 * s);
-    bed.addColorStop(0, `rgba(255,170,70,${(0.55 * flick).toFixed(3)})`);
-    bed.addColorStop(1, "rgba(255,80,20,0)");
-    g.save();
-    g.translate(x, y + 6 * s);
-    g.scale(1, 0.26);
-    g.translate(-x, -(y + 6 * s));
-    g.fillStyle = bed;
-    g.fillRect(x - 80 * s, y + 6 * s - 80 * s, 160 * s, 160 * s);
-    g.restore();
-
-    fspawn += dt * (motion ? 95 : 40);
-    while (fspawn > 1) {
-      fspawn -= 1;
-      const side = (rnd() - 0.5) * 2;
-      flames.push({
-        x: x + side * 44 * s, y: y - 2 * s, vx: -side * 6 * s, vy: -(95 + rnd() * 95) * s,
-        age: 0, max: 0.95 + rnd() * 0.95, r: (24 + rnd() * 14) * s, ph: rnd() * 6.28,
-      });
-    }
-    for (let i = flames.length - 1; i >= 0; i--) {
-      const p = flames[i];
-      p.age += dt;
-      if (p.age >= p.max) { flames.splice(i, 1); continue; }
-      const a = p.age / p.max; // 0 nasce, 1 morre
-      p.vx += (x - p.x) * 1.2 * dt; // puxa para o eixo: a chama afina em gota
-      p.x += (p.vx + Math.sin(t * 5 + p.ph) * 16 * s * a) * dt;
-      p.y += p.vy * dt;
-      p.vy *= 1 - 0.28 * dt;
-      const rad = p.r * (1 - 0.72 * a) * (0.9 + 0.1 * Math.sin(t * 14 + p.ph));
-      let c0: string, c1: string;
-      if (a < 0.14) { const k = 0.5 * (1 - a * 0.6); c0 = `rgba(255,236,170,${k.toFixed(3)})`; c1 = "rgba(255,190,80,0)"; }
-      else if (a < 0.6) { const k = 0.55 * (1 - (a - 0.14) * 0.9); c0 = `rgba(255,140,38,${k.toFixed(3)})`; c1 = "rgba(255,90,20,0)"; }
-      else { const k = (0.34 * (1 - a)) / 0.38; c0 = `rgba(210,60,18,${k.toFixed(3)})`; c1 = "rgba(120,25,8,0)"; }
-      const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
-      gr.addColorStop(0, c0);
-      gr.addColorStop(1, c1);
-      g.fillStyle = gr;
-      g.fillRect(p.x - rad, p.y - rad, rad * 2, rad * 2);
-    }
-    // miolo quente na base
-    const core = g.createRadialGradient(x, y - 16 * s, 0, x, y - 16 * s, 36 * s * flick);
-    core.addColorStop(0, "rgba(255,240,190,.4)");
-    core.addColorStop(0.5, "rgba(255,200,100,.22)");
-    core.addColorStop(1, "rgba(255,140,40,0)");
-    g.fillStyle = core;
-    g.fillRect(x - 40 * s, y - 56 * s, 80 * s, 80 * s);
+    const flick = 0.9 + 0.06 * Math.sin(t * 5.1) + 0.04 * Math.sin(t * 13 + 1);
+    const R = 150 * sc * flick;
+    const gl = g.createRadialGradient(x, y, 0, x, y, R);
+    gl.addColorStop(0, "rgba(255,190,100,.55)");
+    gl.addColorStop(0.3, "rgba(255,140,50,.2)");
+    gl.addColorStop(1, "rgba(255,100,30,0)");
+    g.fillStyle = gl;
+    g.fillRect(x - R, y - R, R * 2, R * 2);
     g.globalCompositeOperation = "source-over";
   };
 
-  let raf = 0, last = performance.now(), t = 0, spawn = 0;
+  let raf = 0, last = performance.now(), t = 0;
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -625,35 +556,9 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
     }
     g.globalAlpha = 1;
 
-    // fogo + brasas
+    // lanterna
     const f = fireAt();
-    flameStep(f.x, f.y, f.s, t, dt);
-    spawn += dt * (motion ? 22 : 8);
-    while (spawn > 1) {
-      spawn -= 1;
-      embers.push({
-        x: f.x + (rnd() - 0.5) * 40 * f.s, y: f.y - 40 * f.s, vx: (rnd() - 0.5) * 14,
-        vy: -(40 + rnd() * 90) * Math.max(0.7, f.s), life: 0, max: 2.4 + rnd() * 3, r: 0.8 + rnd() * 1.9, ph: rnd() * 6.28,
-      });
-    }
-    g.globalCompositeOperation = "lighter";
-    for (let i = embers.length - 1; i >= 0; i--) {
-      const e = embers[i];
-      e.life += dt;
-      if (e.life >= e.max) { embers.splice(i, 1); continue; }
-      e.x += (e.vx + Math.sin(t * 2.2 + e.ph) * 22 + 10) * dt;
-      e.y += e.vy * dt;
-      e.vy *= 1 - 0.12 * dt;
-      const k = 1 - e.life / e.max;
-      g.fillStyle = `rgba(255,${Math.round(90 + 130 * k)},${Math.round(30 + 50 * k)},${(k * 0.35).toFixed(3)})`;
-      g.beginPath();
-      g.arc(e.x, e.y, e.r * 3, 0, 6.283);
-      g.fill();
-      g.fillStyle = `rgba(255,${Math.round(170 + 80 * k)},${Math.round(90 + 60 * k)},${(k * 0.95).toFixed(3)})`;
-      g.beginPath();
-      g.arc(e.x, e.y, e.r, 0, 6.283);
-      g.fill();
-    }
+    lanternStep(f.x, f.y, f.s, t);
     g.globalCompositeOperation = "source-over";
   };
   raf = requestAnimationFrame(frame);
