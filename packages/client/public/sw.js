@@ -1,7 +1,7 @@
 /* Service worker do FrixeP: só deixa o jogo instalável e acelera a abertura (cache do shell e da arte estática).
    NUNCA mexe em API, WebSocket (Colyseus) nem no _manifest.json de assets; o jogo continua exigindo rede.
    Para invalidar tudo, aumente VERSION. Versões antigas do cache são apagadas ao ativar. */
-const VERSION = "v3"; // v3: favicon/ícones novos (brasão premium).  // v2: a arte (PNG/JSON em subpastas de /assets) agora revalida na rede, para sprites novos aparecerem sem esperar
+const VERSION = "v4"; // v3: favicon/ícones novos (brasão premium).  // v2: a arte (PNG/JSON em subpastas de /assets) agora revalida na rede, para sprites novos aparecerem sem esperar
 const CACHE = "frixep-static-" + VERSION;
 
 self.addEventListener("install", () => self.skipWaiting());
