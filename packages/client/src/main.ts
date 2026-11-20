@@ -14,7 +14,7 @@ import {
 import { ensureLogin, logout, wsUrl } from "./auth";
 import { ensureCharacter } from "./character";
 import { mountGameMenu } from "./menu";
-import { attachPerf, startPerf } from "./perf-probe";
+import { attachPerf, startPerf, timed, count } from "./perf-probe";
 import { mountHud, type Hud } from "./hud";
 import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
@@ -1338,29 +1338,29 @@ class WorldScene extends Phaser.Scene {
     if (!st?.players || !st?.enemies) return;
     if (!this.busy) this.driveJoystick(time);
     this.watchPortals();
-    this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? ""));
-    this.weaponAuras?.update(time, st.players, this.sprites);
+    timed("chao", () => this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? "")));
+    timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
     const meNow = this.me();
     if (this.autoPot && meNow && !meNow.dead && meNow.hp / Math.max(1, meNow.maxHp) <= AUTO_POT_AT && time >= this.autoPotNext) {
       this.autoPotNext = time + 400;
       if (this.inv.firstPotionSlot() >= 0) this.drinkPotion(); // sem poção na bolsa, não faz nada (sem aviso repetido)
     }
     if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
-      this.npcs.update(time, meNow.x, meNow.y);
+      timed("npcs", () => this.npcs.update(time, meNow.x, meNow.y));
       const near = this.npcs.inReach(meNow.x, meNow.y);
       this.econ.setNearNpc(near);
       if (this.pendingNpc && near?.id === this.pendingNpc.id) { this.econ.openNpc(this.pendingNpc); this.pendingNpc = null; }
       if (this.econ.isNpcOpen() && !near) this.econ.closeNpc();
     }
     if (meNow && this.town) { // baú da cidade: anel, botão "Abrir o baú" e animações do cenário
-      this.town.update(time, this.cameras.main, meNow);
+      timed("cidade", () => this.town?.update(time, this.cameras.main, meNow));
       const nearV = this.town.nearChest(meNow.x, meNow.y);
       this.vault.setNear(nearV);
       if (this.pendingVault && nearV) { this.pendingVault = false; this.vault.open(); }
     }
     this.checkLock();
-    this.drawMarks(time);
-    this.gates?.update(time);
+    timed("marcas", () => this.drawMarks(time));
+    timed("portais", () => this.gates?.update(time));
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes
     this.bars.clear();
 
@@ -1383,7 +1383,7 @@ class WorldScene extends Phaser.Scene {
       if (!v) return;
       const s = v.obj;
       v.setFace(face);
-      v.update(time, { dead: o.dead, windup: o.windup });
+      timed("sprites", () => v.update(time, { dead: o.dead, windup: o.windup }));
       const hidden = !!o.hideWhenDead && o.dead && v.deathDone; // com sprite, a morte toca antes de sumir
       s.setVisible(!hidden);
       this.labels.get(key)?.setVisible(!hidden);
@@ -1400,9 +1400,10 @@ class WorldScene extends Phaser.Scene {
       }
       if (s.x < wv.x - 140 || s.x > wv.right + 140 || s.y < wv.y - 160 || s.y > wv.bottom + 160) { this.labels.get(key)?.setVisible(false); this.levelTags.get(key)?.setVisible(false); return; }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (v.isSprite) this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX);
+      if (v.isSprite) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX));
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
-      const pg = drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time });
+      count("placas");
+      const pg = timed("placas", () => drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time }));
       this.labels.get(key)?.setPosition(pg.nameX, pg.nameY).setScale(this.uiScale).setDepth(1e5 + 2);
       const nt = this.levelTags.get(key);
       if (nt) {
