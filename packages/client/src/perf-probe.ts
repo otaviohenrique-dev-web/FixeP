@@ -92,10 +92,10 @@ function showOverlay(): Parts {
   if (overlay) overlay.remove();
   // o fundo não bloqueia o toque: durante a medição o jogo segue jogável; só o cartão recebe toques
   const box = el("div", "position:fixed;inset:0;z-index:40;display:flex;align-items:flex-start;justify-content:center;pointer-events:none;padding:70px 16px 16px;font-family:Georgia,serif");
-  const card = el("div", "pointer-events:auto;width:min(340px,100%);padding:18px;border-radius:8px;color:#dbeaff;background:linear-gradient(180deg,rgba(20,34,52,.97),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4)");
+  const card = el("div", "pointer-events:auto;width:min(340px,100%);box-sizing:border-box;max-height:calc(100dvh - 82px);overflow:auto;padding:14px 18px;border-radius:8px;color:#dbeaff;background:linear-gradient(180deg,rgba(20,34,52,.97),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4)");
   const title = el("p", "margin:0 0 10px;font:700 14px Georgia,serif;letter-spacing:.2em;text-transform:uppercase;color:#ffb072;text-align:center", "Medindo desempenho");
   const info = el("p", "margin:0 0 10px;font-size:13px;line-height:1.4;color:#8fb0cf;text-align:center", `Jogue normalmente por ${SECONDS} s.`);
-  const area = el("textarea", "display:none;width:100%;height:170px;box-sizing:border-box;font:12px/1.4 monospace;background:#06090f;color:#dbeaff;border:1px solid #3a4f66;border-radius:4px;padding:6px");
+  const area = el("textarea", "display:none;width:100%;height:min(170px,26vh);box-sizing:border-box;font:12px/1.4 monospace;background:#06090f;color:#dbeaff;border:1px solid #3a4f66;border-radius:4px;padding:6px");
   area.readOnly = true;
   const btn = el("button", "display:none;width:100%;min-height:44px;margin-top:10px;border-radius:5px;cursor:pointer;font:700 13px Georgia,serif;letter-spacing:.12em;text-transform:uppercase;color:#eaf4ff;background:rgba(24,40,60,.9);border:1px solid rgba(255,150,70,.38)", "Copiar relatório");
   const close = el("button", "display:none;width:100%;min-height:44px;margin-top:8px;border-radius:5px;cursor:pointer;font:700 13px Georgia,serif;letter-spacing:.12em;text-transform:uppercase;color:#eaf4ff;background:rgba(7,13,22,.9);border:1px solid #3a4f66", "Fechar");
