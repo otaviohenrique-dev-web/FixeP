@@ -1,4 +1,5 @@
 import { isTypingTarget } from "./keys";
+import { silhouetteSvg } from "./silhouette";
 import {
   ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
@@ -176,32 +177,13 @@ function compareStats(a: ItemDef, b: ItemDef): { text: string; delta: number }[]
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
 const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
 
-const SILHOUETTE = `<svg class="iv-sil" viewBox="0 0 262 330" aria-hidden="true" shape-rendering="geometricPrecision"><defs>
-  <linearGradient id="ivg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3d5e"/><stop offset="1" stop-color="#101b2d"/></linearGradient>
-  <linearGradient id="ivr" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9fc2ea" stop-opacity=".0"/><stop offset=".5" stop-color="#9fc2ea" stop-opacity=".35"/><stop offset="1" stop-color="#9fc2ea" stop-opacity="0"/></linearGradient>
-  <radialGradient id="ivh" cx=".5" cy=".4" r=".55"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".16"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient></defs>
-  <circle cx="131" cy="165" r="150" fill="url(#ivh)"/>
-  <ellipse cx="131" cy="316" rx="60" ry="7" fill="#000" opacity=".35"/>
-  <g fill="url(#ivg)" stroke="#5c7aa3" stroke-opacity=".55" stroke-width="1.2">
-    <ellipse cx="131" cy="58" rx="23" ry="27"/>
-    <path d="M119 80h24v14a12 12 0 0 1-24 0z"/>
-    <path d="M131 112c-30 0-52 4-62 14c-6 6-8 18-8 30v40c0 12 6 24 14 30c10 8 20 10 30 10h72c10 0 20-2 30-10c8-6 14-18 14-30v-40c0-12-2-24-8-30c-10-10-32-14-62-14z"/>
-    <path d="M90 124c-12 6-20 20-26 46c-6 26-10 52-10 66c0 8 6 12 12 9c6-3 8-12 10-22c3-18 8-42 14-62z"/>
-    <path d="M172 124c12 6 20 20 26 46c6 26 10 52 10 66c0 8-6 12-12 9c-6-3-8-12-10-22c-3-18-8-42-14-62z"/>
-    <path d="M104 214h54l6 30c2 14 0 32-4 52c-2 10-6 16-12 16s-8-6-10-16l-7-40h-2l-7 40c-2 10-4 16-10 16s-10-6-12-16c-4-20-6-38-4-52z"/>
-    <path d="M158 214h-54l-6 30c-2 14 0 32 4 52c2 10 6 16 12 16s8-6 10-16l7-40h2l7 40c2 10 4 16 10 16s10-6 12-16c4-20 6-38 4-52z"/>
-  </g>
-  <g fill="url(#ivr)"><rect x="66" y="150" width="130" height="2"/><rect x="66" y="204" width="130" height="2"/></g>
-  <g fill="none" stroke="rgba(150,190,235,.18)" stroke-width="1" stroke-linecap="round"><path d="M131 124v90M104 180q27 8 54 0"/></g>
-  <g class="em" fill="#ff8a3d"><circle cx="131" cy="222" r="2.2"/></g></svg>`;
-
 /** posições (em % do boneco) de cada espaço */
 const EQ_POS: Record<EquipSlot | "potion", [number, number]> = {
-  helmet: [50, 11], armor: [50, 40], boots: [50, 85], weapon: [14, 40], offhand: [86, 40], cape: [14, 12], potion: [14, 68],
+  helmet: [50, 9], armor: [50, 40], boots: [50, 85], weapon: [14, 46], offhand: [86, 46], cape: [14, 16], potion: [14, 68],
 };
 interface Ph { key: string; label: string; icon: string; pos?: [number, number]; acc?: boolean }
 const PLACEHOLDERS: Ph[] = [
-  { key: "bag", label: "Bolsa", icon: "bag", pos: [86, 12] }, { key: "food", label: "Comida", icon: "food", pos: [86, 68] },
+  { key: "bag", label: "Bolsa", icon: "bag", pos: [86, 16] }, { key: "food", label: "Comida", icon: "food", pos: [86, 68] },
   { key: "ring", label: "Anel", icon: "ring", acc: true }, { key: "amulet", label: "Amuleto", icon: "amulet", acc: true },
 ];
 const PH_ICONS: Record<string, string> = {
@@ -433,7 +415,9 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     hideTip();
     renderWallet();
     // equipamento: silhueta com os espaços sobre o corpo
-    dollEl.innerHTML = SILHOUETTE;
+    const rc: Partial<Record<EquipSlot, string>> = {};
+    for (const s of EQUIP_SLOTS) { const d = equippedDef(s); if (d && d.rarity !== "common") rc[s] = RARITY_COLOR[d.rarity]; else if (d) rc[s] = "#8fa6c0"; }
+    dollEl.innerHTML = silhouetteSvg(rc);
     accEl.replaceChildren();
     for (const ph of PLACEHOLDERS) (ph.acc ? accEl : dollEl).append(placeholderSlot(ph));
     for (const s of EQUIP_SLOTS) dollEl.append(equipSlot(s));
