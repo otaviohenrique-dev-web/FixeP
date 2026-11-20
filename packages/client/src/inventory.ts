@@ -1,5 +1,4 @@
 import { isTypingTarget } from "./keys";
-import { silhouetteSvg } from "./silhouette";
 import {
   ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
@@ -18,47 +17,66 @@ const CSS = `
 .iv-btn{position:fixed;top:max(14px,env(safe-area-inset-top));right:66px;z-index:20;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#bcd8f5;
   background:rgba(8,16,28,.7);border:1px solid rgba(160,200,240,.3);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:border-color .18s,color .18s,box-shadow .18s}
 .iv-btn:hover,.iv-btn:focus-visible{color:#fff;border-color:#ff9a4d;box-shadow:0 0 16px rgba(255,120,40,.35)}
-.iv-btn:focus-visible,.iv-slot:focus-visible,.iv-act:focus-visible,.iv-x:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
+.iv-btn:focus-visible,.iv-slot:focus-visible,.iv-es:focus-visible,.iv-act:focus-visible,.iv-x:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
 .iv-btn svg{width:22px;height:22px}
-.iv-back{position:fixed;inset:0;z-index:19;display:none;align-items:center;justify-content:center;background:rgba(2,5,11,.55);padding:12px;font-family:"Cinzel",Georgia,serif}
+.iv-back{--u:1;position:fixed;inset:0;z-index:19;display:none;align-items:center;justify-content:center;background:rgba(2,5,11,.6);padding:12px;font-family:"Cinzel",Georgia,serif}
 .iv-back.open{display:flex}
-.iv-card{width:min(660px,100%);max-height:calc(100vh - 24px);overflow:auto;padding:16px;border-radius:8px;color:#dbeaff;
-  background:linear-gradient(180deg,rgba(20,34,52,.97),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4);box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 1px 0 rgba(180,220,255,.12)}
-.iv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.iv-title{margin:0;font-size:14px;font-weight:700;letter-spacing:.35em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 14px rgba(255,120,40,.5)}
-.iv-x{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#bcd8f5;background:transparent;border:1px solid rgba(160,200,240,.3);font:700 16px/1 Georgia,serif}
-.iv-body{display:grid;grid-template-columns:272px 1fr;gap:14px}
-@media (max-width:640px){.iv-body{grid-template-columns:1fr}.iv-card{padding:12px}}
+@media (min-width:900px) and (min-height:840px){.iv-back{--u:2}}
+.iv-pix{image-rendering:pixelated;image-rendering:crisp-edges;image-rendering:pixelated}
+/* painel: moldura de ferro + pergaminho (peças em /ui/, derivadas da arte oficial por tools/gen_inventory_ui.py) */
+.iv-wrap{position:relative;margin-top:calc(var(--u)*18px);width:min(calc(var(--u)*300px + 360px),100%);max-height:calc(var(--vh,100vh) - 24px - var(--u)*30px);display:flex}
+.iv-card{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;color:#2c1d10;overflow:visible;
+  border:calc(var(--u)*8px) solid transparent;border-image:url(/ui/inv_frame.png) 8 / calc(var(--u)*8px) stretch;
+  background:url(/ui/inv_parch.png) 0 0 / calc(var(--u)*53px) calc(var(--u)*55px) repeat;background-origin:border-box;image-rendering:pixelated;
+  box-shadow:0 18px 50px rgba(0,0,0,.75)}
+.iv-card::before{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 calc(var(--u)*14px) rgba(60,35,10,.35)}
+.iv-head{position:relative;display:flex;align-items:center;justify-content:space-between;height:calc(var(--u)*46px);padding:0 calc(var(--u)*24px) 0 calc(var(--u)*58px);flex:none}
+.iv-title{margin:0;line-height:0}
+.iv-title img{display:block;height:calc(var(--u)*27px);width:auto}
+.iv-scroll{overflow:auto;flex:1;min-height:0;padding:0 calc(var(--u)*10px) calc(var(--u)*8px)}
+.iv-x{position:absolute;right:calc(var(--u)*-9px);top:calc(var(--u)*-8px);width:calc(var(--u)*27px);height:calc(var(--u)*32px);padding:0;border:0;cursor:pointer;background:url(/ui/inv_x.png) center/100% 100% no-repeat;image-rendering:pixelated;z-index:3}
+.iv-x:hover,.iv-x:focus-visible{filter:brightness(1.35) saturate(1.2)}
+.iv-chain{position:absolute;pointer-events:none;image-rendering:pixelated;z-index:2}
+.iv-chain.tr{right:calc(var(--u)*-18px);top:calc(var(--u)*-12px);width:calc(var(--u)*68px)}
+.iv-chain.bl{left:calc(var(--u)*-8px);bottom:calc(var(--u)*-13px);width:calc(var(--u)*68px)}
+.iv-medal{position:absolute;left:calc(var(--u)*-8px);top:calc(var(--u)*-18px);width:calc(var(--u)*68px);height:calc(var(--u)*86px);z-index:3;pointer-events:none}
+.iv-medal canvas{position:absolute;left:calc(var(--u)*12px);top:calc(var(--u)*12px);width:calc(var(--u)*47px);height:calc(var(--u)*57px);border-radius:50%;image-rendering:pixelated;background:#3a1e1c}
+.iv-medal img{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+.iv-body{display:grid;grid-template-columns:calc(var(--u)*197px) 1fr;gap:calc(var(--u)*10px);padding-top:calc(var(--u)*6px)}
+@media (max-width:640px){.iv-back.open{align-items:flex-start;padding-top:calc(64px + env(safe-area-inset-top))!important}.iv-wrap{margin-top:calc(var(--u)*18px);max-height:calc(var(--vh,100vh) - 64px - var(--u)*18px - 16px - env(safe-area-inset-top))}.iv-x{right:calc(var(--u)*2px)}.iv-body{grid-template-columns:1fr;justify-items:center}.iv-body>div:last-child{width:100%}}
 .iv-left{display:flex;flex-direction:column;gap:6px;align-items:center}
 .iv-stats{white-space:pre-line}
-.iv-wallet{display:flex;gap:14px;align-items:center;margin:0 0 8px;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9}
+.iv-wallet{display:flex;gap:14px;align-items:center;margin:0 0 calc(var(--u)*6px);padding:6px 10px;border-radius:3px;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9;background:rgba(18,12,9,.86);border:2px solid #4a4038;box-shadow:inset 0 0 8px #000}
 .iv-wallet span{display:flex;align-items:center;gap:5px}
 .iv-wallet img{width:20px;height:20px;image-rendering:pixelated}
-.iv-sort{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#8fb0cf;background:transparent;border:1px solid rgba(160,200,240,.18);display:grid;place-items:center;margin-right:8px;opacity:.75}
-.iv-sort:hover,.iv-sort:focus-visible{opacity:1;color:#fff;border-color:#ff9a4d;outline:none}
+.iv-sort{width:calc(var(--u)*17px + 12px);height:calc(var(--u)*17px + 12px);border-radius:3px;cursor:pointer;color:#e8dcc4;background:rgba(28,20,15,.85);border:2px solid #4a4038;display:grid;place-items:center;margin-right:calc(var(--u)*10px);box-shadow:inset 0 0 6px #000}
+.iv-sort:hover,.iv-sort:focus-visible{color:#fff;border-color:#c96a2a;outline:none}
 .iv-sort svg{width:16px;height:16px}
 .iv-head-r{display:flex;align-items:center}
 /* boneco: silhueta com os espaços de equipamento sobre o corpo */
-.iv-doll{--s:52px;position:relative;width:100%;max-width:262px;aspect-ratio:262/330;border-radius:10px;overflow:hidden;
-  background:radial-gradient(ellipse at 50% 38%,rgba(255,140,60,.13),rgba(6,12,20,0) 62%),linear-gradient(180deg,rgba(10,16,26,.92),rgba(4,8,14,.96));border:1px solid rgba(255,150,70,.28);
-  box-shadow:inset 0 0 40px rgba(0,0,0,.7)}
-@media (max-width:640px){.iv-doll{--s:42px;max-width:200px}.iv-es .lbl{display:none}.iv-acc{padding:6px 0 0}.iv-acc .iv-es{--s:34px;width:34px;height:34px}.iv-stats{margin:2px 0 0;font-size:11px}}
-.iv-sil{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.iv-sil .em{animation:iv-ember 3.6s ease-in-out infinite}
+/* boneco: os 9 espaços nas posições da arte oficial (coordenadas % da caixa 590x685 da referência) */
+.iv-doll{position:relative;width:calc(var(--u)*197px);aspect-ratio:590/685;flex:none}
+@media (max-width:640px){.iv-acc{padding:6px 0 0}.iv-stats{margin:2px 0 0;font-size:11px}}
+.iv-es .lbl{display:none;position:absolute;left:0;right:0;bottom:2px;text-align:center;font:700 calc(var(--u)*4px + 3px)/1 "Cinzel",Georgia,serif;letter-spacing:.06em;text-transform:uppercase;color:#4a3826;opacity:.8;pointer-events:none;white-space:nowrap}
+@media (min-width:900px) and (min-height:840px){.iv-es .lbl{display:block!important}}
+.iv-sil,.iv-sil-s{position:absolute;left:12.7%;top:4.1%;width:78.3%;height:88%;pointer-events:none;image-rendering:pixelated;z-index:1}
+.iv-sil-s{animation:iv-smoke 5.5s ease-in-out infinite}
+@keyframes iv-smoke{0%,100%{opacity:.55;transform:translateY(0)}50%{opacity:1;transform:translateY(calc(var(--u)*-3px))}}
+
 @keyframes iv-ember{0%,100%{opacity:.55}50%{opacity:1}}
-.iv-es{position:absolute;width:var(--s);height:var(--s);transform:translate(-50%,-50%);display:grid;place-items:center;padding:0;border-radius:7px;cursor:pointer;color:#7a8da3;
-  --rc:rgba(160,200,240,.35);background:radial-gradient(circle at 50% 35%,rgba(26,38,56,.92),rgba(5,9,15,.96));border:2px solid var(--rc);box-shadow:inset 0 0 10px rgba(0,0,0,.8);
-  transition:transform .12s,box-shadow .18s,border-color .15s}
-.iv-es:hover:not(:disabled){transform:translate(-50%,-50%) scale(1.07);border-color:#ffd08a}
-.iv-es.full{box-shadow:0 0 9px var(--rc),inset 0 0 10px rgba(0,0,0,.7)}
-.iv-es[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 14px rgba(255,190,100,.55),inset 0 0 8px rgba(0,0,0,.7)}
-.iv-es svg{width:56%;height:56%;opacity:.55}
-.iv-es .iv-ic{width:82%;height:82%}
-.iv-es:disabled{cursor:not-allowed;border-style:dashed;border-color:rgba(160,200,240,.16);opacity:.55}
-.iv-es:disabled svg{opacity:.3}
-.iv-es.can{border-color:#7dd68a;animation:iv-can 1s ease-in-out infinite}
+.iv-es{position:absolute;width:28%;height:29.2%;transform:translate(-50%,-50%);display:grid;place-items:center;padding:0;cursor:pointer;color:#4a3826;z-index:2;
+  --rc:transparent;background:none;border:calc(var(--u)*5px) solid transparent;border-image:url(/ui/inv_slot.png) 5 fill / calc(var(--u)*5px) stretch;image-rendering:pixelated;
+  transition:transform .12s,filter .15s}
+.iv-es[data-c]{border-image-source:url(/ui/inv_slot_c.png)}
+.iv-es:hover:not(:disabled){transform:translate(-50%,-50%) scale(1.05);filter:brightness(1.12)}
+.iv-es.full{box-shadow:inset 0 0 calc(var(--u)*7px) var(--rc),0 0 calc(var(--u)*5px) var(--rc)}
+.iv-es[aria-pressed=true]{filter:brightness(1.25) drop-shadow(0 0 4px #ffcf7a)}
+.iv-es svg{width:48%;height:48%;opacity:.35}
+.iv-es .iv-ic{width:70%;height:70%}
+.iv-es:disabled{cursor:not-allowed;opacity:.55}
+.iv-es:disabled svg{opacity:.22}
+.iv-es.can{filter:drop-shadow(0 0 5px #7dd68a);animation:iv-can 1s ease-in-out infinite}
 .iv-es.no{opacity:.35}
-.iv-es .lbl{position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);font:700 8px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:#6f8eab;white-space:nowrap;pointer-events:none}
 .iv-es .qn{position:absolute;right:2px;bottom:1px;font:700 10px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 3px #000;color:#fff}
 @keyframes iv-can{0%,100%{box-shadow:0 0 4px #7dd68a}50%{box-shadow:0 0 16px #7dd68a}}
 @keyframes iv-pulse{0%,100%{box-shadow:0 0 5px var(--rc),inset 0 0 8px rgba(0,0,0,.6)}50%{box-shadow:0 0 16px var(--rc),inset 0 0 8px rgba(0,0,0,.6)}}
@@ -79,9 +97,9 @@ const CSS = `
 .iv-es.wglow.w5 .iv-ic{filter:drop-shadow(0 0 10px var(--rc)) brightness(1.15)}
 .iv-es.can,.iv-es.no{animation-name:iv-can}
 @media (prefers-reduced-motion:reduce){.iv-es,.iv-slot,.iv-sil .em{animation:none!important}}
-.iv-acc{display:flex;gap:18px;justify-content:center;padding:12px 0 2px}
-.iv-acc .iv-es{position:relative;transform:none;left:auto;top:auto;--s:40px;width:40px;height:40px}
-.iv-acc .iv-es:hover:not(:disabled){transform:scale(1.07)}
+.iv-acc{display:flex;gap:calc(var(--u)*10px);justify-content:center;padding:calc(var(--u)*6px) 0 2px}
+.iv-acc .iv-es{position:relative;transform:none;left:auto;top:auto;width:calc(var(--u)*30px);height:calc(var(--u)*36px)}
+.iv-acc .iv-es:hover:not(:disabled){transform:scale(1.05)}
 .iv-tip{position:fixed;z-index:40;max-width:260px;padding:9px 11px;border-radius:6px;pointer-events:none;color:#dbeaff;font:400 12px/1.4 Georgia,serif;
   background:linear-gradient(180deg,rgba(18,28,44,.98),rgba(6,10,18,.99));border:1px solid var(--rc,#ff9a4d);box-shadow:0 8px 24px rgba(0,0,0,.8),0 0 14px var(--rc,transparent)}
 .iv-tip h4{margin:0 0 1px;font:700 13px/1.2 "Cinzel",Georgia,serif}
@@ -90,19 +108,18 @@ const CSS = `
 .iv-tip .up{color:#7dd68a}.iv-tip .dn{color:#ff8f7e}.iv-tip .eq{color:#8fb0cf}
 .iv-tip hr{border:0;border-top:1px solid rgba(160,200,240,.18);margin:5px 0}
 .iv-tip .bad{color:#ff9d8a}
-.iv-stats{font:400 12px/1.5 Georgia,serif;color:#9fc0e0;margin:6px 0 0;text-align:center}
+.iv-stats{font:700 12px/1.5 Georgia,serif;color:#3a2814;margin:6px 0 0;text-align:center}
 .iv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.iv-slot{position:relative;aspect-ratio:1;border-radius:5px;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;--rc:rgba(160,200,240,.2);
-  background:radial-gradient(circle at 50% 35%,rgba(20,30,46,.9),rgba(5,9,15,.9));border:1.5px solid var(--rc);transition:border-color .15s,transform .12s}
-.iv-slot.full{box-shadow:0 0 6px var(--rc)}
-.iv-slot.drop{border-color:#7dd68a}
-.iv-slot:hover{border-color:#ff9a4d;transform:scale(1.04)}
-.iv-slot[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 14px rgba(255,170,80,.4)}
+.iv-slot{position:relative;aspect-ratio:1;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;--rc:transparent;background:none;border:calc(var(--u)*5px) solid transparent;border-image:url(/ui/inv_slot.png) 5 fill / calc(var(--u)*5px) stretch;image-rendering:pixelated;transition:filter .15s,transform .12s}
+.iv-slot.full{box-shadow:inset 0 0 calc(var(--u)*6px) var(--rc),0 0 calc(var(--u)*4px) var(--rc)}
+.iv-slot.drop{filter:drop-shadow(0 0 4px #7dd68a) brightness(1.1)}
+.iv-slot:hover{filter:brightness(1.12);transform:scale(1.04)}
+.iv-slot[aria-pressed=true]{filter:brightness(1.25) drop-shadow(0 0 4px #ffcf7a)}
 .iv-slot svg,.iv-eqs svg{width:70%;height:70%}
 .iv-eqs svg{width:34px;height:34px;flex:none}
 .iv-ic{image-rendering:pixelated;object-fit:contain;flex:none;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
 .iv-qty{position:absolute;right:3px;bottom:2px;font:700 10px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 3px #000}
-.iv-det{margin-top:10px;min-height:92px;padding:10px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2)}
+.iv-det{margin-top:10px;min-height:92px;padding:10px;border-radius:3px;background:rgba(18,12,9,.88);border:2px solid #4a4038;box-shadow:inset 0 0 10px #000;color:#dbeaff}
 .iv-det h3{margin:0 0 2px;font:700 13px/1.2 "Cinzel",Georgia,serif}
 .iv-det p{margin:2px 0;font:400 12px/1.35 Georgia,serif;color:#9fc0e0}
 .iv-det .iv-bad{color:#ff9d8a}
@@ -179,11 +196,11 @@ const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarit
 
 /** posições (em % do boneco) de cada espaço */
 const EQ_POS: Record<EquipSlot | "potion", [number, number]> = {
-  helmet: [50, 9], armor: [50, 40], boots: [50, 85], weapon: [14, 46], offhand: [86, 46], cape: [14, 16], potion: [14, 68],
+  helmet: [50, 14.6], armor: [50, 47.4], boots: [50, 81], weapon: [13.9, 51.8], offhand: [86.1, 51.8], cape: [13.9, 18.2], potion: [13.9, 85.4],
 };
 interface Ph { key: string; label: string; icon: string; pos?: [number, number]; acc?: boolean }
 const PLACEHOLDERS: Ph[] = [
-  { key: "bag", label: "Bolsa", icon: "bag", pos: [86, 16] }, { key: "food", label: "Comida", icon: "food", pos: [86, 68] },
+  { key: "bag", label: "Bolsa", icon: "bag", pos: [86.1, 18.2] }, { key: "food", label: "Comida", icon: "food", pos: [86.1, 85.4] },
   { key: "ring", label: "Anel", icon: "ring", acc: true }, { key: "amulet", label: "Amuleto", icon: "amulet", acc: true },
 ];
 const PH_ICONS: Record<string, string> = {
@@ -207,12 +224,19 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const back = document.createElement("div");
   back.className = "iv-back";
   back.innerHTML = `
+    <div class="iv-wrap">
     <div class="iv-card" role="dialog" aria-modal="true" aria-label="Mochila">
-      <div class="iv-head"><h2 class="iv-title">Mochila</h2><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
-      <div class="iv-body">
+      <div class="iv-head"><h2 class="iv-title"><img class="iv-pix" src="/ui/inv_title.png" alt="Inventário"></h2><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button></div></div>
+      <div class="iv-scroll"><div class="iv-body">
         <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><p class="iv-stats"></p></div>
         <div><div class="iv-wallet" aria-label="Moedas"></div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
-      </div>
+      </div></div>
+    </div>
+    <img class="iv-chain tr" src="/ui/inv_chain_tr.png" alt="">
+    <img class="iv-chain bl" src="/ui/inv_chain_bl.png" alt="">
+    <div class="iv-medal"><canvas width="47" height="57" aria-hidden="true"></canvas><img src="/ui/inv_medal.png" alt=""></div>
+    <button type="button" class="iv-x" aria-label="Fechar"></button>
+    </div>
     </div>`;
   const toasts = document.createElement("div");
   toasts.className = "iv-toasts";
@@ -231,7 +255,16 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   let confirmDrop = false;
 
   const isOpen = () => back.classList.contains("open");
-  const open = () => { back.classList.add("open"); render(); };
+  const portrait = back.querySelector<HTMLCanvasElement>(".iv-medal canvas")!;
+  /** copia o retrato real do jogador (o mesmo da HUD) para o medalhão */
+  const drawPortrait = () => {
+    const src = document.querySelector<HTMLCanvasElement>(".hd-portrait canvas");
+    const cx = portrait.getContext("2d")!;
+    cx.imageSmoothingEnabled = false;
+    cx.clearRect(0, 0, portrait.width, portrait.height);
+    if (src && src.width) cx.drawImage(src, 0, 0, src.width, src.height, 0, 0, portrait.width, portrait.height);
+  };
+  const open = () => { back.classList.add("open"); drawPortrait(); render(); };
   const close = () => { back.classList.remove("open"); btn.focus(); };
   const toggle = () => (isOpen() ? close() : open());
 
@@ -350,6 +383,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     const def = equippedDef(s);
     const b = slotButton(s, EQUIP_SLOT_NAME[s] === "Mão secundária" ? "Secundária" : EQUIP_SLOT_NAME[s]);
     b.dataset.eq = s;
+    if (s === "helmet" || s === "armor" || s === "boots") b.dataset.c = "1"; // miolo vazado: a silhueta aparece por trás
     b.setAttribute("aria-pressed", String(sel?.kind === "equip" && sel.s === s));
     b.setAttribute("aria-label", def ? `${EQUIP_SLOT_NAME[s]}: ${def.name}` : `${EQUIP_SLOT_NAME[s]} vazio`);
     if (def) {
@@ -415,9 +449,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     hideTip();
     renderWallet();
     // equipamento: silhueta com os espaços sobre o corpo
-    const rc: Partial<Record<EquipSlot, string>> = {};
-    for (const s of EQUIP_SLOTS) { const d = equippedDef(s); if (d && d.rarity !== "common") rc[s] = RARITY_COLOR[d.rarity]; else if (d) rc[s] = "#8fa6c0"; }
-    dollEl.innerHTML = silhouetteSvg(rc);
+    dollEl.innerHTML = `<img class="iv-sil-s" src="/ui/inv_sil_smoke.png" alt=""><img class="iv-sil" src="/ui/inv_sil_body.png" alt="">`;
     accEl.replaceChildren();
     for (const ph of PLACEHOLDERS) (ph.acc ? accEl : dollEl).append(placeholderSlot(ph));
     for (const s of EQUIP_SLOTS) dollEl.append(equipSlot(s));
