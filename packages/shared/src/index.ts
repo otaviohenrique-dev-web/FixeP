@@ -138,6 +138,7 @@ export const TRADE_CHAT_MAX_LEN = 120; // chat privado da troca: mensagens curta
 export interface ChatEvent { id: string; name: string; text: string }
 
 export interface MoveToPayload {
+  stop?: boolean; // true: para no ponto onde o personagem está AGORA, no servidor (ignora x e y)
   x: number; // tile
   y: number;
 }
