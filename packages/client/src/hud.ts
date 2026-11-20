@@ -221,6 +221,13 @@ const CSS = `
   .hd-bar{gap:10px}.hd-btn{width:48px;height:48px}.hd-btn.big{width:56px;height:56px}.hd-sn{font-size:7px}
   .hd-pwrap{width:60px;height:60px}.hd-track{height:16px}
 }
+/* ---------- limpeza: habilidades só com ícone e recarga (o nome aparece na dica) ---------- */
+.hd-sn,.hd-cost{display:none}
+.hd-auto .hd-sn{display:block;position:static;font-size:10px;letter-spacing:.04em}
+.hd-ic{top:50%;left:50%;margin-left:0;transform:translate(-50%,-50%)}
+.hd-ic svg{width:26px;height:26px}
+.hd-lv{display:none}
+.hd.touch .hd-ic svg{width:28px;height:28px}
 `;
 
 export function mountHud(opts: HudOptions): Hud {
