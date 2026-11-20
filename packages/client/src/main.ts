@@ -14,6 +14,7 @@ import {
 import { ensureLogin, logout, wsUrl } from "./auth";
 import { ensureCharacter } from "./character";
 import { mountGameMenu } from "./menu";
+import { attachPerf, startPerf } from "./perf-probe";
 import { mountHud, type Hud } from "./hud";
 import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
@@ -195,6 +196,7 @@ class WorldScene extends Phaser.Scene {
       if (o instanceof Phaser.GameObjects.Text && DPR > 1) o.setResolution(DPR);
     });
     this.loader = (this.sys.settings.data as { loader: LoadingScreen }).loader;
+    attachPerf(this.game, () => ({ zone: ZONES[this.zoneId]?.name ?? "?", ents: this.sprites.size }));
     await this.enterZone((this.sys.settings.data as { zone?: number }).zone ?? START_ZONE, "boot");
   }
 
@@ -314,6 +316,7 @@ class WorldScene extends Phaser.Scene {
         try { await this.room.leave(true); } catch { /* já desconectado */ }
         logout();
       },
+      onPerf: () => startPerf(),
     });
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });

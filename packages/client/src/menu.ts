@@ -6,6 +6,7 @@ import { cycleHudScale, hudScaleLabel } from "./mobile";
 export interface GameMenuOptions {
   playerName: string;
   onLogout(): void | Promise<void>;
+  onPerf?(): void; // medir desempenho (30 s e relatório para copiar)
 }
 
 const CSS = `
@@ -87,7 +88,13 @@ export function mountGameMenu(opts: GameMenuOptions) {
   onInstallChange(syncInst);
   inst.onclick = async () => { if (installMode() === "ios") hint.hidden = !hint.hidden; else await runInstall(); };
 
-  card.append(title, who, resume, hs, inst, hint, logout);
+  const perf = document.createElement("button"); // medição de FPS/desempenho para mandar o relatório
+  perf.type = "button";
+  perf.className = "gm-item";
+  perf.textContent = "Medir desempenho";
+  perf.onclick = () => { close(); opts.onPerf?.(); };
+
+  card.append(title, who, resume, hs, perf, inst, hint, logout);
   back.append(card);
   document.body.append(btn, back);
 
