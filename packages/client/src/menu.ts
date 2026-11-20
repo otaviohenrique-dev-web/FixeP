@@ -1,7 +1,7 @@
 import { installMode, onInstallChange, runInstall } from "./pwa";
 import { isTypingTarget } from "./keys";
 import { cycleHudScale, hudScaleLabel } from "./mobile";
-import { lowQuality, setLowQuality } from "./quality";
+import { modoQualidade, NOME_MODO, proximoModo, setModo } from "./quality";
 /** Menu simples dentro do jogo: continuar ou desconectar (volta para a tela de login). */
 
 export interface GameMenuOptions {
@@ -89,11 +89,11 @@ export function mountGameMenu(opts: GameMenuOptions) {
   onInstallChange(syncInst);
   inst.onclick = async () => { if (installMode() === "ios") hint.hidden = !hint.hidden; else await runInstall(); };
 
-  const qual = document.createElement("button"); // Qualidade gráfica: Bom ou Baixo (recarrega para aplicar)
+  const qual = document.createElement("button"); // Gráficos: Bom / Teste A / Teste B (recarrega para aplicar)
   qual.type = "button";
   qual.className = "gm-item";
-  qual.textContent = `Qualidade gráfica: ${lowQuality() ? "Baixo" : "Bom"}`;
-  qual.onclick = () => { setLowQuality(!lowQuality()); location.reload(); };
+  qual.textContent = `Gráficos: ${NOME_MODO[modoQualidade()]}`;
+  qual.onclick = () => { setModo(proximoModo()); location.reload(); };
 
   const perf = document.createElement("button"); // medição de FPS/desempenho para mandar o relatório
   perf.type = "button";

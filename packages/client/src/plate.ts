@@ -33,9 +33,8 @@ const mix = (c: number, to: number, t: number) => {
 
 export function drawPlate(
   g: Phaser.GameObjects.Graphics,
-  o: { x: number; y: number; hp: number; maxHp: number; level: number; kind: PlateKind; time: number; low?: boolean },
+  o: { x: number; y: number; hp: number; maxHp: number; level: number; kind: PlateKind; time: number },
 ): PlateGeom {
-  const fancy = !o.low; // qualidade "Baixo" tira os enfeites (halos, rebites, gema)
   const K = 1.3; // escala geral da placa
   const W = (o.kind === "enemy" ? 44 : 54) * K; // largura da barra
   const H = 9 * K;
@@ -68,7 +67,7 @@ export function drawPlate(
 
   // ----- selo de nível
   const pulse = tier >= 5 ? 0.5 + 0.5 * Math.sin(o.time / 220) : 1;
-  if (tier >= 3 && fancy) {
+  if (tier >= 3) {
     g.lineStyle(7, col, 0.14 * pulse).strokeRoundedRect(cx - size / 2 - 3, cy - size / 2 - 3, size + 6, size + 6, 9);
     g.lineStyle(3, col, 0.34 * pulse).strokeRoundedRect(cx - size / 2 - 1, cy - size / 2 - 1, size + 2, size + 2, 7);
   }
@@ -77,12 +76,12 @@ export function drawPlate(
   const bw = (tier >= 2 ? 3 : tier >= 1 ? 2.5 : 2) * 1.15;
   g.fillStyle(0x0d1420, 1).fillRoundedRect(cx - size / 2 + bw, cy - size / 2 + bw, size - bw * 2, size - bw * 2, 3); // miolo
   g.fillStyle(light, 0.5).fillRect(cx - size / 2 + 3, cy - size / 2 + 1, size - 6, 1); // reflexo no alto da moldura
-  if (tier >= 2 && fancy) {
+  if (tier >= 2) {
     // rebites nos cantos
     g.fillStyle(light, 1);
     for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.fillRect(cx + dx * (size / 2 - 1) - 2, cy + dy * (size / 2 - 1) - 2, 4, 4);
   }
-  if (tier >= 4 && fancy) {
+  if (tier >= 4) {
     // gema no topo
     const gy = cy - size / 2 - 1;
     g.fillStyle(0x03050a, 1).fillTriangle(cx - 8, gy + 1, cx + 8, gy + 1, cx, gy - 11);

@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { modoQualidade, NOME_MODO } from "./quality";
 /**
  * Medidor de desempenho para o celular (sem cabo nem configuração).
  * Pelo menu ("Medir desempenho"), grava 30 s de jogo e mostra um relatório curto para copiar e mandar.
@@ -87,7 +88,7 @@ function report(): string {
   const slow = frameMs.filter((f) => f > 33.4).length;
   const lines = [
     `FrixeP desempenho (${r1(secs)} s)`,
-    `tela: ${innerWidth}x${innerHeight} @${devicePixelRatio}x · núcleos: ${navigator.hardwareConcurrency ?? "?"}`,
+    `tela: ${innerWidth}x${innerHeight} @${devicePixelRatio}x · núcleos: ${navigator.hardwareConcurrency ?? "?"} · gráficos: ${NOME_MODO[modoQualidade()]}`,
     `zonas: ${[...zones].join(", ") || "?"} · entidades máx.: ${entsMax}`,
     `FPS médio: ${r1(fpsAvg)} · 1% pior: ${r1(1000 / Math.max(1, pct(frameMs, 0.99)))} · pior quadro: ${r1(worst)} ms`,
     `quadros acima de 33 ms: ${slow} de ${frameMs.length} (${r1((100 * slow) / Math.max(1, frameMs.length))}%)`,
