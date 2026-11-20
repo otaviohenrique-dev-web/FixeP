@@ -274,7 +274,8 @@ const CSS = `
   background:linear-gradient(180deg,#ffffff 0%,#bfe3ff 38%,#6fb0e6 62%,#ff9a4d 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 18px rgba(120,190,255,.35)) drop-shadow(0 4px 22px rgba(255,120,40,.28))}
 .fx-logo h1 b{font-weight:900;background:linear-gradient(180deg,#fff2c9 0%,#ffb35c 45%,#ff5a1a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;animation:fx-flick 2.6s infinite}
-.fx-emb{display:block;margin:0 auto 6px;width:clamp(52px,10vh,84px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
+.fx-logo h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;filter:none}
+.fx-emb{display:block;margin:0 auto 10px;width:clamp(110px,24vh,200px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
 .fx-tag{margin:10px 0 0;font-weight:400;font-size:clamp(11px,1.7vw,16px);letter-spacing:.32em;text-transform:uppercase;color:#a9c7e6;text-indent:.32em;text-shadow:0 2px 12px #000}
 .fx-panel{width:min(360px,100%);display:flex;flex-direction:column;align-items:stretch;gap:12px;animation:fx-rise 1.6s .9s cubic-bezier(.2,.7,.2,1) both}
 .fx-head{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:700;letter-spacing:.4em;text-transform:uppercase;color:#ffb072;margin-bottom:2px;text-shadow:0 0 14px rgba(255,120,40,.5);justify-content:center;text-indent:.4em}
@@ -307,7 +308,7 @@ const CSS = `
 @keyframes fx-tw{0%,100%{opacity:.25}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.fx-root,.fx-logo,.fx-panel{animation:none}.fx-logo h1 b,.fx-tw{animation:none}}
 @media (max-width:520px){.fx-logo{margin-top:30px}.fx-pre{letter-spacing:.32em;text-indent:.32em}.fx-tag{letter-spacing:.2em;text-indent:.2em}}
-@media (max-height:620px){.fx-pre,.fx-tag,.fx-emb{display:none}.fx-btn{min-height:46px}}
+@media (max-height:620px){.fx-pre,.fx-tag{display:none}.fx-emb{width:clamp(72px,20vh,110px)}.fx-btn{min-height:46px}}
 `;
 
 const ICON_ON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></svg>`;
@@ -341,7 +342,7 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
     <div class="fx-vig"></div>
     <div class="fx-ui">
       <header class="fx-logo">
-        <img class="fx-emb" src="/icon-192.png?v=4" alt="" width="84" height="84" draggable="false">
+        <img class="fx-emb" src="/icon-512.png?v=4" alt="FrixeP" width="200" height="200" draggable="false">
         <span class="fx-pre">A Geada Negra consome Vael</span>
         <h1 aria-label="FrixeP">Frixe<b>P</b></h1>
         <p class="fx-tag">Acenda a Brasa &middot; Desperte o mundo</p>
