@@ -268,7 +268,7 @@ export class ZoneRoom extends Room<ZoneState> {
       const p = this.state.players.get(client.sessionId);
       if (p) this.sendInv(client.sessionId, p);
     });
-    this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(client.sessionId, pl, p?.slot)));
+    this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(pl, p?.slot)));
 
     // Baú da cidade: o servidor confere a distância a CADA pedido, valida os espaços e grava bolsa+baú numa transação só
     this.onMessage(Msg.VaultOpen, (client) => void this.vaultOp(client, () => ({ ok: true })));
@@ -702,14 +702,13 @@ export class ZoneRoom extends Room<ZoneState> {
     this.sendInv(client.sessionId, p);
   }
 
-  private usePotion(id: string, p: Player, slot: unknown): { ok: true } | { ok: false; error: string } {
+  private usePotion(p: Player, slot: unknown): { ok: true } | { ok: false; error: string } {
     if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
     const stack = p.inv.slots[slot];
     const def = stack ? ITEMS[stack.id] : undefined;
     if (!stack || !def || def.kind !== "potion") return { ok: false, error: "Esse item não pode ser usado." };
     if (this.t < p.potionCdUntil) return { ok: false, error: "Poção em recarga." };
     if (p.hp >= p.maxHp) return { ok: false, error: "Sua vida já está cheia." };
-    if (this.healBlocked(id, p)) return { ok: false, error: "Você está sob ataque: não pode se curar agora." };
     consumeOne(p.inv, slot);
     p.potionCdUntil = this.t + POTION_COOLDOWN_S;
     p.hp = Math.min(p.maxHp, p.hp + (def.heal ?? 0));
@@ -934,7 +933,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (p.level >= LEVEL_CAP) p.xp = 0;
     p.dirty = true;
     if (leveled) {
-      this.refreshStats(p, !this.healBlocked(id, p)); // subir de nível não cura quem está sob ataque
+      this.refreshStats(p, true);
       this.broadcast(Evt.LevelUp, { id, level: p.level });
       void this.save(p); // subir de nível salva na hora
     }
@@ -1215,7 +1214,7 @@ export class ZoneRoom extends Room<ZoneState> {
     }
   }
 
-  /** Não pode curar: apanhou há pouco, ou algum inimigo vivo está focando este jogador (perseguindo, preparando ou atacando). */
+  /** Bloqueia só a REGENERAÇÃO AUTOMÁTICA em repouso: apanhou há pouco, ou algum inimigo vivo está focando este jogador. Poções, habilidades de cura e aliados não passam por aqui. */
   private healBlocked(id: string, p: Player): boolean {
     if (this.t - p.hurtAt < HEAL_BLOCK_AFTER_HIT_S) return true;
     let focused = false;
@@ -1224,7 +1223,6 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private healPlayer(id: string, p: Player, amount: number, from?: string) {
-    if (this.healBlocked(id, p)) return; // sob ataque: nenhuma cura, nem de aliado
     const before = p.hp;
     p.hp = Math.min(p.maxHp, p.hp + amount);
     const healed = p.hp - before;
