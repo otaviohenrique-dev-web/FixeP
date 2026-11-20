@@ -129,30 +129,86 @@ function midLayer(): string {
 </svg>`;
 }
 
+/** pedra arredondada, iluminada pelo fogo do lado de dentro */
+function stone(x: number, y: number, rx: number, ry: number, tone: number, id: string): string {
+  const base = Math.round(22 + tone * 16);
+  return `<g>
+    <ellipse cx="${x}" cy="${(y + ry * 0.55).toFixed(1)}" rx="${(rx * 1.05).toFixed(1)}" ry="${(ry * 0.45).toFixed(1)}" fill="#000" opacity=".5"/>
+    <ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#${id})" stroke="#05080d" stroke-width="1.4"/>
+    <ellipse cx="${(x - rx * 0.25).toFixed(1)}" cy="${(y - ry * 0.4).toFixed(1)}" rx="${(rx * 0.5).toFixed(1)}" ry="${(ry * 0.28).toFixed(1)}" fill="rgb(${base + 40},${base + 48},${base + 64})" opacity=".35"/>
+  </g>`;
+}
+
+/** tora: cilindro arredondado com casca, anéis na ponta e brilho de brasa no lado voltado ao fogo */
+function log(x1: number, y1: number, x2: number, y2: number, r: number, seed: number): string {
+  const rr = rng(seed);
+  const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+  const ux = dx / L, uy = dy / L, nx = -uy, ny = ux; // eixo e normal
+  const up = ny > 0 ? -1 : 1; // normal apontando para cima
+  let bark = "";
+  for (let k = 0; k < 7; k++) {
+    const t0 = 0.06 + rr() * 0.8, t1 = Math.min(0.97, t0 + 0.1 + rr() * 0.16), off = (rr() - 0.5) * r * 1.3;
+    bark += `<line x1="${(x1 + dx * t0 + nx * off).toFixed(1)}" y1="${(y1 + dy * t0 + ny * off).toFixed(1)}" x2="${(x1 + dx * t1 + nx * off).toFixed(1)}" y2="${(y1 + dy * t1 + ny * off).toFixed(1)}" stroke="#120a05" stroke-width="1.4" opacity=".75"/>`;
+  }
+  const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const cap = (x: number, y: number) => `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(1)})">
+      <ellipse rx="${(r * 0.42).toFixed(1)}" ry="${r}" fill="#3b2412" stroke="#0e0703" stroke-width="1.2"/>
+      <ellipse rx="${(r * 0.3).toFixed(1)}" ry="${(r * 0.72).toFixed(1)}" fill="none" stroke="#6b4423" stroke-width="1"/>
+      <ellipse rx="${(r * 0.17).toFixed(1)}" ry="${(r * 0.4).toFixed(1)}" fill="none" stroke="#7d5230" stroke-width=".9"/></g>`;
+  const sx = nx * up * r * 0.45, sy = ny * up * r * 0.45;
+  return `<g stroke-linecap="round">
+    <line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#0d0704" stroke-width="${(r * 2 + 3).toFixed(1)}"/>
+    <line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#2b1a0d" stroke-width="${(r * 2).toFixed(1)}"/>
+    <line x1="${(x1 + sx).toFixed(1)}" y1="${(y1 + sy).toFixed(1)}" x2="${(x2 + sx).toFixed(1)}" y2="${(y2 + sy).toFixed(1)}" stroke="#4a2c15" stroke-width="${(r * 1.05).toFixed(1)}" opacity=".9"/>
+    <line x1="${(x1 + sx * 1.2).toFixed(1)}" y1="${(y1 + sy * 1.2).toFixed(1)}" x2="${(x2 + sx * 1.2).toFixed(1)}" y2="${(y2 + sy * 1.2).toFixed(1)}" stroke="#ff7a28" stroke-width="${(r * 0.35).toFixed(1)}" opacity=".5"/>
+  </g>${bark}${cap(x1, y1)}${cap(x2, y2)}`;
+}
+
+const STONE_DEFS = `<radialGradient id="fxStone" cx=".5" cy=".12" r=".95"><stop offset="0" stop-color="#ff9a52" stop-opacity=".85"/><stop offset=".3" stop-color="#6b4a3a"/><stop offset=".62" stop-color="#2a3240"/><stop offset="1" stop-color="#0b1119"/></radialGradient>`;
+
 function nearLayer(): string {
   const r = rng(91);
-  let rocks = "";
-  for (let i = 0; i < 9; i++) {
-    const a = r() * Math.PI * 2;
-    const x = FIRE.x + Math.cos(a) * (46 + r() * 26), y = FIRE.y + 30 + Math.sin(a) * 10;
-    rocks += `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(9 + r() * 8).toFixed(1)}" ry="${(6 + r() * 4).toFixed(1)}" fill="#0a111b" stroke="rgba(255,150,70,.35)" stroke-width="1.2"/>`;
-  }
   const left = treeSvg(101, 120, 910, 250, 6, 16, "#02050a", 0.07);
   const right = treeSvg(131, 1490, 910, 280, 6, 18, "#02050a", -0.08);
+  // pedras de trás (menores, mais escuras) fecham o círculo
+  let back = "";
+  for (let i = 0; i < 7; i++) {
+    const a = Math.PI * (1.08 + (i / 6) * 0.84);
+    back += stone(Math.round(FIRE.x + Math.cos(a) * 96), Math.round(FIRE.y + 14 + Math.sin(a) * 15), 15 + r() * 6, 9 + r() * 3, r(), "fxStone");
+  }
+  const F = FIRE;
   return `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
   <defs>
     <linearGradient id="fxGround" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d1a2a"/><stop offset=".25" stop-color="#050b14"/><stop offset="1" stop-color="#02050a"/></linearGradient>
-    <radialGradient id="fxLit" cx=".5" cy=".5"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".55"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fxLit" cx=".5" cy=".5"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".6"/><stop offset=".5" stop-color="#ff6a20" stop-opacity=".2"/><stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fxAsh" cx=".5" cy=".5"><stop offset="0" stop-color="#ffb060" stop-opacity=".9"/><stop offset=".45" stop-color="#d4501a" stop-opacity=".55"/><stop offset="1" stop-color="#3a0f05" stop-opacity="0"/></radialGradient>
+    ${STONE_DEFS}
   </defs>
   ${ridge(630, 26, 53, "url(#fxGround)", "rgba(190,225,255,.45)")}
-  <ellipse cx="${FIRE.x}" cy="${FIRE.y + 34}" rx="260" ry="34" fill="url(#fxLit)"/>
+  <ellipse cx="${F.x}" cy="${F.y + 36}" rx="330" ry="44" fill="url(#fxLit)"/>
   ${left}${right}
-  ${rocks}
-  <g stroke="#0b0805" stroke-linecap="round">
-    <line x1="${FIRE.x - 52}" y1="${FIRE.y + 30}" x2="${FIRE.x + 40}" y2="${FIRE.y + 8}" stroke-width="15"/>
-    <line x1="${FIRE.x + 52}" y1="${FIRE.y + 30}" x2="${FIRE.x - 40}" y2="${FIRE.y + 8}" stroke-width="15"/>
-    <line x1="${FIRE.x - 44}" y1="${FIRE.y + 22}" x2="${FIRE.x + 44}" y2="${FIRE.y + 22}" stroke-width="12"/>
-  </g>
+  <ellipse cx="${F.x}" cy="${F.y + 16}" rx="104" ry="24" fill="#0a0604"/>
+  ${back}
+  <ellipse cx="${F.x}" cy="${F.y + 12}" rx="82" ry="15" fill="url(#fxAsh)"/>
+  ${log(F.x - 50, F.y + 12, F.x + 30, F.y - 24, 8, 301)}
+  ${log(F.x + 52, F.y + 12, F.x - 28, F.y - 22, 8, 302)}
+</svg>`;
+}
+
+/** primeiro plano da fogueira: toras da frente e pedras (desenhado POR CIMA do fogo, para a chama nascer atrás da lenha) */
+function campFront(): string {
+  const F = FIRE;
+  const r = rng(177);
+  let front = "";
+  for (let i = 0; i < 7; i++) {
+    const a = Math.PI * (0.06 + (i / 6) * 0.88);
+    front += stone(Math.round(F.x + Math.cos(a) * 112), Math.round(F.y + 30 + Math.sin(a) * 22), 18 + r() * 8, 11 + r() * 4, r(), "fxStoneF");
+  }
+  return `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+  <defs>${STONE_DEFS.replace('id="fxStone"', 'id="fxStoneF"')}</defs>
+  ${log(F.x - 78, F.y + 30, F.x + 56, F.y + 2, 10, 311)}
+  ${log(F.x + 80, F.y + 32, F.x - 54, F.y + 4, 10, 312)}
+  ${front}
 </svg>`;
 }
 
@@ -275,7 +331,7 @@ const CSS = `
   filter:drop-shadow(0 0 18px rgba(120,190,255,.35)) drop-shadow(0 4px 22px rgba(255,120,40,.28))}
 .fx-logo h1 b{font-weight:900;background:linear-gradient(180deg,#fff2c9 0%,#ffb35c 45%,#ff5a1a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;animation:fx-flick 2.6s infinite}
 .fx-logo h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;filter:none}
-.fx-emb{display:block;margin:0 auto 10px;width:clamp(110px,24vh,200px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
+.fx-emb{display:block;margin:0 auto 10px;width:clamp(150px,34vh,300px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
 .fx-tag{margin:10px 0 0;font-weight:400;font-size:clamp(11px,1.7vw,16px);letter-spacing:.32em;text-transform:uppercase;color:#a9c7e6;text-indent:.32em;text-shadow:0 2px 12px #000}
 .fx-panel{width:min(360px,100%);display:flex;flex-direction:column;align-items:stretch;gap:12px;animation:fx-rise 1.6s .9s cubic-bezier(.2,.7,.2,1) both}
 .fx-head{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:700;letter-spacing:.4em;text-transform:uppercase;color:#ffb072;margin-bottom:2px;text-shadow:0 0 14px rgba(255,120,40,.5);justify-content:center;text-indent:.4em}
@@ -308,7 +364,7 @@ const CSS = `
 @keyframes fx-tw{0%,100%{opacity:.25}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.fx-root,.fx-logo,.fx-panel{animation:none}.fx-logo h1 b,.fx-tw{animation:none}}
 @media (max-width:520px){.fx-logo{margin-top:30px}.fx-pre{letter-spacing:.32em;text-indent:.32em}.fx-tag{letter-spacing:.2em;text-indent:.2em}}
-@media (max-height:620px){.fx-pre,.fx-tag{display:none}.fx-emb{width:clamp(72px,20vh,110px)}.fx-btn{min-height:46px}}
+@media (max-height:620px){.fx-pre,.fx-tag{display:none}.fx-emb{width:clamp(96px,26vh,150px)}.fx-btn{min-height:46px}}
 `;
 
 const ICON_ON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></svg>`;
@@ -339,6 +395,7 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
     <div class="fx-layer" data-d="18">${midLayer()}</div>
     <div class="fx-layer" data-d="34">${nearLayer()}</div>
     <canvas class="fx-fx"></canvas>
+    <div class="fx-layer fx-front" data-d="34">${campFront()}</div>
     <div class="fx-vig"></div>
     <div class="fx-ui">
       <header class="fx-logo">
@@ -459,45 +516,70 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
     x: rnd() * innerWidth, y: 0.5 + rnd() * 0.45, s: 380 + rnd() * 420, v: (i % 2 ? 1 : -1) * (5 + rnd() * 10), a: 0.07 + rnd() * 0.09,
   }));
 
-  const flame = (x: number, y: number, s: number, t: number) => {
+  // fogo: partículas macias que nascem na base, sobem estreitando e esfriam (branco-amarelo, laranja, vermelho).
+  // Sem polígonos: tudo são gradientes radiais, então a chama é redonda e orgânica, sem pontas.
+  type Fp = { x: number; y: number; vx: number; vy: number; age: number; max: number; r: number; ph: number };
+  const flames: Fp[] = [];
+  let fspawn = 0;
+  const flameStep = (x: number, y: number, s: number, t: number, dt: number) => {
     g.globalCompositeOperation = "lighter";
-    const flick = 0.86 + 0.1 * Math.sin(t * 9) + 0.06 * Math.sin(t * 23 + 1);
-    const R = 380 * s * flick;
-    const glow = g.createRadialGradient(x, y - 70 * s, 0, x, y - 70 * s, R);
-    glow.addColorStop(0, "rgba(255,150,60,.42)");
-    glow.addColorStop(0.4, "rgba(255,100,30,.14)");
+    const flick = 0.88 + 0.08 * Math.sin(t * 7.3) + 0.05 * Math.sin(t * 19 + 1);
+    const R = 420 * s * flick;
+    const glow = g.createRadialGradient(x, y - 60 * s, 0, x, y - 60 * s, R);
+    glow.addColorStop(0, "rgba(255,150,60,.40)");
+    glow.addColorStop(0.35, "rgba(255,100,30,.15)");
     glow.addColorStop(1, "rgba(255,80,20,0)");
     g.fillStyle = glow;
-    g.fillRect(x - R, y - 70 * s - R, R * 2, R * 2);
-    // tochas de chama: externas laranja, internas amarelo-brancas
-    const tongues = [
-      [-30, 70, 24, 0.0], [30, 78, 24, 1.3], [-14, 118, 26, 2.1], [16, 124, 26, 3.4], [0, 150, 30, 4.7],
-      [-6, 92, 15, 5.2], [8, 100, 14, 6.1], [0, 118, 14, 7.3],
-    ];
-    tongues.forEach(([bx, bh, bw, ph], i) => {
-      const inner = i >= 5;
-      const h = bh * s * (0.78 + 0.22 * Math.sin(t * (6 + i * 0.7) + ph) + 0.08 * Math.sin(t * 17 + ph * 2));
-      const w = bw * s * (0.9 + 0.1 * Math.sin(t * 8 + ph));
-      const px = x + bx * s, sway = Math.sin(t * 4.2 + ph) * 11 * s;
-      const gr = g.createLinearGradient(0, y, 0, y - h);
-      if (inner) {
-        gr.addColorStop(0, "rgba(255,245,200,.95)");
-        gr.addColorStop(0.5, "rgba(255,210,110,.7)");
-        gr.addColorStop(1, "rgba(255,170,60,0)");
-      } else {
-        gr.addColorStop(0, "rgba(255,200,110,.85)");
-        gr.addColorStop(0.4, "rgba(255,120,30,.6)");
-        gr.addColorStop(0.8, "rgba(200,50,10,.25)");
-        gr.addColorStop(1, "rgba(160,30,0,0)");
-      }
+    g.fillRect(x - R, y - 60 * s - R, R * 2, R * 2);
+    // leito de brasas pulsando
+    const bed = g.createRadialGradient(x, y + 6 * s, 0, x, y + 6 * s, 78 * s);
+    bed.addColorStop(0, `rgba(255,170,70,${(0.55 * flick).toFixed(3)})`);
+    bed.addColorStop(1, "rgba(255,80,20,0)");
+    g.save();
+    g.translate(x, y + 6 * s);
+    g.scale(1, 0.26);
+    g.translate(-x, -(y + 6 * s));
+    g.fillStyle = bed;
+    g.fillRect(x - 80 * s, y + 6 * s - 80 * s, 160 * s, 160 * s);
+    g.restore();
+
+    fspawn += dt * (motion ? 95 : 40);
+    while (fspawn > 1) {
+      fspawn -= 1;
+      const side = (rnd() - 0.5) * 2;
+      flames.push({
+        x: x + side * 44 * s, y: y - 2 * s, vx: -side * 6 * s, vy: -(95 + rnd() * 95) * s,
+        age: 0, max: 0.95 + rnd() * 0.95, r: (24 + rnd() * 14) * s, ph: rnd() * 6.28,
+      });
+    }
+    for (let i = flames.length - 1; i >= 0; i--) {
+      const p = flames[i];
+      p.age += dt;
+      if (p.age >= p.max) { flames.splice(i, 1); continue; }
+      const a = p.age / p.max; // 0 nasce, 1 morre
+      p.vx += (x - p.x) * 1.2 * dt; // puxa para o eixo: a chama afina em gota
+      p.x += (p.vx + Math.sin(t * 5 + p.ph) * 16 * s * a) * dt;
+      p.y += p.vy * dt;
+      p.vy *= 1 - 0.28 * dt;
+      const rad = p.r * (1 - 0.72 * a) * (0.9 + 0.1 * Math.sin(t * 14 + p.ph));
+      let c0: string, c1: string;
+      if (a < 0.14) { const k = 0.5 * (1 - a * 0.6); c0 = `rgba(255,236,170,${k.toFixed(3)})`; c1 = "rgba(255,190,80,0)"; }
+      else if (a < 0.6) { const k = 0.55 * (1 - (a - 0.14) * 0.9); c0 = `rgba(255,140,38,${k.toFixed(3)})`; c1 = "rgba(255,90,20,0)"; }
+      else { const k = (0.34 * (1 - a)) / 0.38; c0 = `rgba(210,60,18,${k.toFixed(3)})`; c1 = "rgba(120,25,8,0)"; }
+      const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+      gr.addColorStop(0, c0);
+      gr.addColorStop(1, c1);
       g.fillStyle = gr;
-      g.beginPath();
-      g.moveTo(px - w, y);
-      g.quadraticCurveTo(px - w * 0.95, y - h * 0.55, px + sway, y - h);
-      g.quadraticCurveTo(px + w * 0.95, y - h * 0.55, px + w, y);
-      g.closePath();
-      g.fill();
-    });
+      g.fillRect(p.x - rad, p.y - rad, rad * 2, rad * 2);
+    }
+    // miolo quente na base
+    const core = g.createRadialGradient(x, y - 16 * s, 0, x, y - 16 * s, 36 * s * flick);
+    core.addColorStop(0, "rgba(255,240,190,.4)");
+    core.addColorStop(0.5, "rgba(255,200,100,.22)");
+    core.addColorStop(1, "rgba(255,140,40,0)");
+    g.fillStyle = core;
+    g.fillRect(x - 40 * s, y - 56 * s, 80 * s, 80 * s);
+    g.globalCompositeOperation = "source-over";
   };
 
   let raf = 0, last = performance.now(), t = 0, spawn = 0;
@@ -545,12 +627,12 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
 
     // fogo + brasas
     const f = fireAt();
-    flame(f.x, f.y, f.s, t);
+    flameStep(f.x, f.y, f.s, t, dt);
     spawn += dt * (motion ? 22 : 8);
     while (spawn > 1) {
       spawn -= 1;
       embers.push({
-        x: f.x + (rnd() - 0.5) * 36 * f.s, y: f.y - 20 * f.s, vx: (rnd() - 0.5) * 14,
+        x: f.x + (rnd() - 0.5) * 40 * f.s, y: f.y - 40 * f.s, vx: (rnd() - 0.5) * 14,
         vy: -(40 + rnd() * 90) * Math.max(0.7, f.s), life: 0, max: 2.4 + rnd() * 3, r: 0.8 + rnd() * 1.9, ph: rnd() * 6.28,
       });
     }
