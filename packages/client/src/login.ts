@@ -341,7 +341,7 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
     <div class="fx-vig"></div>
     <div class="fx-ui">
       <header class="fx-logo">
-        <img class="fx-emb" src="/icon-192.png" alt="" width="84" height="84" draggable="false">
+        <img class="fx-emb" src="/icon-192.png?v=4" alt="" width="84" height="84" draggable="false">
         <span class="fx-pre">A Geada Negra consome Vael</span>
         <h1 aria-label="FrixeP">Frixe<b>P</b></h1>
         <p class="fx-tag">Acenda a Brasa &middot; Desperte o mundo</p>
