@@ -176,7 +176,7 @@ export const SHARE_RADIUS = 14; // colegas de grupo (vivos) a até 14 tiles do a
 export const ELIGIBLE_DMG_PCT = 0.1; // fora de grupo, só recebe XP/loot quem causou pelo menos 10% da vida máxima do alvo
 export const PLAYER_REGEN_DELAY_S = 6; // sem causar nem receber dano por 6 s, o personagem começa a recuperar vida
 export const PLAYER_REGEN_PCT_S = 0.02; // ...a 2% da vida máxima por segundo (vida cheia em ~50 s)
-/** Regeneração automática em repouso fica bloqueada por este tempo depois de qualquer dano, e enquanto houver inimigo focando o jogador. Poções, habilidades de cura (clérigo) e aliados não são afetados.
+/** Regeneração automática em repouso fica bloqueada por este tempo depois de qualquer dano, e enquanto houver inimigo focando o jogador. Poções, habilidades de cura (clérigo) e aliados não são afetados. */
 export const HEAL_BLOCK_AFTER_HIT_S = 8;
 /** Regeneração dos inimigos: só parados em casa ou voltando para ela, e só depois de ficarem sem receber dano. */
 /** Chefe sem NENHUM alvo vivo (todo mundo morreu, saiu ou fugiu) por tanto tempo: reseta a vida na hora e esquece a luta. */
