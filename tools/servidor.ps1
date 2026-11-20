@@ -144,7 +144,7 @@ $antes = (GitC @("rev-parse", "--short", "HEAD")) | Select-Object -First 1
 GitC @("checkout", "--detach", "origin/main") | Out-Null
 $depois = (GitC @("rev-parse", "--short", "HEAD")) | Select-Object -First 1
 $titulo = (GitC @("log", "-1", "--format=%s")) | Select-Object -First 1
-if ($antes -eq $depois) { Info "já estava na versão mais recente (commit $depois: $titulo)." } else { Ok "atualizado: $antes -> $depois  (commit $depois: $titulo)" }
+if ($antes -eq $depois) { Info "já estava na versão mais recente (commit ${depois}: $titulo)." } else { Ok "atualizado: $antes -> $depois  (commit ${depois}: $titulo)" }
 
 # 3) dependências (só se o package-lock.json mudou)
 $lock = Join-Path $Pasta "package-lock.json"
