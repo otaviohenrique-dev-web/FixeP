@@ -176,6 +176,8 @@ export const SHARE_RADIUS = 14; // colegas de grupo (vivos) a até 14 tiles do a
 export const ELIGIBLE_DMG_PCT = 0.1; // fora de grupo, só recebe XP/loot quem causou pelo menos 10% da vida máxima do alvo
 export const PLAYER_REGEN_DELAY_S = 6; // sem causar nem receber dano por 6 s, o personagem começa a recuperar vida
 export const PLAYER_REGEN_PCT_S = 0.02; // ...a 2% da vida máxima por segundo (vida cheia em ~50 s)
+/** Sem cura (regeneração, poção, habilidade ou aliado) por este tempo depois de qualquer dano recebido. Enquanto houver inimigo focando o jogador, não há cura nenhuma. */
+export const HEAL_BLOCK_AFTER_HIT_S = 8;
 /** Regeneração dos inimigos: só parados em casa ou voltando para ela, e só depois de ficarem sem receber dano. */
 /** Chefe sem NENHUM alvo vivo (todo mundo morreu, saiu ou fugiu) por tanto tempo: reseta a vida na hora e esquece a luta. */
 export const BOSS_RESET_GRACE_S = 3;
@@ -413,6 +415,8 @@ export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : Math.round(
 /** Faixa de borda do nível: muda a cada 10 níveis (1-9, 10-19, 20-29, 30-39, 40-49, 50). */
 export const levelTier = (level: number) => Math.min(5, Math.floor(Math.max(1, level) / 10));
 export const LEVEL_TIER_COLORS = [0x9a8460, 0xc9d3df, 0xf0c34a, 0x4cc3ee, 0xb575f5, 0xff6a3d] as const; // bronze, prata, ouro, gelo, violeta, brasa
+/** Título de cada faixa de nível (o nome épico que aparece na barra de progresso e no aviso de level up). */
+export const LEVEL_TIER_TITLES = ["Andarilho das Cinzas", "Lâmina Sombria", "Juramentado do Abismo", "Ceifador Gélido", "Devoto das Trevas", "Arauto da Ruína"] as const;
 /** Vida máxima: base da classe + 10 por nível + bônus de armadura. */
 export const maxHpFor = (cls: CharClass, level: number, armorHp = 0) => CLASS_DEFS[cls].maxHp + 10 * (level - 1) + armorHp;
 /** Máximo do recurso (Fúria/Foco/Mana): base da classe + bônus por nível. */
