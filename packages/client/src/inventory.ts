@@ -1,6 +1,6 @@
 import { isTypingTarget } from "./keys";
 import { silhouetteSvg } from "./silhouette";
-import { bindItemTip, hideItemTip, setItemTipContext, compareStats, STAT_DEFS, type ItemTipData } from "./itemtip";
+import { bindItemTip, hideItemTip, setItemTipContext, compareStats, type ItemTipData } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
