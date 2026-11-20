@@ -43,10 +43,10 @@ const CSS = `
 .iv-sort svg{width:16px;height:16px}
 .iv-head-r{display:flex;align-items:center}
 /* boneco: silhueta com os espaços de equipamento sobre o corpo */
-.iv-doll{--s:52px;position:relative;width:100%;max-width:262px;aspect-ratio:262/330;border-radius:10px;overflow:hidden;
-  background:radial-gradient(ellipse at 50% 38%,rgba(255,140,60,.13),rgba(6,12,20,0) 62%),linear-gradient(180deg,rgba(10,16,26,.92),rgba(4,8,14,.96));border:1px solid rgba(255,150,70,.28);
+.iv-doll{--s:72px;position:relative;width:100%;max-width:262px;aspect-ratio:262/292;border-radius:10px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(14,14,16,.94),rgba(6,6,9,.97));border:1px solid rgba(255,150,70,.22);
   box-shadow:inset 0 0 40px rgba(0,0,0,.7)}
-@media (max-width:640px){.iv-doll{--s:42px;max-width:200px}.iv-es .lbl{display:none}.iv-acc{padding:6px 0 0}.iv-acc .iv-es{--s:34px;width:34px;height:34px}.iv-stats{margin:2px 0 0;font-size:11px}}
+@media (max-width:640px){.iv-doll{--s:56px;max-width:232px}.iv-es .lbl{display:none}.iv-acc{padding:6px 0 0}.iv-acc .iv-es{--s:34px;width:34px;height:34px}.iv-stats{margin:2px 0 0;font-size:11px}}
 .iv-sil{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .iv-es{position:absolute;width:var(--s);height:var(--s);transform:translate(-50%,-50%);display:grid;place-items:center;padding:0;border-radius:7px;cursor:pointer;color:#7a8da3;
   --rc:rgba(160,200,240,.35);background:radial-gradient(circle at 50% 35%,rgba(26,38,56,.92),rgba(5,9,15,.96));border:2px solid var(--rc);box-shadow:inset 0 0 10px rgba(0,0,0,.8);
@@ -82,7 +82,7 @@ const CSS = `
 .iv-es.can,.iv-es.no{animation-name:iv-can}
 @media (prefers-reduced-motion:reduce){.iv-es,.iv-slot{animation:none!important}}
 .iv-acc{display:flex;gap:18px;justify-content:center;padding:12px 0 2px}
-.iv-acc .iv-es{position:relative;transform:none;left:auto;top:auto;--s:40px;width:40px;height:40px}
+.iv-acc .iv-es{position:relative;transform:none;left:auto;top:auto;--s:48px;width:48px;height:48px}
 .iv-acc .iv-es:hover:not(:disabled){transform:scale(1.07)}
 .iv-tip{position:fixed;z-index:40;max-width:260px;padding:9px 11px;border-radius:6px;pointer-events:none;color:#dbeaff;font:400 12px/1.4 Georgia,serif;
   background:linear-gradient(180deg,rgba(18,28,44,.98),rgba(6,10,18,.99));border:1px solid var(--rc,#ff9a4d);box-shadow:0 8px 24px rgba(0,0,0,.8),0 0 14px var(--rc,transparent)}
@@ -166,11 +166,11 @@ const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarit
 
 /** posições (em % do boneco) de cada espaço */
 const EQ_POS: Record<EquipSlot | "potion", [number, number]> = {
-  helmet: [50, 9], armor: [50, 40], boots: [50, 85], weapon: [14, 46], offhand: [86, 46], cape: [14, 16], potion: [14, 68],
+  helmet: [50, 19], armor: [50, 50], boots: [50, 81], weapon: [17, 50], offhand: [83, 50], cape: [17, 19], potion: [17, 81],
 };
 interface Ph { key: string; label: string; icon: string; pos?: [number, number]; acc?: boolean }
 const PLACEHOLDERS: Ph[] = [
-  { key: "bag", label: "Bolsa", icon: "bag", pos: [86, 16] }, { key: "food", label: "Comida", icon: "food", pos: [86, 68] },
+  { key: "bag", label: "Bolsa", icon: "bag", pos: [83, 19] }, { key: "food", label: "Comida", icon: "food", pos: [83, 81] },
   { key: "ring", label: "Anel", icon: "ring", acc: true }, { key: "amulet", label: "Amuleto", icon: "amulet", acc: true },
 ];
 const PH_ICONS: Record<string, string> = {
