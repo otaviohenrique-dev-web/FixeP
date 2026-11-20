@@ -1,61 +1,148 @@
 /**
- * Ícones ilustrados das habilidades (estilo "arte de botão": moldura colorida pela classe + símbolo grande).
+ * Ícones ilustrados das habilidades (estilo "arte de botão": moldura colorida pela classe + símbolo grande, com brilho e contorno).
  * Desenhados em SVG 64x64 no próprio código; a chave é o nome da habilidade (campo `name` de shared/index.ts).
  */
 
 const FRAME = {
-  warrior: ["#7a2220", "#3a0f0e"],
-  archer: ["#2f6b3a", "#12301a"],
-  cleric: ["#8a6a1c", "#3d2e0c"],
-  mage: ["#4a2f8a", "#1d1240"],
-  neutro: ["#4a5566", "#1b222c"],
+  warrior: ["#9a2c24", "#3a0f0e"],
+  archer: ["#2f7a40", "#12301a"],
+  cleric: ["#a57a22", "#3d2e0c"],
+  mage: ["#5a3aa8", "#1d1240"],
+  neutro: ["#56627a", "#1b222c"],
 } as const;
 
 type Cls = keyof typeof FRAME;
 
-const GLYPH = 'fill="#f4efe0" stroke="#05080d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" paint-order="stroke"';
-const GLOW = 'fill="#ffb347" stroke="#3a1400" stroke-width="2.5" stroke-linejoin="round" paint-order="stroke"';
-const ARC = 'fill="none" stroke="#f4efe0" stroke-width="4" stroke-linecap="round" stroke-opacity=".9"';
+/** gradiente linear (claro em cima, escuro embaixo) */
+const grad = (id: string, top: string, bot: string) =>
+  `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bot}"/></linearGradient>`;
 
-function tile(cls: Cls, body: string): string {
+const OUT = 'stroke="#05080d" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" paint-order="stroke"';
+const ARC = (w = 4) => `fill="none" stroke="url(#STEEL)" stroke-width="${w}" stroke-linecap="round"`;
+
+/** monta o ícone: moldura da classe + símbolo; ids de gradiente ficam únicos por habilidade */
+function tile(cls: Cls, slug: string, defs: string, body: string): string {
   const [c1, c2] = FRAME[cls];
-  return `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision">
+  const id = (s: string) => `${s}-${slug}`;
+  return `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+<defs>${defs.replace(/id="(\w+)"/g, (_m, s) => `id="${id(s)}"`)}</defs>
 <rect x="1" y="1" width="62" height="62" rx="12" fill="${c2}"/>
-<rect x="4" y="4" width="56" height="30" rx="9" fill="${c1}" opacity=".85"/>
+<rect x="4" y="4" width="56" height="28" rx="9" fill="${c1}" opacity=".9"/>
 <rect x="1.5" y="1.5" width="61" height="61" rx="11.5" fill="none" stroke="#05080d" stroke-width="2"/>
 <rect x="3" y="3" width="58" height="58" rx="10.5" fill="none" stroke="#f0cf86" stroke-opacity=".55" stroke-width="1.5"/>
-${body}
+${body.replace(/url\(#(\w+)\)/g, (_m, s) => `url(#${id(s)})`)}
 </svg>`;
 }
 
+// gradientes reutilizados: aço (lâminas), ouro (detalhes), fogo, luz, madeira
+const STEEL = grad("STEEL", "#ffffff", "#9fb0c4");
+const GOLD = grad("GOLD", "#fff3c4", "#c08a2a");
+const FIRE = grad("FIRE", "#fff2a8", "#ff6a1a");
+const LIGHT = grad("LIGHT", "#ffffff", "#ffe27a");
+const WOOD = grad("WOOD", "#c99a5b", "#6a3f1c");
+
+const S = (fill = "STEEL") => `fill="url(#${fill})" ${OUT}`;
+
 const ART: Record<string, string> = {
-  // Guerreiro
-  "Golpe": tile("warrior", `<path ${GLYPH} d="M18 46 L44 20 L48 16 L50 20 L46 24 L20 50 Z"/><path ${GLYPH} d="M14 40 L24 50 L18 54 L10 46 Z"/><path ${GLYPH} d="M30 46 L42 34" stroke-width="5"/>`),
-  "Investida": tile("warrior", `<path ${GLYPH} d="M22 28 H42 V20 L56 32 L42 44 V36 H22 Z"/><path ${ARC} d="M8 22 H16 M6 32 H14 M8 42 H16" stroke-width="3"/>`),
-  "Correntes": tile("warrior", `<ellipse cx="24" cy="30" rx="10" ry="7" ${ARC} transform="rotate(-30 24 30)"/><ellipse cx="38" cy="36" rx="10" ry="7" ${ARC} transform="rotate(-30 38 36)"/><ellipse cx="46" cy="22" rx="8" ry="5.5" ${ARC} transform="rotate(-30 46 22)"/>`),
-  "Escudo Refletor": tile("warrior", `<path ${GLYPH} d="M32 12 L50 18 V32 C50 44 40 50 32 54 C24 50 14 44 14 32 V18 Z"/><path fill="none" stroke="#05080d" stroke-width="3" d="M32 22 V44 M22 30 H42"/>`),
-  "Queda do Colosso": tile("warrior", `<rect ${GLYPH} x="18" y="14" width="26" height="14" rx="2"/><path ${GLYPH} d="M30 28 H36 V48 H30 Z"/><path ${ARC} d="M10 56 H54" stroke-width="3"/>`),
-  // Arqueiro
-  "Flecha": tile("archer", `<path ${GLYPH} d="M12 46 L46 18" stroke-width="5"/><path ${GLYPH} d="M52 12 L40 16 L48 24 Z"/><path ${GLYPH} d="M10 40 L16 36 L18 46 L8 50 Z" stroke-width="2"/>`),
-  "Perfurar": tile("archer", `<path ${GLYPH} d="M12 36 H42" stroke-width="4"/><path ${GLYPH} d="M56 36 L40 26 L42 36 L40 46 Z"/><path ${ARC} d="M8 24 H20 M6 48 H18" stroke-width="3"/>`),
-  "Cilada": tile("archer", `<circle cx="32" cy="34" r="14" fill="none" stroke="#f4efe0" stroke-width="5"/><path ${GLYPH} d="M22 22 L26 28 L30 20 L34 28 L38 20 L42 28 L44 22 V16 H20 V22 Z" stroke-width="2"/>`),
-  "Chuva": tile("archer", `<path ${GLYPH} d="M16 16 L34 38" stroke-width="3.5"/><path ${GLYPH} d="M38 40 L32 36 L42 34 Z"/><path ${GLYPH} d="M30 12 L48 34" stroke-width="3.5"/><path ${GLYPH} d="M52 36 L46 32 L56 30 Z"/><path ${GLYPH} d="M12 34 L26 52" stroke-width="3.5"/><path ${GLYPH} d="M30 56 L24 52 L34 50 Z"/>`),
-  "Salva Final": tile("archer", `<path ${GLYPH} d="M8 56 L34 28" stroke-width="4"/><path ${GLYPH} d="M36 26 L28 26 L34 34 Z"/><path ${GLYPH} d="M8 56 L40 46" stroke-width="4"/><path ${GLYPH} d="M42 44 L34 42 L40 50 Z"/><path ${GLYPH} d="M8 56 L56 56" stroke-width="3" fill="none"/><path ${GLYPH} d="M8 56 L50 14" stroke-width="4"/><path ${GLYPH} d="M52 12 L44 14 L50 22 Z"/>`),
-  // Clérigo
-  "Raio": tile("cleric", `<path ${GLYPH} d="M36 10 L18 36 H30 L24 56 L46 26 H34 L40 10 Z"/>`),
-  "Cura em Área": tile("cleric", `<circle cx="32" cy="34" r="18" fill="none" stroke="#f4efe0" stroke-width="3.5" stroke-dasharray="5 5"/><path ${GLYPH} d="M28 22 H36 V30 H44 V38 H36 V46 H28 V38 H20 V30 H28 Z"/>`),
-  "Cura Focada": tile("cleric", `<path ${GLYPH} d="M32 50 C14 38 10 28 14 22 C18 16 28 16 32 24 C36 16 46 16 50 22 C54 28 50 38 32 50 Z"/><path ${ARC} d="M24 28 L28 34 L32 28 L36 34 L40 28" stroke-width="3" stroke="#05080d"/>`),
-  "Compressor de Ar": tile("cleric", `<path ${ARC} d="M12 26 C22 16 42 16 52 26"/><path ${ARC} d="M12 40 C22 50 42 50 52 40"/><path ${GLYPH} d="M32 28 L26 34 H30 V42 H34 V34 H38 Z" stroke-width="2"/>`),
-  "Julgamento": tile("cleric", `<circle cx="32" cy="34" r="11" ${GLYPH}/><path ${ARC} d="M32 12 V18 M32 50 V56 M10 34 H16 M48 34 H54 M17 19 L21 23 M47 49 L43 45 M47 19 L43 23 M17 49 L21 45" stroke-width="4"/>`),
-  "Luz Divina": tile("cleric", `<path ${GLYPH} d="M32 8 L37 26 L56 22 L42 34 L56 46 L37 42 L32 60 L27 42 L8 46 L22 34 L8 22 L27 26 Z"/><circle cx="32" cy="34" r="6" fill="#fff6d6"/>`),
-  // Mago
-  "Dardo Arcano": tile("mage", `<circle cx="44" cy="22" r="9" ${GLYPH}/><path ${ARC} d="M34 30 L12 50 M30 26 L14 34 M38 34 L24 52" stroke-width="3.5"/>`),
-  "Bola de Fogo": tile("mage", `<circle cx="32" cy="36" r="15" ${GLOW}/><path ${GLOW} d="M24 26 C26 14 34 10 32 2 C40 10 42 18 40 24 Z"/><circle cx="32" cy="36" r="7" fill="#fff1b8"/>`),
-  "Relâmpago": tile("mage", `<path ${GLYPH} d="M40 8 L20 36 H32 L22 56 L46 26 H34 L42 8 Z" fill="#ffe27a"/>`),
-  "Chuva de Fogo": tile("mage", `<path ${GLOW} d="M18 24 C14 32 14 40 18 44 C24 46 26 38 26 32 C26 28 22 26 18 24 Z"/><path ${GLOW} d="M36 14 C32 22 32 30 36 34 C42 36 44 28 44 22 C44 18 40 16 36 14 Z"/><path ${GLOW} d="M26 46 C22 54 22 62 26 66 C32 66 34 58 34 52 C34 48 30 46 26 46 Z" transform="translate(0 -8)"/>`),
-  "Meteoro": tile("mage", `<path ${GLOW} d="M10 14 L30 30" stroke-width="6" fill="none"/><path ${GLOW} d="M6 22 L20 36" stroke-width="4" fill="none"/><circle cx="40" cy="40" r="14" ${GLOW}/><circle cx="36" cy="36" r="4" fill="#fff1b8"/>`),
-  // Neutros
-  "Esquiva": tile("neutro", `<path ${ARC} d="M10 24 C24 14 40 16 54 26"/><path ${ARC} d="M14 36 C28 28 42 30 54 38"/><path ${ARC} d="M18 48 C30 42 40 44 50 50"/>`),
+  // ----- Guerreiro (aço e vermelho)
+  "Golpe": tile("warrior", "golpe", STEEL + GOLD,
+    `<path ${S()} d="M52 6 L58 12 L30 42 L22 34 Z"/>
+     <path ${S("GOLD")} d="M14 30 L22 22 L40 40 L32 48 Z"/>
+     <path ${S("WOOD")} d="M18 42 L26 34 L34 42 L26 50 Z"/>
+     <circle cx="14" cy="50" r="5" ${S("GOLD")}/>
+     <path d="M48 10 L56 18" stroke="#fff" stroke-opacity=".6" stroke-width="1.5"/>`),
+  "Investida": tile("warrior", "investida", STEEL + GOLD,
+    `<path ${S()} d="M46 32 L30 22 V28 H12 V36 H30 V42 Z"/>
+     <path ${S("GOLD")} d="M40 26 L58 32 L40 38 Z"/>
+     <path ${ARC(3)} d="M8 18 H18 M6 26 H16 M8 46 H18 M6 54 H16"/>`),
+  "Correntes": tile("warrior", "correntes", STEEL,
+    `<ellipse cx="24" cy="26" rx="13" ry="8" fill="none" stroke="url(#STEEL)" stroke-width="6" transform="rotate(-40 24 26)"/>
+     <ellipse cx="40" cy="38" rx="13" ry="8" fill="none" stroke="url(#STEEL)" stroke-width="6" transform="rotate(-40 40 38)" ${OUT}/>
+     <circle cx="50" cy="16" r="3" fill="#ffe27a"/>`),
+  "Escudo Refletor": tile("warrior", "escudo", STEEL + GOLD,
+    `<path d="M32 12 L50 18 V32 C50 44 40 50 32 54 C24 50 14 44 14 32 V18 Z" fill="url(#STEEL)" ${OUT}/>
+     <path d="M32 18 L44 22 V32 C44 40 38 44 32 47 Z" fill="url(#GOLD)" opacity=".85"/>
+     <path fill="none" stroke="#05080d" stroke-width="3" d="M32 22 V44 M22 30 H42"/>`),
+  "Queda do Colosso": tile("warrior", "queda", STEEL + WOOD,
+    `<path d="M26 26 H36 V52 H26 Z" fill="url(#WOOD)" ${OUT}/>
+     <rect ${S()} x="14" y="10" width="34" height="18" rx="3"/>
+     <path d="M10 56 L16 50 M28 58 L32 52 M46 56 L52 50" fill="none" stroke="#ffe27a" stroke-width="3" stroke-linecap="round"/>`),
+
+  // ----- Arqueiro (verde e madeira)
+  "Flecha": tile("archer", "flecha", STEEL + WOOD,
+    `<path d="M12 50 L44 18" stroke="url(#WOOD)" stroke-width="5" stroke-linecap="round" ${OUT}/>
+     <path ${S()} d="M56 6 L39 13 L49 23 Z"/>
+     <path ${S("GOLD")} d="M12 50 L4 46 L8 58 Z M12 50 L20 56 L8 58 Z"/>`),
+  "Perfurar": tile("archer", "perfurar", STEEL + WOOD,
+    `<path d="M12 36 H40" stroke="url(#WOOD)" stroke-width="5" stroke-linecap="round" ${OUT}/>
+     <path ${S()} d="M58 36 L42 26 L44 36 L42 46 Z"/>
+     <path ${ARC(3)} d="M6 22 H18 M4 50 H16 M8 30 H16"/>`),
+  "Cilada": tile("archer", "cilada", STEEL + GOLD,
+    `<path ${S()} d="M32 8 L38 18 L50 14 L46 26 L58 32 L46 38 L50 50 L38 46 L32 58 L26 46 L14 50 L18 38 L6 32 L18 26 L14 14 L26 18 Z"/>
+     <circle cx="32" cy="33" r="9" fill="url(#GOLD)" ${OUT}/>
+     <circle cx="32" cy="33" r="3" fill="#05080d"/>`),
+  "Chuva": tile("archer", "chuva", STEEL + WOOD,
+    `<path d="M14 14 L36 44" stroke="url(#WOOD)" stroke-width="3" ${OUT}/><path ${S()} d="M40 48 L32 44 L42 40 Z"/>
+     <path d="M32 10 L52 40" stroke="url(#WOOD)" stroke-width="3" ${OUT}/><path ${S()} d="M56 44 L48 40 L57 36 Z"/>
+     <path d="M8 26 L26 56" stroke="url(#WOOD)" stroke-width="3" ${OUT}/><path ${S()} d="M30 60 L22 56 L31 52 Z"/>`),
+  "Salva Final": tile("archer", "salva", STEEL + WOOD,
+    `<ellipse cx="32" cy="50" rx="24" ry="5" fill="#ffe27a" opacity=".35"/>
+     <path d="M14 8 V46 M26 4 V42 M38 8 V46 M50 4 V42" stroke="url(#WOOD)" stroke-width="3" ${OUT}/>
+     <path ${S()} d="M11 46 L14 56 L17 46 Z M23 42 L26 52 L29 42 Z M35 46 L38 56 L41 46 Z M47 42 L50 52 L53 42 Z"/>`),
+
+  // ----- Clérigo (dourado e luz)
+  "Raio": tile("cleric", "raio", GOLD + LIGHT,
+    `<path ${S("LIGHT")} d="M38 6 L16 36 H30 L24 58 L48 26 H34 L42 6 Z"/>
+     <path d="M36 14 L24 32" stroke="#fff" stroke-opacity=".7" stroke-width="2"/>`),
+  "Cura em Área": tile("cleric", "curaarea", GOLD + LIGHT,
+    `<circle cx="32" cy="34" r="20" fill="none" stroke="url(#GOLD)" stroke-width="3" stroke-dasharray="6 5"/>
+     <circle cx="32" cy="34" r="12" fill="none" stroke="url(#LIGHT)" stroke-width="2" opacity=".7"/>
+     <path ${S("LIGHT")} d="M28 20 H36 V28 H44 V36 H36 V44 H28 V36 H20 V28 H28 Z"/>`),
+  "Cura Focada": tile("cleric", "curafocada", GOLD + LIGHT,
+    `<path ${S("LIGHT")} d="M32 52 C12 38 8 26 13 20 C18 13 28 14 32 22 C36 14 46 13 51 20 C56 26 52 38 32 52 Z"/>
+     <path d="M32 26 V42 M24 34 H40" stroke="#c08a2a" stroke-width="5" stroke-linecap="round"/>
+     <path d="M32 26 V42 M24 34 H40" stroke="#fff6d6" stroke-width="2" stroke-linecap="round"/>`),
+  "Compressor de Ar": tile("cleric", "compressor", STEEL + GOLD,
+    `<path ${ARC(4)} d="M10 22 C22 10 44 12 50 26"/>
+     <path ${ARC(4)} d="M14 42 C24 54 42 52 52 40"/>
+     <path ${S("GOLD")} d="M30 30 L36 30 L36 24 L44 32 L36 40 L36 34 L30 34 L22 32 Z" opacity=".95"/>`),
+  "Julgamento": tile("cleric", "julgamento", GOLD,
+    `<path d="M32 10 V52 M18 52 H46" stroke="url(#GOLD)" stroke-width="4" stroke-linecap="round" ${OUT}/>
+     <path d="M12 22 H52" stroke="url(#GOLD)" stroke-width="4" stroke-linecap="round" ${OUT}/>
+     <path ${S("GOLD")} d="M8 30 L16 22 L24 30 Z M40 30 L48 22 L56 30 Z"/>
+     <circle cx="32" cy="10" r="4" fill="url(#LIGHT)"/>`),
+  "Luz Divina": tile("cleric", "luz", LIGHT,
+    `<path d="M32 4 L36 20 L52 12 L44 28 L60 32 L44 36 L52 52 L36 44 L32 60 L28 44 L12 52 L20 36 L4 32 L20 28 L12 12 L28 20 Z" fill="url(#LIGHT)" ${OUT} opacity=".95"/>
+     <circle cx="32" cy="32" r="9" fill="#fff"/>`),
+
+  // ----- Mago (roxo e fogo/arcano)
+  "Dardo Arcano": tile("mage", "dardo", LIGHT,
+    `<circle cx="42" cy="22" r="10" fill="url(#LIGHT)" ${OUT}/>
+     <circle cx="42" cy="22" r="4" fill="#fff"/>
+     <path d="M32 32 L10 54" stroke="url(#LIGHT)" stroke-width="5" stroke-linecap="round" opacity=".8"/>
+     <path d="M26 30 L8 36 M30 38 L12 46" stroke="#e9dcff" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+     <ellipse cx="42" cy="22" rx="18" ry="6" fill="none" stroke="#e9dcff" stroke-width="2" stroke-opacity=".7" transform="rotate(-30 42 22)"/>`),
+  "Bola de Fogo": tile("mage", "bolafogo", FIRE,
+    `<path ${S("FIRE")} d="M32 6 C40 16 52 22 50 38 C48 52 40 58 32 58 C22 58 14 52 14 40 C14 30 22 26 24 18 C30 24 30 30 32 32 C34 24 34 14 32 6 Z"/>
+     <path d="M32 26 C38 32 42 38 40 46 C38 52 26 52 24 46 C22 40 28 36 32 26 Z" fill="#fff2a8" opacity=".9"/>`),
+  "Relâmpago": tile("mage", "relampago", LIGHT,
+    `<path ${S("LIGHT")} d="M40 6 L20 34 H32 L22 58 L46 26 H34 L42 6 Z" opacity=".95"/>
+     <path d="M26 40 L14 52 M46 14 L56 8" stroke="#ffe27a" stroke-width="2.5" stroke-linecap="round"/>`),
+  "Chuva de Fogo": tile("mage", "chuvafogo", FIRE,
+    `<path ${S("FIRE")} d="M16 20 C10 30 12 42 18 46 C26 46 28 34 24 26 C22 22 18 20 16 20 Z"/>
+     <path ${S("FIRE")} d="M34 8 C28 20 30 34 36 38 C44 38 46 26 42 18 C40 14 36 10 34 8 Z"/>
+     <path ${S("FIRE")} d="M46 34 C40 44 42 54 48 58 C56 56 56 46 52 40 C50 37 48 35 46 34 Z"/>`),
+  "Meteoro": tile("mage", "meteoro", FIRE,
+    `<path d="M42 42 L8 8" stroke="url(#FIRE)" stroke-width="9" stroke-linecap="round" opacity=".5"/>
+     <path d="M42 42 L14 14" stroke="url(#FIRE)" stroke-width="4" stroke-linecap="round" opacity=".7"/>
+     <circle cx="42" cy="42" r="15" fill="url(#FIRE)" ${OUT}/>
+     <circle cx="37" cy="37" r="4" fill="#5a2a0a" opacity=".5"/><circle cx="46" cy="46" r="3" fill="#5a2a0a" opacity=".4"/>`),
+
+  // ----- Neutro
+  "Esquiva": tile("neutro", "esquiva", STEEL,
+    `<path ${ARC(4)} d="M10 24 C24 14 40 16 54 26"/>
+     <path ${ARC(4)} d="M14 36 C28 28 42 30 54 38"/>
+     <path ${ARC(4)} d="M18 48 C30 42 40 44 50 50"/>`),
 };
 
 /** arte da habilidade pelo nome, ou undefined (aí a HUD usa o ícone pequeno de antes) */
