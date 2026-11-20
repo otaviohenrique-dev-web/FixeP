@@ -106,7 +106,9 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.MoveTo, (client, p: MoveToPayload) => {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
-      if (!pl || pl.dead || pl.traveling || !Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
+      if (!pl || pl.dead || pl.traveling) return;
+      if (p?.stop === true) { pl.tx = pl.x; pl.ty = pl.y; return; } // soltar o joystick: para onde ele está de fato, não onde o cliente achava que estava
+      if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
       pl.tx = clamp(p.x, 0, this.zone.w - 1);
       pl.ty = clamp(p.y, 0, this.zone.h - 1);
     });

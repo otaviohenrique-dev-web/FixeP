@@ -692,7 +692,7 @@ class WorldScene extends Phaser.Scene {
     if (!me || !this.room) return;
     const v = this.joy?.vector();
     if (!v || me.dead) {
-      if (this.joyMoving) { this.joyMoving = false; this.room.send(Msg.MoveTo, { x: me.x, y: me.y }); }
+      if (this.joyMoving) { this.joyMoving = false; this.room.send(Msg.MoveTo, { x: me.x, y: me.y, stop: true }); }
       return;
     }
     if (time - this.joyAt < 100) return;
