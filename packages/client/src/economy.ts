@@ -1,5 +1,6 @@
 import { isTypingTarget } from "./keys";
 import { mountMarket } from "./market";
+import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
@@ -399,6 +400,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   const cancelTrade = () => { opts.send(Msg.TradeCancel, {}); closeTradeUi(); };
   function closeTradeUi() { tradeOpen = false; tlog.replaceChildren(); tin.value = ""; tback.classList.remove("open"); clearTimeout(sendTimer); last = null; }
 
+  const equippedOf = (kind: string): ItemDef | null => { const id = (snap.equip as Record<string, string | null>)[kind]; return id ? ITEMS[id] ?? null : null; };
   function chips(side: TradeOfferSide, onTake?: (slot: number) => void): HTMLElement {
     const box = el("div", "ec-offer");
     for (const it of side.items) {
@@ -406,7 +408,8 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
       if (!d) continue;
       const c = el(onTake ? "button" : "div", "ec-chip");
       if (c instanceof HTMLButtonElement) c.type = "button";
-      c.title = `${d.name}${it.qty > 1 ? ` ×${it.qty}` : ""} — ${brief(d)}`;
+      // a ficha do item (toque ou mouse) é a mesma da mochila; compara com o equipado do mesmo tipo
+      bindItemTip(c, () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
       c.style.borderColor = RARITY_COLOR[d.rarity] + "cc";
       c.append(itemImg(it.id, ""));
       if (it.qty > 1) { const q = el("i", "", String(it.qty)); c.append(q); }
