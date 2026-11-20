@@ -15,7 +15,7 @@ import { ensureLogin, logout, wsUrl } from "./auth";
 import { ensureCharacter } from "./character";
 import { mountGameMenu } from "./menu";
 import { attachPerf, startPerf, timed, count } from "./perf-probe";
-import { lowQuality } from "./quality";
+import { modoQualidade } from "./quality";
 import { mountHud, type Hud } from "./hud";
 import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
@@ -72,8 +72,12 @@ const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)
 const AUTO_POT_AT = 0.35;
 const AUTO_POT_KEY = "frixep_autopot";
 const readAutoPot = () => { try { return localStorage.getItem(AUTO_POT_KEY) === "on"; } catch { return false; } };
-const LOW = lowQuality(); // qualidade "Baixo" (menu): menos enfeites e resolução menor no celular
-const DPR = Math.max(1, Math.min(COARSE ? (LOW ? 1.5 : 2) : 3, window.devicePixelRatio || 1)); // celular: no máximo 2x (menos pixels = mais FPS)
+const MODO = modoQualidade(); // botão "Gráficos" do menu (teste A/B de FPS)
+const SEM_DESENHOS = MODO === "sem-desenhos"; // Teste A
+const SEM_SPRITES = MODO === "sem-sprites"; // Teste B
+// alvo de desenho que aceita qualquer chamada e não faz nada (usado no Teste A)
+const NO_DRAW: unknown = new Proxy({}, { get: () => () => NO_DRAW });
+const DPR = Math.max(1, Math.min(COARSE ? 2 : 3, window.devicePixelRatio || 1)); // celular: no máximo 2x (menos pixels = mais FPS)
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
@@ -749,9 +753,13 @@ class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- efeitos
   private makeEffects() {
-    this.bars = this.add.graphics().setDepth(1e5);
-    this.weaponAuras = new WeaponAuras(this); // brilho público da arma equipada
-    this.shadows = this.add.graphics().setDepth(0.3); // sombra no chão dos sprites
+    if (SEM_DESENHOS) { // Teste A: nenhum desenho de Graphics (placas, barras, sombras, efeitos)
+      this.bars = this.shadows = NO_DRAW as Phaser.GameObjects.Graphics;
+    } else {
+      this.bars = this.add.graphics().setDepth(1e5);
+      this.weaponAuras = new WeaponAuras(this); // brilho público da arma equipada
+      this.shadows = this.add.graphics().setDepth(0.3); // sombra no chão dos sprites
+    }
     if (!this.textures.exists("spark")) {
       const tex = this.make.graphics({ x: 0, y: 0 }, false);
       tex.fillStyle(0xffffff, 1);
@@ -1341,7 +1349,7 @@ class WorldScene extends Phaser.Scene {
     if (!this.busy) this.driveJoystick(time);
     this.watchPortals();
     timed("chao", () => this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? "")));
-    if (!LOW) timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
+    if (!SEM_DESENHOS) timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
     const meNow = this.me();
     if (this.autoPot && meNow && !meNow.dead && meNow.hp / Math.max(1, meNow.maxHp) <= AUTO_POT_AT && time >= this.autoPotNext) {
       this.autoPotNext = time + 400;
@@ -1387,7 +1395,7 @@ class WorldScene extends Phaser.Scene {
       v.setFace(face);
       timed("sprites", () => v.update(time, { dead: o.dead, windup: o.windup }));
       const hidden = !!o.hideWhenDead && o.dead && v.deathDone; // com sprite, a morte toca antes de sumir
-      s.setVisible(!hidden);
+      s.setVisible(!hidden && !SEM_SPRITES); // Teste B: some com os sprites (nomes e placas continuam)
       this.labels.get(key)?.setVisible(!hidden);
       this.levelTags.get(key)?.setVisible(!hidden);
       if (hidden) return;
@@ -1402,10 +1410,10 @@ class WorldScene extends Phaser.Scene {
       }
       if (s.x < wv.x - 140 || s.x > wv.right + 140 || s.y < wv.y - 160 || s.y > wv.bottom + 160) { this.labels.get(key)?.setVisible(false); this.levelTags.get(key)?.setVisible(false); return; }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (v.isSprite && !LOW) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX));
+      if (v.isSprite && !SEM_DESENHOS) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX));
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
       count("placas");
-      const pg = timed("placas", () => drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time, low: LOW }));
+      const pg = timed("placas", () => drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time }));
       this.labels.get(key)?.setPosition(pg.nameX, pg.nameY).setScale(this.uiScale).setDepth(1e5 + 2);
       const nt = this.levelTags.get(key);
       if (nt) {
