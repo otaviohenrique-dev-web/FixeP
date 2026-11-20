@@ -53,6 +53,24 @@ export function attachPerf(g: Phaser.Game, c: Ctx): void {
   });
 }
 
+// tempo por parte do quadro (CPU de cada bloco do update) e contagem de desenhos; só conta durante a medição
+const partMs = new Map<string, number>();
+const partN = new Map<string, number>();
+
+/** mede o tempo de um bloco do quadro; fora da medição só executa o bloco */
+export function timed<T>(name: string, fn: () => T): T {
+  if (!measuring) return fn();
+  const t = performance.now();
+  const r = fn();
+  partMs.set(name, (partMs.get(name) ?? 0) + performance.now() - t);
+  return r;
+}
+
+/** conta chamadas de desenho de uma parte (ex.: placas por quadro) */
+export function count(name: string, n = 1): void {
+  if (measuring) partN.set(name, (partN.get(name) ?? 0) + n);
+}
+
 const pct = (a: number[], p: number) => {
   if (!a.length) return 0;
   const s = [...a].sort((x, y) => x - y);
@@ -76,6 +94,11 @@ function report(): string {
     `atualizar mundo (update): média ${r1(avg(updMs))} ms · p95 ${r1(pct(updMs, 0.95))} ms`,
     `desenhar (render): média ${r1(avg(rendMs))} ms · p95 ${r1(pct(rendMs, 0.95))} ms`,
   ];
+  const n = Math.max(1, rendMs.length); // média por quadro de cada parte
+  const parts = [...partMs.keys()].sort().map((k) => `${k} ${r1((partMs.get(k) ?? 0) / n)} ms`);
+  if (parts.length) lines.push(`partes (por quadro): ${parts.join(" · ")}`);
+  const cnts = [...partN.keys()].sort().map((k) => `${k} ${r1((partN.get(k) ?? 0) / n)}`);
+  if (cnts.length) lines.push(`chamadas por quadro: ${cnts.join(" · ")}`);
   return lines.join("\n");
 }
 
@@ -115,6 +138,7 @@ export function startPerf(): void {
   if (!game || measuring) return;
   const p = showOverlay();
   frameMs = []; updMs = []; rendMs = []; zones = new Set(); entsMax = 0; lastFrame = 0;
+  partMs.clear(); partN.clear();
   measuring = true;
   startedAt = performance.now();
   const tick = () => {
