@@ -1353,7 +1353,7 @@ class WorldScene extends Phaser.Scene {
       if (this.econ.isNpcOpen() && !near) this.econ.closeNpc();
     }
     if (meNow && this.town) { // baú da cidade: anel, botão "Abrir o baú" e animações do cenário
-      timed("cidade", () => this.town.update(time, this.cameras.main, meNow));
+      timed("cidade", () => this.town?.update(time, this.cameras.main, meNow));
       const nearV = this.town.nearChest(meNow.x, meNow.y);
       this.vault.setNear(nearV);
       if (this.pendingVault && nearV) { this.pendingVault = false; this.vault.open(); }
