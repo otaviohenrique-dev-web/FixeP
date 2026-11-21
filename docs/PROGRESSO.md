@@ -18,8 +18,8 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 
 | ID | Pendência | Criticidade | Detalhe e próximo passo |
 |---|---|---|---|
-| PD-01 | `classes.mjs` intermitente no CI | **Média** | No GitHub (2 CPUs) o Arqueiro às vezes não derruba o esqueleto a tempo. Passa sempre no PC, mesmo com CPU sobrecarregada. O `run-all.sh` repete a suíte 1 vez e marca FLAKY. Corrigir: tornar o teste independente de tempo (ex.: esperar o abate por evento) e remover a dependência da repetição. |
-| PD-02 | `loot.mjs` intermitente no CI | **Média** | O teste do baú do chefe falhou uma vez no GitHub (itens sorteados fora do modo de teste). Mesmo tratamento da PD-01. Investigar se o baú ignora `LOOT_TEST=1`. |
+| PD-01 | `classes.mjs` intermitente no CI | **Média** | No GitHub (2 CPUs) o Arqueiro às vezes não derruba o esqueleto a tempo (o esqueleto volta a "idle" longe do Arqueiro). Passa sempre no PC, mesmo com CPU sobrecarregada. O `run-all.sh` repete a suíte 1 vez e marca FLAKY. Corrigir: tornar o teste independente de tempo (ex.: esperar o abate por evento) e remover a dependência da repetição. |
+| PD-02 | `guerreiro.mjs` também intermitente no CI | **Média** | Falhou na 1ª tentativa e passou na repetição (mesmo padrão da PD-01). `loot.mjs` falhava de forma fixa no GitHub porque o Clérigo ficava longe do chefe; já corrigido. Tornar `guerreiro.mjs` independente de tempo. |
 | PD-03 | Cobertura de CI só do servidor | **Baixa** | O cliente (Phaser/Vite) só passa pelo typecheck; não há teste automático de interface. Avaliar após a etapa C1. |
 | PD-04 | Servidores de teste esquecidos no Windows | **Baixa** | O `run-all.sh` agora encerra a árvore de processos; se uma rodada for interrompida à força, restam processos `tsx src/index.ts`. Encerre-os pelo Gerenciador de Tarefas. |
 

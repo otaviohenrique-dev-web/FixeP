@@ -99,7 +99,9 @@ A.go(22, 6);
 await sleep(2600);
 A.go(boss.x - 8.5, boss.y);
 B.go(6, 38); // longe: não lutou
+C.go(boss.x - 9, boss.y); // o clérigo do grupo também precisa estar por perto para ser elegível (o ponto de partida dele varia com a lentidão da máquina)
 await sleep(2600);
+await until(() => Math.hypot(A.me().x - boss.x, A.me().y - boss.y) < 10 && Math.hypot(C.me().x - boss.x, C.me().y - boss.y) < 12, 15000);
 const lv0 = A.me().level;
 A.act("attack", boss.x, boss.y);
 for (let i = 0; i < 12 && boss.st !== "dead"; i++) { await sleep(400); if (boss.st !== "dead") A.act("attack", boss.x, boss.y); }
