@@ -32,6 +32,7 @@ export const Msg = {
   PartyKick: "party_kick", // { name }: o líder expulsa um membro
   PartyLead: "party_lead", // { name }: o líder passa a liderança
   PartyChat: "party_chat", // { text }: mensagem só para o grupo (comando /g)
+  Report: "report", // { name, motivo }: denúncia de um jogador (1 por minuto por conta; denúncia de si mesmo é ignorada)
   PartySync: "party_sync", // {}: pede o estado do grupo e o convite pendente (o cliente pede depois de registrar os receptores)
   ShopBuy: "shop_buy", // { npc, id, qty }: compra do comerciante (valida distância, estoque, saldo e espaço)
   ShopSell: "shop_sell", // { npc, slot, qty }: vende ao comerciante

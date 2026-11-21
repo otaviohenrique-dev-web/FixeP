@@ -1,6 +1,7 @@
 import { randomUUID, randomBytes } from "node:crypto";
 import { Router } from "express";
 import { registrarEvento } from "./telemetria.js";
+import { marcarContaTesteAdmin } from "./moderacao.js";
 import { SignJWT, jwtVerify } from "jose";
 import type { Repo } from "./db/repo.js";
 
@@ -146,6 +147,7 @@ export function authRouter(repo: Repo): Router {
     if (isProd && process.env.ALLOW_GUEST !== "1") return res.status(403).end();
     try {
       const acct = await repo.upsertAccount("guest", randomUUID(), `Convidado-${randomBytes(2).toString("hex")}`);
+      marcarContaTesteAdmin(acct.id); // só com ADMIN_TEST_FIRST_GUEST=1 (testes automatizados)
       void registrarEvento(repo.db, "login", { contaId: acct.id, dados: { provedor: "guest" } });
       res.json({ token: await signSession({ id: acct.id, name: acct.name }) });
     } catch (e) {

@@ -351,6 +351,11 @@ export function mountParty(opts: PartyOptions): PartyUi {
     else b.addEventListener("click", () => { closeMenu(); onClick(); });
     return b;
   }
+  /** denúncia: pede o motivo (até 200 caracteres) e envia; o servidor grava e limita a 1 por minuto */
+  function denunciar(nome: string) {
+    const motivo = window.prompt(`Denunciar ${nome}. Motivo (até 200 caracteres):`);
+    if (motivo?.trim()) opts.send("report", { name: nome, motivo: motivo.trim().slice(0, 200) });
+  }
   function openMenu(t: MenuTarget, x: number, y: number, mode: "player" | "member" | "dock") {
     menu.classList.remove("dock");
     docked = false;
@@ -396,6 +401,7 @@ export function mountParty(opts: PartyOptions): PartyUi {
       menu.append(
         item("Convidar para grupo", canInvite ? send("party_invite") : null, inviteWhy, true),
         item("Pedir para entrar no grupo", !s.inParty ? send("party_join") : null, s.inParty ? "Você já está em um grupo" : undefined),
+        item("Denunciar", () => denunciar(t.name), undefined, true), // sempre por último no menu do jogador
       );
     }
     menu.classList.add("on");

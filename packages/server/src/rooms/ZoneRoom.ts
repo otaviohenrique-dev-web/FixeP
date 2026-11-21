@@ -19,6 +19,7 @@ export const onlineCount = () => { let n = 0; for (const r of liveRooms) n += r.
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
 import { registrarEvento } from "../telemetria.js";
+import { isAdmin, parseComandoAdmin, type ComandoAdmin, sancaoEmCache, guardarSancao, silenciadoAte, horaLegivel, MOTIVO_MAX } from "../moderacao.js";
 import { Market } from "../game/market.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, sortInventory, type Inventory } from "../game/inventory.js";
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
@@ -56,6 +57,9 @@ export function cleanChat(raw: string): string {
     .slice(0, CHAT_MAX_LEN)
     .trim();
 }
+
+// última denúncia de cada conta (ms): limite de 1 por minuto, válido entre as zonas
+const ultimaDenuncia = new Map<string, number>();
 
 export class ZoneRoom extends Room<ZoneState> {
   maxClients = MAX_CLIENTS_PER_ZONE;
@@ -215,10 +219,14 @@ export class ZoneRoom extends Room<ZoneState> {
     // chat da zona: o servidor limpa o texto, limita a taxa e usa o NOME DO PERSONAGEM (o cliente não manda nome)
     this.onMessage(Msg.Chat, (client, p: { text?: unknown }) => {
       if (!this.allow(client)) return;
+      // comandos de moderação (/silenciar, /banir, /desbanir, /denuncias) nunca vão ao chat
+      if (typeof p?.text === "string" && parseComandoAdmin(p.text)) { void this.comandoAdmin(client, p.text); return; }
       const pl = this.state.players.get(client.sessionId);
       const text = pl && this.chatText(client, p?.text);
       if (pl && text) this.broadcast(Evt.Chat, { id: client.sessionId, name: pl.name, text });
     });
+    // denúncia de jogador (menu do jogador): grava na tabela `denuncias`
+    this.onMessage(Msg.Report, (client, p: { name?: unknown; motivo?: unknown }) => void this.denunciar(client, p));
     // chat do grupo (/g): mesmas regras de limite, taxa e sanitização; vai só aos membros, em qualquer zona
     this.onMessage(Msg.PartyChat, (client, p: { text?: unknown }) => {
       if (!this.allow(client)) return;
@@ -441,6 +449,8 @@ export class ZoneRoom extends Room<ZoneState> {
   /** valida, limpa e aplica a taxa do chat (zona e grupo dividem o mesmo limite); "" = descartar */
   private chatText(client: Client, raw: unknown, max = CHAT_MAX_LEN): string {
     if (typeof raw !== "string") return "";
+    const ate = silenciadoAte(this.userIds.get(client.sessionId));
+    if (ate && ate > Date.now()) { this.notify(client.sessionId, `Você está silenciado até ${horaLegivel(ate)}.`); return ""; }
     if (raw.length > max) { this.notify(client.sessionId, `Mensagem longa demais (máx. ${max} caracteres).`); return ""; }
     const text = cleanChat(raw);
     if (!text) return "";
@@ -454,6 +464,79 @@ export class ZoneRoom extends Room<ZoneState> {
     recent.push(now);
     this.chatAt.set(client.sessionId, recent);
     return text;
+  }
+
+  // ------------------------------------------------------------------ moderação (C0.6)
+  /** aviso para a conta, se ela estiver online em alguma zona */
+  private avisarConta(contaId: string, text: string) {
+    const s = active.get(contaId);
+    if (s) s.room.notify(s.sid, text);
+  }
+
+  /** comandos de admin (já reconhecidos como comando): só para contas em ADMIN_ACCOUNT_IDS */
+  private async comandoAdmin(client: Client, texto: string) {
+    const cmd = parseComandoAdmin(texto) as ComandoAdmin;
+    if (!isAdmin(this.userIds.get(client.sessionId))) return this.notify(client.sessionId, "Comando reservado a administradores.");
+    try {
+      if (cmd.tipo === "uso") return this.notify(client.sessionId, cmd.texto);
+      if (cmd.tipo === "denuncias") {
+        const lista = await this.repo.denunciasAbertas();
+        if (!lista.length) return this.notify(client.sessionId, "Nenhuma denúncia aberta.");
+        for (const d of lista) this.notify(client.sessionId, `Denúncia #${d.id} contra ${d.nome}: ${d.motivo}`);
+        return;
+      }
+      const alvo = await this.repo.findCharacterByName(cmd.nome);
+      if (!alvo) return this.notify(client.sessionId, `Jogador "${cmd.nome}" não encontrado.`);
+      if (cmd.tipo === "silenciar") {
+        const ate = Date.now() + cmd.minutos * 60_000;
+        await this.repo.setSilencio(alvo.account_id, ate, cmd.motivo);
+        guardarSancao(alvo.account_id, { ...sancaoEmCache(alvo.account_id), silenciadoAte: ate });
+        void registrarEvento(this.repo.db, "silenciado", { contaId: alvo.account_id, personagemId: alvo.id, dados: { minutos: cmd.minutos } });
+        this.avisarConta(alvo.account_id, `Você foi silenciado até ${horaLegivel(ate)}${cmd.motivo ? `: ${cmd.motivo}` : ""}.`);
+        return this.notify(client.sessionId, `${alvo.name} silenciado por ${cmd.minutos} min.`);
+      }
+      if (cmd.tipo === "banir") {
+        await this.repo.setBanido(alvo.account_id, true, cmd.motivo);
+        guardarSancao(alvo.account_id, { ...sancaoEmCache(alvo.account_id), banido: true });
+        void registrarEvento(this.repo.db, "banido", { contaId: alvo.account_id, personagemId: alvo.id });
+        const s = active.get(alvo.account_id); // derruba a sessão atual, se estiver online
+        s?.room.clients.getById(s.sid)?.leave(4003);
+        return this.notify(client.sessionId, `${alvo.name} banido.`);
+      }
+      // desbanir
+      await this.repo.setBanido(alvo.account_id, false, "");
+      guardarSancao(alvo.account_id, { ...sancaoEmCache(alvo.account_id), banido: false });
+      return this.notify(client.sessionId, `${alvo.name} desbanido.`);
+    } catch (e) {
+      console.error("[moderacao] comando:", (e as Error).message);
+      this.notify(client.sessionId, "Erro ao executar o comando.");
+    }
+  }
+
+  /** denúncia: valida; 1 por minuto por conta (checagem e marca síncronas, sem corrida); grava na tabela */
+  private async denunciar(client: Client, p: { name?: unknown; motivo?: unknown }) {
+    if (!this.allow(client)) return;
+    const pl = this.state.players.get(client.sessionId);
+    const uid = this.userIds.get(client.sessionId);
+    if (!pl || !uid) return;
+    const nome = typeof p?.name === "string" ? p.name.trim().slice(0, 40) : "";
+    const motivo = typeof p?.motivo === "string" ? cleanChat(p.motivo).slice(0, MOTIVO_MAX).trim() : "";
+    if (!nome || !motivo) return this.notify(client.sessionId, "Escreva o motivo da denúncia (até 200 caracteres).");
+    try {
+      const alvo = await this.repo.findCharacterByName(nome);
+      if (!alvo) return this.notify(client.sessionId, "Jogador não encontrado.");
+      if (alvo.id === pl.charId || alvo.account_id === uid) return; // denunciar a si mesmo é ignorado (nem conta no limite)
+      // checagem e marca no mesmo passo síncrono: duas denúncias seguidas não passam juntas
+      const agora = Date.now();
+      if (agora - (ultimaDenuncia.get(uid) ?? -Infinity) < 60_000) return this.notify(client.sessionId, "Aguarde 1 minuto entre denúncias.");
+      ultimaDenuncia.set(uid, agora);
+      const id = await this.repo.addDenuncia(uid, alvo.id, alvo.name, motivo);
+      void registrarEvento(this.repo.db, "denuncia", { contaId: uid, personagemId: alvo.id, dados: { denuncia: id } });
+      this.notify(client.sessionId, "Denúncia registrada. Obrigado.");
+    } catch (e) {
+      console.error("[moderacao] denúncia:", (e as Error).message);
+      this.notify(client.sessionId, "Erro ao registrar a denúncia.");
+    }
   }
 
   // ------------------------------------------------------------------ inventário
@@ -801,6 +884,10 @@ export class ZoneRoom extends Room<ZoneState> {
     } catch {
       throw new ServerError(401, "não autorizado"); // não vaza detalhes do JWT
     }
+    // banimento: recusado antes de qualquer coisa; o cache de sanções também vale para o chat
+    const sancao = await this.repo.getSancao(user.id);
+    guardarSancao(user.id, { silenciadoAte: sancao.silenciadoAte, banido: sancao.banido });
+    if (sancao.banido) throw new ServerError(403, "Esta conta está banida do FrixeP.");
     const character = await this.repo.getCharacter(user.id);
     if (!character) throw new ServerError(403, "crie um personagem antes de entrar");
     const inventory = await this.repo.loadInventory(character.id, character.class);
