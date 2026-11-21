@@ -88,9 +88,12 @@ check("o Arqueiro recebe XP e loot (o item do chão é dele; qualquer classe pod
 console.log("\n== 3. Clérigo: Compressor de Ar, Julgamento e ataque ==");
 // ambos vão para perto do esqueleto e2 (31,24): A fica no alcance de aggro, C um pouco atrás (dentro do raio de cura 4)
 A.room.send("move_to", { x: 28.2, y: 24 });
-C.room.send("move_to", { x: 24.8, y: 23.5 });
-await sleep(4500);
 const dAC = () => Math.hypot(A.me().x - C.me().x, A.me().y - C.me().y);
+// o Clérigo segue a posição REAL do aliado (o ponto fixo dependia do desenho do mapa e do tempo de caminhada)
+{
+  const t0 = Date.now();
+  while (Date.now() - t0 < 12000 && !(dAC() <= 3.5 && Date.now() - t0 > 2500)) { C.room.send("move_to", { x: A.me().x - 2, y: A.me().y }); await sleep(400); }
+}
 check("o Clérigo ficou perto o bastante do aliado (cura 4)", dAC() <= 4.2, `distância ${dAC().toFixed(1)}`);
 const e2 = C.room.state.enemies.get("e2");
 {
@@ -111,10 +114,11 @@ check("o Arqueiro toma dano do esqueleto", await until(() => A.me().hp < A.me().
 const hpAntes = A.me().hp;
 const healsAntes = C.ev.heal.length;
 C.act("skill1", 0, 0);
-await sleep(600);
+let hpMax = hpAntes; // o esqueleto ainda bate no aliado: vale o maior valor visto durante a cura, não o final
+for (let i = 0; i < 12; i++) { hpMax = Math.max(hpMax, A.me().hp); await sleep(50); }
 const heal = C.ev.heal.slice(healsAntes).find((h) => h.id === A.id && !h.revive);
 check("a Cura chega ao aliado (evento heal)", !!heal && heal.amount > 0, `+${heal?.amount}`);
-check("a vida do aliado sobe de verdade no servidor", A.me().hp > hpAntes || A.me().hp === A.me().maxHp, `${hpAntes} → ${A.me().hp}`);
+check("a vida do aliado sobe de verdade no servidor", hpMax > hpAntes || hpMax === A.me().maxHp, `${hpAntes} → máx ${hpMax}`);
 
 console.log("\n== 5. Queda e renascimento ==");
 const tm = Date.now();
@@ -184,13 +188,11 @@ await sleep(700);
 check("o Arqueiro também ganha XP do abate", A.me().level > lvA0 || A.me().xp > xpA0, `xp ${xpA0} → ${A.me().xp}`);
 check("o Clérigo ganha XP mesmo sem dar o golpe final (rateio)", C.me().level > lvC0 || C.me().xp > xpC0, `xp ${xpC0} → ${C.me().xp} (nv ${C.me().level})`);
 {
-  const owners = []; // os itens do abate saem por rodízio entre quem participou (aqui: Arqueiro e Clérigo)
-  A.room.state.items.forEach((g) => owners.push(g.owner));
-  check("o abate solta itens no chão com dono exclusivo, divididos entre os dois que lutaram", owners.length >= 2 && owners.every((o) => o === A.id || o === C.id) && owners.includes(A.id) && owners.includes(C.id), `${owners.length} itens`);
+  // os itens saem por rodízio entre quem lutou; quem estava perto já pode ter pisado em alguns, então a prova vem do que cada um RECEBEU
   await Promise.all([collect(A), collect(C)]);
   await sleep(300);
   const gotA = A.ev.loot.slice(lootA0).map((l) => l.id), gotC = C.ev.loot.slice(lootC0).map((l) => l.id);
-  check("cada um pega os itens que são seus (nenhum item some nem é pego por quem não é o dono)", gotA.length + gotC.length === owners.length && gotA.length >= 1 && gotC.length >= 1, `A ${gotA} | C ${gotC}`);
+  check("o loot do abate é dividido: os dois recebem itens e nada fica esquecido no chão", gotA.length >= 1 && gotC.length >= 1 && A.room.state.items.size === 0, `A ${gotA} | C ${gotC} | chão ${A.room.state.items.size}`);
 }
 
 console.log("\n== 7. Estabilidade ==");

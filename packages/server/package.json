@@ -33,7 +33,8 @@
     "test:market": "node test/market.mjs",
     "test:guerreiro": "node test/guerreiro.mjs",
     "test:curandeiro": "node test/curandeiro.mjs",
-    "test:balance:unit": "tsx test/balance.unit.ts"
+    "test:balance:unit": "tsx test/balance.unit.ts",
+    "test:ci": "bash test/run-all.sh"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.0",

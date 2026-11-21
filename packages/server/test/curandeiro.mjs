@@ -39,7 +39,7 @@ console.log("\n== A. Cura em Área (padrão): cura todos em volta, mas pouco =="
   check("o guerreiro apanha do esqueleto (perde mais de 20 de vida)", await until(() => W.me().hp <= W.me().maxHp - 20, 15000, 100), `hp ${W.me().hp}/${W.me().maxHp}`);
   C.act("skill1", C.me().x, C.me().y);
   check("a cura em área chega ao aliado com 16 de vida (e sem `from`)", await until(() => C.ev.heal.some((h) => h.id === W.id && h.amount === 16 && !h.from) || W.ev.heal.some((h) => h.id === W.id && h.amount === 16 && !h.from), 1500), JSON.stringify(W.ev.heal.at(-1)));
-  check("custa 26 de Mana", C.me().mana >= 90 && C.me().mana <= 98, `mana ${C.me().mana}`);
+  check("custa 26 de Mana", await until(() => C.me().mana >= 90 && C.me().mana <= 98, 1500, 50), `mana ${C.me().mana}`); // o estado chega por sincronização: espera em vez de ler na hora
   // em combate (o Clérigo acerta o esqueleto): a troca do Q é recusada
   C.act("attack", e.x, e.y);
   await until(() => C.ev.hits.some((h) => h.k === "e" && h.by === C.id), 3000);

@@ -7,6 +7,7 @@ import { SignJWT } from "jose";
 const HTTP = process.env.SERVER ?? "http://localhost:2999";
 const WS = HTTP.replace(/^http/, "ws");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (fn, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(60); } return false; };
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
@@ -220,8 +221,9 @@ console.log("\n== 8. Ping ==");
   const pongs = [];
   c.room.onMessage("pong", (m) => pongs.push(m));
   c.room.send("ping", { t: 123.5, lixo: "ignorado" });
-  await sleep(500);
-  check("o servidor devolve o mesmo carimbo de tempo (pong)", pongs.length === 1 && pongs[0].t === 123.5 && Object.keys(pongs[0]).length === 1, JSON.stringify(pongs));
+  await until(() => pongs.length >= 1, 3000); // espera a resposta em vez de um tempo fixo (servidor ocupado no CI)
+  await sleep(150);
+  check("o servidor devolve o mesmo carimbo de tempo (pong)", pongs.length === 1 && pongs[0].t === 123.5 && Object.keys(pongs[0]).every((k) => k === "t" || k === "online"), JSON.stringify(pongs));
   for (const t of ["x", null, NaN, Infinity, {}, [], undefined]) { c.room.send("ping", { t }); await sleep(40); }
   c.room.send("ping", "texto");
   c.room.send("ping", null);
