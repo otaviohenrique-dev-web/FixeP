@@ -385,6 +385,13 @@ Para publicar sem o painel por padrão, defina `VITE_SHOW_STATS=0` na montagem d
 > **Atenção ao rodar servidores de teste:** o `.env` agora tem a `DATABASE_URL` do Supabase e ela tem prioridade sobre `PGLITE_DIR`.
 > Para testes locais **não carregue o `.env`** (rode `npx tsx src/index.ts` com `JWT_SECRET` inline) ou use `DB_SCHEMA=frixep_test`.
 
+**`DATABASE_CA` (certificado do banco):** variável opcional do servidor, com o certificado raiz (CA) do PostgreSQL em PEM
+(conteúdo direto, com `\n` aceitos, ou caminho de arquivo). Se definida, a conexão ao banco verifica o certificado
+(`rejectUnauthorized: true`). Não é usada com PGlite nem com `localhost`. Detalhes em `docs/DEPLOY_SUPABASE_RENDER.md`
+(Parte 3) e rotação de segredos em `docs/SEGURANCA.md`.
+
+**Limpeza de contas convidado de teste:** `tools/limpar_convidados.ps1` (simula por padrão; `-Executar` apaga). Usa só `DATABASE_URL` da sessão. Veja o cabeçalho do script.
+
 ## Arte no jogo (sprites)
 
 O jogo desenha **sprites animados** quando encontra o atlas do personagem e **círculos** quando não encontra, então a arte pode

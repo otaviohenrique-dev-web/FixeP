@@ -1,4 +1,5 @@
 import { readdir, readFile, mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import pg from "pg";
@@ -25,11 +26,24 @@ export interface Db {
 
 const isProd = process.env.NODE_ENV === "production";
 
+/**
+ * DATABASE_CA: certificado raiz (CA) do PostgreSQL, em PEM. Aceita o conteúdo PEM direto
+ * (com "\n" literais, comum em painéis de variáveis) ou o caminho de um arquivo .pem.
+ */
+export function lerDatabaseCa(valor: string): string {
+  if (valor.includes("-----BEGIN")) return valor.replace(/\\n/g, "\n");
+  try {
+    return readFileSync(valor, "utf8");
+  } catch (e) {
+    throw new Error(`DATABASE_CA não é um PEM válido nem um arquivo legível: ${(e as Error).message}`);
+  }
+}
+
 function sslFor(url: string): pg.PoolConfig["ssl"] {
   const host = new URL(url).hostname;
   if (host === "localhost" || host === "127.0.0.1") return false;
   const ca = process.env.DATABASE_CA; // certificado raiz do provedor (recomendado)
-  if (ca) return { ca, rejectUnauthorized: true };
+  if (ca) return { ca: lerDatabaseCa(ca), rejectUnauthorized: true };
   console.warn("[db] DATABASE_CA não definido: TLS sem verificação de certificado. Defina DATABASE_CA em produção.");
   return { rejectUnauthorized: false };
 }

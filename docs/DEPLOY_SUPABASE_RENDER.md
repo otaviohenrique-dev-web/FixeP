@@ -50,6 +50,14 @@ Sem isso o servidor conecta com TLS **sem verificar o certificado** (e avisa no 
    até `-----END CERTIFICATE-----`).
 3. No Render, crie a variável `DATABASE_CA` com esse conteúdo (campo multilinha).
 
+`DATABASE_CA` aceita **o conteúdo PEM** (com as quebras de linha reais ou como `\n` literal, se o painel não aceitar
+várias linhas) **ou o caminho de um arquivo `.pem`** (útil na máquina do servidor). Se estiver definida, o servidor usa
+`ssl: { ca, rejectUnauthorized: true }`; se o certificado estiver inválido, ele não sobe e mostra o motivo.
+Sem `DATABASE_CA` o comportamento antigo continua (TLS sem verificação, com aviso no log). Em desenvolvimento
+(PGlite ou `localhost`) a variável não é usada.
+
+Se a chave ou a senha do banco vazarem, veja o passo a passo de rotação em [`docs/SEGURANCA.md`](SEGURANCA.md).
+
 ## Parte 4. Variáveis no Render (serviço do servidor)
 
 Em **Environment** do serviço, defina:
