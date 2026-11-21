@@ -65,7 +65,7 @@ await sleep(500);
 check("longe do baú: recusado, nada é enviado", A.ev.vaults === 0 && A.said("baú"), JSON.stringify(A.ev.notice.slice(-1)));
 A.send("vault_deposit", { slot: 0 });
 await sleep(300);
-check("depositar de longe não move o item", A.invCount("espada_1m_common") === 1 && A.ev.vaults === 0);
+check("depositar de longe não move o item", await until(() => A.invCount("espada_1m_common") === 1, 2500) && A.ev.vaults === 0, `espada=${A.invCount("espada_1m_common")} vaults=${A.ev.vaults}`);
 await A.walk(29, 30);
 await A.op("vault_open", {});
 check("perto do baú: abre, com 180 espaços vazios e saldo zero", A.ev.vault?.slots.length === 180 && A.ev.vault.slots.every((s) => s === null) && A.ev.vault.iron === 0, `${A.ev.vault?.slots.length} espaços, ${A.ev.vaults} envios, em (${A.me().x.toFixed(1)}, ${A.me().y.toFixed(1)})`);
