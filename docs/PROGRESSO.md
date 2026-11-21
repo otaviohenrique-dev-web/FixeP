@@ -11,7 +11,7 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | C0.2 Backup e espelho | 🟡 scripts e guia prontos (2026-11-21) | `tools/backup_espelho.ps1` e `tools/backup_banco.ps1` prontos; guia em `docs/BACKUP_RESTAURACAO.md`. Falta o usuário rodar uma restauração de teste (PD-05). |
 | C0.3 Servidor em VPS no Brasil | ⬜ | |
 | C0.4 Segurança (chave, DATABASE_CA, contas de teste) | ⬜ | |
-| C0.5 Telemetria mínima | ⬜ | |
+| C0.5 Telemetria mínima | 🟡 concluído com pendência (2026-11-21) | Tabela `eventos` (migração 010), `registrarEvento` (nunca lança), eventos login, criação, 1º abate, nível 5 e saída; `tools/funil_7dias.sql`; seção no README. Testes: `test/telemetria.unit.ts` (14 verificações), persistence e cidade passam com o servidor. Pendência **Média**: os eventos do servidor de verdade não são lidos de volta pelos testes (não há leitura de banco no servidor de teste); `passo_tutorial` fica pronto mas não é gerado, porque o tutorial ainda não existe. |
 | C0.6 Moderação mínima | ⬜ | |
 
 ## Pendências abertas
