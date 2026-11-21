@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { PLAYABLE_CLASSES, START_ZONE, type CharClass } from "@frixep/shared";
 import { verifySession, type AuthUser } from "./auth.js";
+import { registrarEvento } from "./telemetria.js";
 import { Repo, validateName } from "./db/repo.js";
 
 declare module "express-serve-static-core" {
@@ -64,6 +65,7 @@ export function apiRouter(repo: Repo): Router {
       if (!out.ok) {
         return res.status(409).json({ error: out.error === "name_taken" ? "Esse nome já está em uso." : "Você já tem um personagem." });
       }
+      void registrarEvento(repo.db, "criacao_personagem", { contaId: req.user!.id, personagemId: out.character.id, dados: { classe: cls } });
       res.status(201).json({ character: shape(out.character) });
     } catch (e) {
       console.error("[api] /character:", (e as Error).message);
