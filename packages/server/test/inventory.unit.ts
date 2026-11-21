@@ -5,7 +5,7 @@ process.env.NODE_ENV = "test";
 
 import { randomUUID } from "node:crypto";
 import {
-  INV_SLOTS, ITEMS, CLASS_DEFS, ACTION_IDS, ZONES, ZONE_IDS, RARITIES, WEAPON_TYPES, RARITY_COLOR, PLAYABLE_CLASSES,
+  INV_SLOTS, ITEMS, CLASS_DEFS, ACTION_IDS, ZONES, ZONE_IDS, RARITIES, RARITIES_ALL, RARITY_NAME, WEAPON_TYPES, RARITY_COLOR, PLAYABLE_CLASSES,
   maxHpFor, maxManaFor, rarityIndex, gearBonuses, effectiveAction, migrateItemId, kitLines, type CharClass, type Rarity,
 } from "@frixep/shared";
 import { emptyInventory, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, snapshot, sortInventory, migrateInventory } from "../src/game/inventory.js";
@@ -26,6 +26,7 @@ const check = (name: string, ok: boolean, detail = "") => {
 console.log("\n== Catálogo de itens ==");
 {
   const all = Object.values(ITEMS);
+  check("8 níveis de raridade, cada um com nome e cor próprios (inferior e ancestral ainda sem itens)", RARITIES_ALL.length === 8 && new Set(RARITIES_ALL.map((r) => RARITY_COLOR[r])).size === 8 && RARITIES_ALL.every((r) => !!RARITY_NAME[r]) && RARITIES_ALL[0] === "junk" && RARITIES_ALL[7] === "ancestral" && RARITIES.every((r) => RARITIES_ALL.includes(r)));
   check("6 raridades com cores distintas", RARITIES.length === 6 && new Set(RARITIES.map((r) => RARITY_COLOR[r])).size === 6);
   check("4 classes jogáveis, incluindo o Mago", PLAYABLE_CLASSES.length === 4 && PLAYABLE_CLASSES.includes("mage"));
   check("cada classe tem 3 ou mais tipos de arma", PLAYABLE_CLASSES.every((c) => Object.values(WEAPON_TYPES).filter((t) => t.cls === c).length >= 3));

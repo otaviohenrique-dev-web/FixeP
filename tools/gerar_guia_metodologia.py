@@ -41,7 +41,7 @@ CRU = [
     ]),
     ("C3", "Itens com profundidade", "Dá o motivo de caçar o mesmo item muitas vezes. Todo ralo de moeda nasce junto da função.",
      "v0.4 Itens", "Um item com afixos, refino e engaste equipado e salvo.", [
-        ("C3.1", "Afixos: de 1 a 5 atributos sorteados no drop, por raridade; guardados no item e somados aos stats.", "Dois itens iguais saem diferentes; tooltip lista os afixos.", "G"),
+        ("C3.1", "Afixos: de 1 a 5 atributos sorteados no drop, por raridade (8 níveis: inferior, comum, incomum, raro, épico, lendário, mítico, ancestral; os dois extremos ainda sem itens); guardados no item e somados aos stats.", "Dois itens iguais saem diferentes; tooltip lista os afixos.", "G"),
         ("C3.2", "Refino +1 a +N com Tostões e material, sem risco de perder o item.", "Refinar altera o stat e gasta a moeda.", "M"),
         ("C3.3", "Engaste: espaços e gemas pagas em Óbolos de Sangue.", "Gema somada ao stat; remover devolve o espaço.", "M"),
         ("C3.4", "Conjuntos (sets) de 2 e 4 peças, em dados, com bônus.", "Bônus liga e desliga ao trocar a peça.", "M"),

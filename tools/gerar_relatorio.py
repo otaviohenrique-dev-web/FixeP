@@ -260,7 +260,7 @@ def build():
     # ---------------------------------------------------------------- 1
     st += [H1("1. Sumário executivo")]
     st += [P("O FrixeP já é, tecnicamente, um MMORPG funcional: servidor autoritativo em tempo real, quatro classes com combate de ação, "
-             "itens com seis raridades, economia com duas moedas, mercado entre jogadores, troca segura, grupos, chefes que exigem cooperação, "
+             "itens com oito níveis de raridade (seis já com equipamento), economia com duas moedas, mercado entre jogadores, troca segura, grupos, chefes que exigem cooperação, "
              "PvP opcional e um mundo de quatro zonas, tudo jogável no navegador e no celular. A base técnica é sólida e coerente "
              "(client Phaser, servidor Colyseus, banco PostgreSQL, testes automatizados de anti-trapaça e economia).")]
     st += [P("O que o jogo ainda <b>não</b> tem é o que transforma um sistema divertido em um produto que prende: um motivo para voltar amanhã. "
@@ -319,7 +319,7 @@ def build():
         ["Plataforma", "Navegador (computador e celular), instalável como app (PWA), login com Google, personagem salvo em PostgreSQL. Cliente em Phaser 3 + Vite, servidor Colyseus + Express."],
         ["Classes", "Guerreiro (tanque), Arqueiro (distância), Clérigo (suporte) e Mago (explosivo). Cada uma tem ataque básico, Q/W/E, ultimate (R) e esquiva, com recurso próprio (Fúria, Foco, Mana). O Clérigo escolhe entre duas versões do Q."],
         ["Progressão", "Nível 1 a 50, XP exponencial (20% por nível), placas de nível com moldura que muda a cada 10 níveis."],
-        ["Itens", "Seis raridades (comum a mítico), seis espaços de equipamento, três ou mais tipos de arma por classe, itens no chão com reserva ao dono, tetos de raridade por zona e baús de chefe."],
+        ["Itens", "Oito níveis de raridade (inferior, comum, incomum, raro, épico, lendário, mítico, ancestral; hoje há equipamento de comum a mítico), seis espaços de equipamento, três ou mais tipos de arma por classe, itens no chão com reserva ao dono, tetos de raridade por zona e baús de chefe."],
         ["Economia", "Duas moedas (Tostões de Ferro e Óbolos de Sangue), comerciante (Garrick), ferreira (Brasa), troca segura entre jogadores com chat privado, mercado de jogadores (leiloeiro Ossian) com taxa, baú pessoal."],
         ["Mundo", "Cidade segura de Brasalume (hub, sem combate) e três zonas de combate: Cinzas, Floresta Gélida e Catacumbas. Pontos de caça em grupo, chefes por zona, travessia por portões, mapa-mundo, bolha de proteção na chegada."],
         ["Social", "Grupo (party) com divisão de XP e loot, chat da zona com balão de fala, troca e mercado. Chefes exigem grupo."],
@@ -606,7 +606,7 @@ def build():
         ["Testes", "Anti-trapaça, persistência, inventário, classes, mana, chat, PvP, zonas, chegada, economia, mercado, balanceamento e chefes."],
         ["Zonas", "Brasalume (hub), Cinzas, Floresta Gélida, Catacumbas."],
         ["Classes", "Guerreiro, Arqueiro, Clérigo, Mago."],
-        ["Raridades", "Comum, incomum, raro, épico, lendário, mítico; nível máximo 50."],
+        ["Raridades", "Inferior (cinza), comum (branco), incomum (verde), raro (azul), épico (roxo), lendário (laranja), mítico (vermelho), ancestral (ciano); inferior e ancestral ainda sem itens; nível máximo 50."],
         ["Moedas", "Tostões de Ferro e Óbolos de Sangue."],
     ], [CW * .22, CW * .78])]
     st += [SP(10), H1("Apêndice B. Glossário")]
