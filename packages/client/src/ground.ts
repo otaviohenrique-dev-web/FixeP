@@ -16,7 +16,7 @@ const BEAM_H = [0, 0, 46, 96, 140, 170];
 function look(d: GroundData): { name: string; rarity: Rarity; hex: number; color: string; coin: boolean } | null {
   if (isCoinItem(d.itemId)) {
     const obol = d.itemId === COIN_OBOL.id;
-    return { name: coinName(d.itemId, d.qty), rarity: obol ? "legendary" : "common", hex: obol ? 0xff3b30 : 0xa8aeb9, color: obol ? "#ff6a5a" : "#cfd4dc", coin: true };
+    return { name: coinName(d.itemId, d.qty), rarity: obol ? "mythic" : "common", hex: obol ? 0xff2e63 : 0xa8aeb9, color: obol ? "#ff6a8a" : "#cfd4dc", coin: true };
   }
   const def = ITEMS[d.itemId];
   return def ? { name: def.name + (d.qty > 1 ? ` x${d.qty}` : ""), rarity: def.rarity, hex: RARITY_HEX[def.rarity], color: RARITY_COLOR[def.rarity], coin: false } : null;
