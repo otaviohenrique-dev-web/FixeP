@@ -411,8 +411,8 @@ export const enemyXp = (level: number) => Math.round(XP_PER_KILL * Math.pow(1.45
 export const LEVEL_CAP = 50;
 export const XP_PER_KILL = 20;
 /** XP necessário para sair do nível `level` para o próximo (0 no nível máximo). */
-/** Cresce 20% a cada nível (100, 120, 144, 173, 207...; ~3,2 mil no nível 20; ~600 mil no 49). */
-export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : Math.round(100 * Math.pow(1.2, level - 1)));
+/** Cresce 25% a cada nível (100, 125, 156, 195, 244...; ~ 6,9 mil no nível 20; ~ 4,5 milhões no 49). */
+export const xpToNext = (level: number) => (level >= LEVEL_CAP ? 0 : Math.round(100 * Math.pow(1.25, level - 1)));
 /** Faixa de borda do nível: muda a cada 10 níveis (1-9, 10-19, 20-29, 30-39, 40-49, 50). */
 export const levelTier = (level: number) => Math.min(5, Math.floor(Math.max(1, level) / 10));
 export const LEVEL_TIER_COLORS = [0x9a8460, 0xc9d3df, 0xf0c34a, 0x4cc3ee, 0xb575f5, 0xff6a3d] as const; // bronze, prata, ouro, gelo, violeta, brasa
@@ -430,7 +430,7 @@ export const maxManaFor = (cls: CharClass, level: number) => CLASS_DEFS[cls].res
  */
 export const PLAYER_POWER_PER_LEVEL = 0.08;
 export const PLAYER_DEFENSE_PER_LEVEL = 0.06;
-export const ENEMY_HP_PER_LEVEL = 0.25;
+export const ENEMY_HP_PER_LEVEL = 0.3;
 export const dmgMult = (level: number, weaponPct = 0) => (1 + PLAYER_POWER_PER_LEVEL * (level - 1)) * (1 + weaponPct / 100);
 /** Divisor do dano recebido pelo jogador (>= 1): cresce com o nível. */
 export const defenseMult = (level: number) => 1 + PLAYER_DEFENSE_PER_LEVEL * (Math.max(1, level) - 1);
