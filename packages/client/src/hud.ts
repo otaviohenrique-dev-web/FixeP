@@ -1,6 +1,6 @@
 import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
-import { skillArt } from "./skill-art";
+import { skillImage, skillCategory } from "./skill-art";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -138,7 +138,10 @@ const CSS = `
 .hd-btn.hasic .hd-cost,.hd.touch .hd-btn.hasic .hd-cost{top:2px;bottom:auto;left:auto;right:3px;text-align:right}
 .hd-ic{position:absolute;left:50%;top:11px;margin-left:-8px;pointer-events:none;color:#ffe3a8;filter:drop-shadow(0 1px 2px #000)}
 .hd-art{position:absolute;inset:0;pointer-events:none;display:none}
-.hd-art svg{width:100%;height:100%;display:block}
+.hd-art img{width:100%;height:100%;display:block;object-fit:cover}
+.hd-btn.cat-dano{border-color:#ffd86b;box-shadow:inset 0 0 0 1px rgba(255,216,107,.35),0 2px 6px rgba(0,0,0,.6)}
+.hd-btn.cat-cura{border-color:#9ad66b;box-shadow:inset 0 0 0 1px rgba(154,214,107,.35),0 2px 6px rgba(0,0,0,.6)}
+.hd-btn.cat-controle{border-color:#8fd8ff;box-shadow:inset 0 0 0 1px rgba(143,216,255,.35),0 2px 6px rgba(0,0,0,.6)}
 .hd-btn.hasart .hd-art{display:block}
 .hd-btn.hasart .hd-sn{display:none}
 .hd-btn.hasart .hd-key{z-index:2;background:rgba(0,0,0,.8)}
@@ -378,10 +381,11 @@ export function mountHud(opts: HudOptions): Hud {
     const cost = def.cost ?? 0;
     const b = document.createElement("button");
     b.type = "button";
-    const art = skillArt(def.name); // arte ilustrada (skill-art.ts); sem arte, usa o ícone pequeno
-    b.className = `hd-btn hd-a-${a}` + (a === "attack" ? " big" : "") + (a === "ultimate" ? " ult" : "") + (art ? " hasart" : def.icon ? " hasic" : "");
+    const art = skillImage(def.name); // arte final (assets/ui/skills); sem arte, usa o ícone pequeno
+    const cat = skillCategory(def.name);
+    b.className = `hd-btn hd-a-${a}` + (a === "attack" ? " big" : "") + (a === "ultimate" ? " ult" : "") + (art ? " hasart" : def.icon ? " hasic" : "") + (cat ? ` cat-${cat}` : "");
     b.setAttribute("aria-label", `${def.name} (${def.key})${cost ? `, custa ${cost} de ${res.name}` : ""}`);
-    b.innerHTML = `<span class="hd-key">${def.key}</span>${art ? `<span class="hd-art">${art}</span>` : def.icon ? `<span class="hd-ic">${ICON[def.icon] ?? ""}</span>` : ""}<span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
+    b.innerHTML = `<span class="hd-key">${def.key}</span>${art ? `<span class="hd-art"><img src="${art}" alt="" draggable="false"></span>` : def.icon ? `<span class="hd-ic">${ICON[def.icon] ?? ""}</span>` : ""}<span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
     // pointerdown: resposta imediata no toque, sem esperar o "click"
     // toque: dispara ao soltar (um toque longo abre o balão em vez de disparar); mouse: dispara ao apertar
     pressable(b, () => trigger(a), () => tipHtml(skillTooltip(defs[a], res.name)));
@@ -403,10 +407,13 @@ export function mountHud(opts: HudOptions): Hud {
     const d = qMode === 1 && cdef.skill1Alt ? cdef.skill1Alt : cdef.actions.skill1;
     defs.skill1 = d;
     qBtn.querySelector(".hd-sn")!.textContent = d.name;
-    const art = skillArt(d.name);
+    const art = skillImage(d.name);
     const artEl = qBtn.querySelector(".hd-art");
-    if (artEl) artEl.innerHTML = art ?? "";
+    if (artEl) artEl.innerHTML = art ? `<img src="${art}" alt="" draggable="false">` : "";
     qBtn.classList.toggle("hasart", !!art);
+    qBtn.classList.remove("cat-dano", "cat-cura", "cat-controle");
+    const cat = skillCategory(d.name);
+    if (cat) qBtn.classList.add(`cat-${cat}`);
     const ic = qBtn.querySelector(".hd-ic");
     if (ic && d.icon) ic.innerHTML = ICON[d.icon] ?? "";
     const c = qBtn.querySelector(".hd-cost");
