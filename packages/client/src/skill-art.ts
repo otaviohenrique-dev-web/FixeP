@@ -5,6 +5,8 @@
 
 /** caminho da imagem da habilidade, ou undefined se o nome não tem arte */
 export function skillImage(name: string): string | undefined {
+  // ataque básico do Clérigo (Raio) usa a arte do Compressor de Ar, por pedido
+  if (name === "Raio") return "/assets/ui/skills/skill_compressor_de_ar.png";
   const slug = name
     .normalize("NFD").replace(/[̀-ͯ]/g, "") // tira acentos
     .toLowerCase().trim().replace(/\s+/g, "_");

@@ -144,8 +144,10 @@ const CSS = `
 .hd-btn.cat-controle{border-color:#8fd8ff;box-shadow:inset 0 0 0 1px rgba(143,216,255,.35),0 2px 6px rgba(0,0,0,.6)}
 .hd-btn.hasart .hd-art{display:block}
 .hd-btn.hasart .hd-sn{display:none}
-.hd-btn.hasart .hd-key{z-index:2;background:rgba(0,0,0,.8)}
-.hd-btn.hasart .hd-cost{z-index:2;background:rgba(0,0,0,.7);border-radius:3px;padding:0 2px}
+.hd-btn.hasart .hd-key{z-index:2;min-width:15px;height:15px;font-size:10px;color:#fff;background:#05080d;border:1px solid #f0cf86;text-shadow:0 1px 0 #000}
+.hd-btn.hasart .hd-cost{z-index:2;font-size:11px;color:#fff!important;background:rgba(5,8,13,.88);border:1px solid rgba(240,207,134,.6);border-radius:3px;padding:1px 3px;text-shadow:0 1px 0 #000}
+.hd-btn.hasart .hd-cdn{font-size:20px;text-shadow:0 0 3px #000,0 0 6px #000,0 2px 4px #000}
+.hd-btn.hasart .hd-cd{background:rgba(0,0,0,.7)}
 .hd-qs{position:absolute;left:2px;top:17px;z-index:3;width:18px;height:14px;display:grid;place-items:center;border-radius:4px;background:rgba(0,0,0,.7);border:1px solid var(--gold-d);color:#ffd9a0;font:700 9px/1 "Cinzel",Georgia,serif;cursor:pointer}
 .hd-qs:hover{border-color:#f0cf86;color:#fff}
 .hd.touch .hd-qs{width:22px;height:18px;left:50%;margin-left:-11px;top:-1px}
