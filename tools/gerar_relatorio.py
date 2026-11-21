@@ -203,7 +203,7 @@ class Doc(BaseDocTemplate):
             c.setFillColor(colors.Color(.83, .33, .11, alpha=a)); c.circle(W * .72, H * .30, 190 - i * 55, stroke=0, fill=1)
         c.setStrokeColor(GOLD); c.setLineWidth(1.2); c.line(LM, H - 38 * mm, W - RM, H - 38 * mm)
         c.setFillColor(GOLDL); c.setFont("Seg-B", 9); c.drawString(LM, H - 32 * mm, "RELATÓRIO DE PRODUTO  ·  CONFIDENCIAL")
-        c.setFillColor(colors.HexColor("#8fa3c4")); c.setFont("Seg", 9); c.drawRightString(W - RM, H - 32 * mm, "Versão 1.0  ·  20 de novembro de 2026")
+        c.setFillColor(colors.HexColor("#8fa3c4")); c.setFont("Seg", 9); c.drawRightString(W - RM, H - 32 * mm, "Versão 1.1  ·  21 de novembro de 2026")
         if os.path.exists(EMB): c.drawImage(EMB, W / 2 - 48 * mm, H - 140 * mm, 96 * mm, 96 * mm, mask="auto")
         c.setFillColor(colors.white); c.setFont("Geo-B", 44); c.drawCentredString(W / 2, H * .43, "FrixeP")
         c.setFillColor(GOLDL); c.setFont("Geo-I", 15); c.drawCentredString(W / 2, H * .43 - 24, "Acenda a Brasa  ·  Desperte o Mundo")
