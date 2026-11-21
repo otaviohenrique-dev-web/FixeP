@@ -354,6 +354,14 @@ Saem com código 1 se qualquer verificação falhar. Veja também `docs/DEPLOY_S
 
 
 
+## Telemetria mínima (eventos, C0.5)
+
+O servidor grava eventos de jogo na tabela `eventos` (migração `010_telemetria.sql`): `login`, `criacao_personagem`, `primeiro_abate`, `nivel_5` e `saida`. Não são gravados senha, token, e-mail nem IP. A gravação nunca derruba o jogo: se falhar, vira um aviso no log.
+
+- **Ver o funil dos últimos 7 dias:** no Supabase, abra o SQL Editor, cole o conteúdo de `tools/funil_7dias.sql` e execute. Ele mostra quantas contas logaram, criaram personagem, deram o 1º abate e chegaram ao nível 5.
+- **Teste:** `npx tsx test/telemetria.unit.ts` (dentro de `packages/server`), com banco embutido em memória.
+- O evento `passo_tutorial` já é aceito pela função `registrarEvento` (`packages/server/src/telemetria.ts`), mas ainda não é gerado, porque o tutorial não existe.
+
 ## Deploy
 
 `render.yaml` descreve os serviços do Render. Veja `docs/DEPLOY_SUPABASE_RENDER.md` (Parte 5).

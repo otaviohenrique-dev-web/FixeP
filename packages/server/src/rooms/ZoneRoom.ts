@@ -18,6 +18,7 @@ const liveRooms = new Set<ZoneRoom>();
 export const onlineCount = () => { let n = 0; for (const r of liveRooms) n += r.state.players.size; return n; };
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
+import { registrarEvento } from "../telemetria.js";
 import { Market } from "../game/market.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, sortInventory, type Inventory } from "../game/inventory.js";
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
@@ -851,6 +852,7 @@ export class ZoneRoom extends Room<ZoneState> {
   // balde de fichas por cliente: rajada de 40, reposição de 30 mensagens/s. Jogo legítimo
   // fica bem abaixo disso (cliques e teclas); excesso é descartado e a insistência derruba a conexão.
   private buckets = new Map<string, { tokens: number; last: number; strikes: number }>();
+  private abatesRegistrados = new Set<string>(); // telemetria: 1º abate de cada personagem já anotado nesta execução (evita consulta a cada abate)
   private static readonly CHAT_WINDOW_MS = 8000; // no máximo 5 mensagens de chat a cada 8 s por jogador
   private static readonly CHAT_MAX_IN_WINDOW = 5;
   private chatAt = new Map<string, number[]>();
@@ -891,7 +893,10 @@ export class ZoneRoom extends Room<ZoneState> {
     const pl = this.state.players.get(client.sessionId);
     if (pl) parties.detach(pl.charId, client.sessionId); // continua no grupo (ausente) por um tempo: recarregar ou atravessar não o desfaz
     this.state.players.delete(client.sessionId);
-    if (pl) await this.save(pl);
+    if (pl) {
+      void registrarEvento(this.repo.db, "saida", { contaId: uid, personagemId: pl.charId, dados: { nivel: pl.level, zona: this.zone.id } });
+      await this.save(pl);
+    }
   }
 
   async onDispose() {
@@ -930,6 +935,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private addXp(id: string, p: Player, amount: number) {
     if (p.level >= LEVEL_CAP) return;
     p.xp += amount;
+    const nivelAntes = p.level;
     let leveled = false;
     while (p.level < LEVEL_CAP && p.xp >= xpToNext(p.level)) {
       p.xp -= xpToNext(p.level);
@@ -937,6 +943,7 @@ export class ZoneRoom extends Room<ZoneState> {
       leveled = true;
     }
     if (p.level >= LEVEL_CAP) p.xp = 0;
+    if (nivelAntes < 5 && p.level >= 5) void registrarEvento(this.repo.db, "nivel_5", { contaId: this.userIds.get(id), personagemId: p.charId, dados: { nivel: p.level } });
     p.dirty = true;
     if (leveled) {
       this.refreshStats(p, true);
@@ -1393,6 +1400,10 @@ export class ZoneRoom extends Room<ZoneState> {
       const ironEach = Math.max(1, Math.round((K.boss ? bossIron(e.level) : mobIron(e.level)) / n));
       for (const [pid, pl] of members) {
         this.addXp(pid, pl, xpEach);
+        if (!this.abatesRegistrados.has(pl.charId)) {
+          this.abatesRegistrados.add(pl.charId);
+          void registrarEvento(this.repo.db, "primeiro_abate", { contaId: this.userIds.get(pid), personagemId: pl.charId, dados: { nivel: pl.level, zona: this.zone.id } });
+        }
         this.clients.getById(pid)?.send(Evt.Xp, { amount: xpEach, x: e.x, y: e.y });
         const iron = addCoins(pl.inv, "iron", ironEach);
         if (iron > 0) { pl.invDirty = true; this.sendInv(pid, pl); this.clients.getById(pid)?.send(Evt.Coins, { iron, obols: 0, x: e.x, y: e.y }); }

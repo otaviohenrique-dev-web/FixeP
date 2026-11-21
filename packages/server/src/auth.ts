@@ -1,5 +1,6 @@
 import { randomUUID, randomBytes } from "node:crypto";
 import { Router } from "express";
+import { registrarEvento } from "./telemetria.js";
 import { SignJWT, jwtVerify } from "jose";
 import type { Repo } from "./db/repo.js";
 
@@ -132,6 +133,7 @@ export function authRouter(repo: Repo): Router {
       const profRes = await fetch(p.userUrl, { headers: { Authorization: `Bearer ${tok.access_token}` } });
       const prof = p.profile(await profRes.json());
       const acct = await repo.upsertAccount(name, String(prof.id), String(prof.name).slice(0, 20));
+      void registrarEvento(repo.db, "login", { contaId: acct.id, dados: { provedor: name } });
       res.redirect(backToClient(await signSession({ id: acct.id, name: acct.name })));
     } catch (e) {
       console.warn("[auth] falha OAuth:", (e as Error).message);
@@ -144,6 +146,7 @@ export function authRouter(repo: Repo): Router {
     if (isProd && process.env.ALLOW_GUEST !== "1") return res.status(403).end();
     try {
       const acct = await repo.upsertAccount("guest", randomUUID(), `Convidado-${randomBytes(2).toString("hex")}`);
+      void registrarEvento(repo.db, "login", { contaId: acct.id, dados: { provedor: "guest" } });
       res.json({ token: await signSession({ id: acct.id, name: acct.name }) });
     } catch (e) {
       console.error("[auth] guest:", (e as Error).message);
