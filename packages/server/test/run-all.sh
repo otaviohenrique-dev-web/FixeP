@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.." || exit 1
 
 TEST_JWT="ci-only-secret-nao-e-producao-0123456789abcdef"
 FAILS=()
+FLAKY=()
 RAN=0
 PORT_NEXT=3400
 LOG_DIR="${TMPDIR:-/tmp}/frixep-test-logs"
@@ -39,25 +40,38 @@ stop_server() {
 }
 
 # Uma suíte com servidor próprio. Argumentos: porta, variáveis do servidor, arquivo, variáveis da suíte.
-run_case() {
-  # porta própria a cada caso: no Windows o node filho pode sobreviver e segurar a porta
-  local port srv="$2" file="$3" suite="$4"
-  # pula portas já em uso (servidor esquecido de outra rodada responderia no lugar do novo e falsearia o resultado)
+# Uma tentativa de uma suíte, com servidor novo. Devolve 0 se passou.
+attempt_case() {
+  local srv="$1" file="$2" suite="$3" port rc=1
+  # porta própria a cada tentativa: no Windows o node filho pode sobreviver e segurar a porta
   port=$((PORT_NEXT++))
+  # pula portas já em uso (servidor esquecido de outra rodada responderia no lugar do novo e falsearia o resultado)
   while curl -s -o /dev/null --max-time 1 "http://localhost:$port/health"; do port=$((PORT_NEXT++)); done
-  RAN=$((RAN + 1))
-  echo "::group::$file"
   if start_server "$port" "$srv"; then
     # shellcheck disable=SC2086
-    if env SERVER="http://localhost:$port" $suite node "$file"; then
-      echo "OK  $file"
+    env SERVER="http://localhost:$port" $suite node "$file" && rc=0
+  fi
+  stop_server
+  return $rc
+}
+
+# Uma suíte com servidor próprio. Argumentos: (porta, ignorada), variáveis do servidor, arquivo, variáveis da suíte.
+# Os testes de ponta a ponta são sensíveis ao tempo (o CI do GitHub é lento): se falhar, repete UMA vez com servidor novo.
+# Passou na repetição = "FLAKY" (aparece no log e no resumo, ver docs/PROGRESSO.md); falhou nas 2 = falha real e o CI fica vermelho.
+run_case() {
+  local srv="$2" file="$3" suite="$4"
+  RAN=$((RAN + 1))
+  echo "::group::$file"
+  if attempt_case "$srv" "$file" "$suite"; then
+    echo "OK  $file"
+  else
+    echo "TENTATIVA 1 FALHOU  $file  -> repetindo uma vez com servidor novo"
+    if attempt_case "$srv" "$file" "$suite"; then
+      echo "OK  $file  (FLAKY: passou só na repetição)"; FLAKY+=("$file")
     else
       echo "FALHA  $file"; FAILS+=("$file")
     fi
-  else
-    echo "FALHA  $file (servidor)"; FAILS+=("$file")
   fi
-  stop_server
   echo "::endgroup::"
 }
 
@@ -95,6 +109,7 @@ run_case 2996 "TEST_START_ZONE=1" test/chegada.mjs ""
 
 echo
 echo "Suítes executadas: $RAN"
+if [ ${#FLAKY[@]} -gt 0 ]; then echo "ATENÇÃO, intermitentes (passaram só na repetição): ${FLAKY[*]}"; fi
 if [ ${#FAILS[@]} -gt 0 ]; then
   echo "FALHARAM (${#FAILS[@]}): ${FAILS[*]}"
   exit 1

@@ -73,7 +73,7 @@ await until(() => e1.st === "dead", 30000, 300).then(async (dead) => {
     A.act("attack", e1.x, e1.y); await sleep(600);
   }
 });
-check("o Arqueiro derruba o esqueleto só com ataques à distância", e1.st === "dead", `${dano}+ acertos`);
+check("o Arqueiro derruba o esqueleto só com ataques à distância", e1.st === "dead", `${dano}+ acertos | e1 ${e1.st} hp ${e1.hp} a ${Math.hypot(e1.x - A.me().x, e1.y - A.me().y).toFixed(1)} | A morto=${A.me().dead} hp ${A.me().hp}`);
 await sleep(500);
 // os itens caem no chão: anda até cada um (andar até o item pega sozinho)
 async function collect(P, ms = 9000) {
