@@ -91,7 +91,7 @@ console.log("\n== R Queda do Colosso: telegrafada, dano enorme em área e atordo
   check("chegou perto do esqueleto", await arrive(W, 24.5, 26.8));
   W.act("ultimate", e.x, e.y);
   check("telégrafo da ultimate com o visual 'colossus' e raio grande", await until(() => W.ev.tele.some((t) => t.fx === "colossus" && t.r >= 4 && t.ms >= 1400), 800), JSON.stringify(W.ev.tele.at(-1)));
-  check("ela custa 80 de Fúria", W.me().mana >= 18 && W.me().mana <= 26, `mana ${W.me().mana}`);
+  check("ela custa 80 de Fúria", await until(() => W.me().mana >= 18 && W.me().mana <= 26, 1500, 50), `mana ${W.me().mana}`); // o estado chega por sincronização: espera em vez de ler na hora
   check("a espada cai e o inimigo na área morre de um golpe só (dano > 100)", await until(() => e.st === "dead", 3000) && W.ev.hits.some((h) => h.k === "e" && h.dmg >= 100), `maior dano ${Math.max(0, ...W.ev.hits.map((h) => h.dmg))}`);
   W.act("ultimate", e.x, e.y);
   await sleep(300);
