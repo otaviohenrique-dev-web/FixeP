@@ -113,7 +113,7 @@ let B = await join("zone2");
 check("entra na zona 2 junto do portal de volta", B.r.state.zoneId === 2 && near(B.me(), 8.5, 8.5, 0.5), `(${B.me().x}, ${B.me().y})`);
 check("inimigos da zona 2: lobos e esqueletos, níveis 6,6,6,7,8,8,9,10", levels(B.r, 8) === "6,6,6,7,8,8,9,10" && kinds(B.r, 8) === '{"wolf":5,"skeleton":3}', `${levels(B.r, 8)} ${kinds(B.r, 8)}`);
 const e0 = enemies(B.r, 8).find((e) => e.kind === "wolf" && e.level === 6);
-check("a vida do inimigo segue o nível e o tipo (lobo nível 6 = 108: 60 x 0,8 x 2,25)", e0 && e0.maxHp === 108 && e0.hp === 108, JSON.stringify(e0));
+check("a vida do inimigo segue o nível e o tipo (lobo nível 6 = 120: 60 x 0,8 x 2,5; 0,30 por nível)", e0 && e0.maxHp === 120 && e0.hp === 120, JSON.stringify(e0));
 await B.r.leave(true);
 await sleep(300);
 B = await join("zone2");
@@ -137,7 +137,7 @@ const C = await join("zone3");
 check("entra na zona 3", C.r.state.zoneId === 3 && near(C.me(), 8.5, 8.5, 0.5), `(${C.me().x}, ${C.me().y})`);
 check("inimigos da zona 3: espectros e esqueletos, níveis 12 a 20", levels(C.r, 8) === "12,13,13,15,15,16,18,20" && kinds(C.r, 8) === '{"skeleton":3,"wraith":5}', `${levels(C.r, 8)} ${kinds(C.r, 8)}`);
 const w = enemies(C.r, 8).find((e) => e.kind === "wraith" && e.level === 13);
-check("espectro nível 13: vida 312 (60 x 1,3 x 4,0; 0,25 por nível)", w && w.maxHp === Math.round(60 * 1.3 * (1 + 0.25 * 12)), JSON.stringify(w));
+check("espectro nível 13: vida 359 (60 x 1,3 x 4,6; 0,30 por nível)", w && w.maxHp === Math.round(60 * 1.3 * (1 + 0.30 * 12)), JSON.stringify(w));
 
 console.log("\n== Volta pelo portal ==");
 C.r.send("move_to", { x: 4, y: 4 });
