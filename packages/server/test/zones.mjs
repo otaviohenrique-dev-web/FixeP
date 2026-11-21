@@ -149,8 +149,10 @@ let D = await join("zone2");
 check("chega perto do portal da zona 3 (não em cima dele)", D.r.state.zoneId === 2 && near(D.me(), 36, 36, 0.5), `(${D.me().x}, ${D.me().y})`);
 await sleep(1500);
 check("e não atravessa de novo sozinho", D.ev.travel.length === 0 && D.ev.left === null);
-D.r.send("move_to", { x: 4, y: 14 });
-check("o portal da zona 2 para a cidade leva à zona 4", (await waitFor(() => D.ev.travel.length > 0, 9000)) && D.ev.travel[0].zone === 4, JSON.stringify(D.ev.travel));
+// no caminho um lobo pode atacar: a trava de combate (8 s) recusa a travessia, então insiste até o combate acabar (CI é mais lento que o PC)
+let cruzou = false;
+for (let i = 0; i < 12 && !cruzou; i++) { D.r.send("move_to", { x: 4, y: 14 }); cruzou = await waitFor(() => D.ev.travel.length > 0, 3000); }
+check("o portal da zona 2 para a cidade leva à zona 4", cruzou && D.ev.travel[0].zone === 4, JSON.stringify(D.ev.travel));
 await D.r.leave(true);
 await sleep(300);
 D = await join("zone4");
