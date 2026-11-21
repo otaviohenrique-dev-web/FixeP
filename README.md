@@ -199,7 +199,17 @@ Para trocar por arte desenhada à mão basta substituir os PNGs com os mesmos no
 | Abrir/fechar a mochila | I ou B (ESC fecha) |
 | Beber a primeira poção | F (recarga de 6 s) |
 
-**Raridades** (`packages/shared/src/items.ts`): comum (cinza), incomum (verde), raro (azul), épico (dourado radiante), lendário (vermelho brilhante), mítico (púrpura pulsante).
+**Raridades** (`packages/shared/src/items.ts`): são **8 níveis** (lista definitiva de 2026-11-21):
+1. **Inferior / Lixo** (cinza): itens quebrados ou inúteis, sem bônus de combate; servem só para vender por moedas.
+2. **Comum** (branco): equipamento básico com atributos simples (ex.: só defesa física), de lojas iniciais ou monstros fracos.
+3. **Incomum** (verde): 1 ou 2 atributos extras simples (ex.: +5 de Força ou +20 de Vida) para ajudar na evolução inicial.
+4. **Raro** (azul): vários atributos ao mesmo tempo; recompensa de missões difíceis, chefes de mapa e masmorras.
+5. **Épico** (roxo): itens de alto nível (endgame), de raids ou PvP competitivo; costumam liberar bônus extras em conjunto (set).
+6. **Lendário** (laranja/dourado): muito difíceis de obter; trazem efeitos passivos únicos que mudam o funcionamento das habilidades.
+7. **Mítico** (vermelho/rosa-choque): múltiplos efeitos especiais ou habilidades ativas exclusivas do item; drop baixíssimo ou fusão de vários lendários.
+8. **Ancestral** (ciano/turquesa): o teto de poder; costuma ser uma versão "despertada" de itens inferiores, com atributos multiplicados, engastes (sockets) extras e ligação com a história do mundo (lore).
+
+**Situação no jogo:** os níveis 2 a 7 (comum a mítico) já têm equipamento gerado por tabelas. **Inferior** e **Ancestral** já existem como níveis (nome, cor e ordem), mas ainda não têm itens nem drops: entram com a etapa C3 do guia de metodologia (afixos, itens de venda, engastes). Os ids internos continuam `common`…`mythic`, então nada salvo no banco muda.
 Raridade maior exige mais nível e dá mais bônus. Quase todo o catálogo é **gerado por tabelas** (famílias x raridades); o id é `<família>_<raridade>` (ex.: `montante_epic`, `mage_helmet_rare`).
 
 **Equipamento** (6 espaços, painel à esquerda da mochila): arma, mão secundária, elmo, armadura, botas e capa. Cada item é **exclusivo de uma classe**: qualquer classe pode *dropar*
@@ -221,7 +231,7 @@ Arma de duas mãos libera a mão secundária (o item volta à mochila); com arma
 **Drops no chão** (`ZoneRoom`): o abate solta os itens no chão, visíveis a todos na cor da raridade (brilho; coluna de luz de raro para cima). Só o **dono de cada item** (rodízio entre os elegíveis do abate) pega por 30 s (baú do chefe: 60 s);
 um **anel em volta do item esvazia como relógio** e um número mostra os segundos (colorido para quem pode pegar, cinza para os outros). Depois disso qualquer um pega; o item some em 3 min. Para pegar, basta andar até ele (ou clicar nele de perto: `pickup { id }`).
 **Raridade do drop**: cada zona tem um **teto** (tabela `drops` em `zones.ts`): impossível épico na zona 1. Taxas baixas: 7%/9%/11% de equipamento por abate e 8%/10%/12% de poção; raro ou melhor fica abaixo de ~2% dos abates. Lendário e mítico **só saem de baús de chefe**.
-**Animação de raridade**: ao receber item raro ou melhor, o centro da tela mostra um efeito que cresce com a raridade (`packages/client/src/loot-fx.ts`): raro, anel azul; épico, raios dourados; lendário, chamas e anéis vermelhos; mítico, aura púrpura pulsante com estrelas.
+**Animação de raridade**: ao receber item raro ou melhor, o centro da tela mostra um efeito que cresce com a raridade (`packages/client/src/loot-fx.ts`): raro, anel azul; épico, raios roxos; lendário, chamas e anéis alaranjados; mítico, aura vermelha pulsante com estrelas (cores vindas de `RARITY_COLOR`).
 
 **Chefes** (um por zona, `boss` em `zones.ts`): aparecem sempre em campo, com 15 a 18 vezes a vida de um inimigo do mesmo nível, golpe mais forte, **pancada em área** telegrafada em volta deles (a cada 8 a 9 s) e **fúria** abaixo de 30% de vida (mais rápidos, pancadas mais seguidas). Dão 8 a 10 vezes o XP.
 Ao morrer reaparecem em 5 / 7 / 10 min (`respawnS`) e o servidor avisa a todos ("Rei Ossudo despertou!"). **O baú** só existe quando o chefe morre: **cada jogador que lutou** (e está por perto) ganha a sua própria rolagem (elegíveis: veja "Regras de combate e grupo"), reservada a ele, e o cliente mostra a explosão do baú (`chest`).

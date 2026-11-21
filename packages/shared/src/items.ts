@@ -7,7 +7,15 @@ import type { ActionDef, ActionId, CharClass } from "./index";
  * Quase tudo é gerado por tabelas (famílias x raridades): o id de um item é `<familia>_<raridade>` (ex.: "montante_epic").
  */
 export type ItemKind = "weapon" | "offhand" | "helmet" | "armor" | "boots" | "cape" | "potion";
-export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythic";
+/**
+ * Os 8 níveis de raridade (lista definitiva, 2026-11-21):
+ * inferior/lixo (cinza), comum (branco), incomum (verde), raro (azul), épico (roxo), lendário (laranja/dourado),
+ * mítico (vermelho/rosa-choque), ancestral (ciano). Os ids internos ficam os mesmos de antes (não mexe nos itens salvos).
+ * `junk` e `ancestral` já existem como níveis (nome, cor, ordem), mas o catálogo gerado ainda não cria itens deles:
+ * por isso `RARITIES` (os níveis que têm equipamento) segue com 6; `RARITIES_ALL` tem os 8, na ordem.
+ */
+export type Rarity = "junk" | "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythic" | "ancestral";
+export const RARITIES_ALL: readonly Rarity[] = ["junk", "common", "uncommon", "rare", "epic", "legendary", "mythic", "ancestral"];
 export const RARITIES: readonly Rarity[] = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
 export const rarityIndex = (r: Rarity) => RARITIES.indexOf(r);
 
@@ -69,9 +77,9 @@ export interface ItemDef {
   desc: string;
 }
 
-export const RARITY_COLOR: Record<Rarity, string> = { common: "#9ea7b3", uncommon: "#5fd17a", rare: "#2f8bff", epic: "#ffc83d", legendary: "#ff3b30", mythic: "#b44dff" };
-export const RARITY_NAME: Record<Rarity, string> = { common: "Comum", uncommon: "Incomum", rare: "Raro", epic: "Épico", legendary: "Lendário", mythic: "Mítico" };
-export const RARITY_HEX: Record<Rarity, number> = { common: 0x9ea7b3, uncommon: 0x5fd17a, rare: 0x2f8bff, epic: 0xffc83d, legendary: 0xff3b30, mythic: 0xb44dff };
+export const RARITY_COLOR: Record<Rarity, string> = { junk: "#8a8f98", common: "#f2f2f2", uncommon: "#5fd17a", rare: "#2f8bff", epic: "#a855f7", legendary: "#ff9d2e", mythic: "#ff2e63", ancestral: "#2de2e6" };
+export const RARITY_NAME: Record<Rarity, string> = { junk: "Inferior", common: "Comum", uncommon: "Incomum", rare: "Raro", epic: "Épico", legendary: "Lendário", mythic: "Mítico", ancestral: "Ancestral" };
+export const RARITY_HEX: Record<Rarity, number> = { junk: 0x8a8f98, common: 0xf2f2f2, uncommon: 0x5fd17a, rare: 0x2f8bff, epic: 0xa855f7, legendary: 0xff9d2e, mythic: 0xff2e63, ancestral: 0x2de2e6 };
 
 // ------------------------------------------------------------ geração das tabelas
 const SUFFIX = ["Simples", "de Ferro", "da Geada", "Solar", "Carmesim", "do Abismo"]; // sem gênero: servem a qualquer nome

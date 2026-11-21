@@ -41,7 +41,7 @@ CRU = [
     ]),
     ("C3", "Itens com profundidade", "Dá o motivo de caçar o mesmo item muitas vezes. Todo ralo de moeda nasce junto da função.",
      "v0.4 Itens", "Um item com afixos, refino e engaste equipado e salvo.", [
-        ("C3.1", "Afixos: de 1 a 5 atributos sorteados no drop, por raridade; guardados no item e somados aos stats.", "Dois itens iguais saem diferentes; tooltip lista os afixos.", "G"),
+        ("C3.1", "Afixos: de 1 a 5 atributos sorteados no drop, por raridade (8 níveis: inferior, comum, incomum, raro, épico, lendário, mítico, ancestral; os dois extremos ainda sem itens); guardados no item e somados aos stats.", "Dois itens iguais saem diferentes; tooltip lista os afixos.", "G"),
         ("C3.2", "Refino +1 a +N com Tostões e material, sem risco de perder o item.", "Refinar altera o stat e gasta a moeda.", "M"),
         ("C3.3", "Engaste: espaços e gemas pagas em Óbolos de Sangue.", "Gema somada ao stat; remover devolve o espaço.", "M"),
         ("C3.4", "Conjuntos (sets) de 2 e 4 peças, em dados, com bônus.", "Bônus liga e desliga ao trocar a peça.", "M"),
@@ -196,7 +196,7 @@ class Doc2(B.Doc):
             c.setFillColor(colors.Color(.83, .33, .11, alpha=a)); c.circle(W * .72, H * .30, 190 - i * 55, stroke=0, fill=1)
         c.setStrokeColor(GOLD); c.setLineWidth(1.2); c.line(LM, H - 38 * mm, W - RM, H - 38 * mm)
         c.setFillColor(GOLDL); c.setFont("Seg-B", 9); c.drawString(LM, H - 32 * mm, "GUIA DE EXECUÇÃO  ·  DESENVOLVIMENTO SOLO")
-        c.setFillColor(colors.HexColor("#8fa3c4")); c.setFont("Seg", 9); c.drawRightString(W - RM, H - 32 * mm, "Versão 1.0  ·  20 de novembro de 2026")
+        c.setFillColor(colors.HexColor("#8fa3c4")); c.setFont("Seg", 9); c.drawRightString(W - RM, H - 32 * mm, "Versão 1.1  ·  21 de novembro de 2026")
         if os.path.exists(B.EMB): c.drawImage(B.EMB, W / 2 - 40 * mm, H - 128 * mm, 80 * mm, 80 * mm, mask="auto")
         c.setFillColor(colors.white); c.setFont("Geo-B", 38); c.drawCentredString(W / 2, H * .45, "FrixeP")
         c.setFillColor(GOLDL); c.setFont("Geo-I", 14); c.drawCentredString(W / 2, H * .45 - 22, "Primeiro funcionando, depois bonito")
