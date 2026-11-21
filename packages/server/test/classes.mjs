@@ -67,7 +67,11 @@ const dano = A.ev.hit.filter((h) => h.k === "e" && h.by === A.id).length;
 await until(() => e1.st === "dead", 30000, 300).then(async (dead) => {
   // se ainda vivo, termina com flechas
   const t0 = Date.now();
-  while (e1.st !== "dead" && Date.now() - t0 < 20000 && !A.me().dead) { A.act("attack", e1.x, e1.y); await sleep(600); }
+  while (e1.st !== "dead" && Date.now() - t0 < 45000 && !A.me().dead) {
+    // o esqueleto pode recuar (evade) e sair do alcance, sobretudo em máquina lenta: o Arqueiro se reaproxima antes de atirar
+    if (Math.hypot(e1.x - A.me().x, e1.y - A.me().y) > 7) A.room.send("move_to", { x: e1.x - 5, y: e1.y });
+    A.act("attack", e1.x, e1.y); await sleep(600);
+  }
 });
 check("o Arqueiro derruba o esqueleto só com ataques à distância", e1.st === "dead", `${dano}+ acertos`);
 await sleep(500);
