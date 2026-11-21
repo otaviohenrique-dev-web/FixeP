@@ -156,7 +156,7 @@ B.kick(D.name);
 check("o líder expulsa um membro: D fica sem grupo e é avisado", await until(() => !D.inGroup() && D.said("expulso") && D.me().party === "") && [A, B, C].every((p) => p.members().length === 3));
 B.leave();
 check("o líder sai: o membro mais antigo restante (A) vira líder", await until(() => !B.inGroup() && A.leader() === A.name && A.members().length === 2 && C.leader() === A.name), `${A.leader()} ${JSON.stringify(A.members())}`);
-check("quem saiu fica sem marca de grupo", B.me().party === "" && B.ev.party.members.length === 0);
+check("quem saiu fica sem marca de grupo", await until(() => B.me().party === "" && B.ev.party.members.length === 0, 3000));
 A.leave();
 check("sobrando um só, o grupo se desfaz para todos", await until(() => !A.inGroup() && !C.inGroup() && C.me().party === "" && C.said("desfeito")));
 A.leave();

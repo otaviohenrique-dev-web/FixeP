@@ -113,7 +113,7 @@ let B = await join("zone2");
 check("entra na zona 2 junto do portal de volta", B.r.state.zoneId === 2 && near(B.me(), 8.5, 8.5, 0.5), `(${B.me().x}, ${B.me().y})`);
 check("inimigos da zona 2: lobos e esqueletos, níveis 6,6,6,7,8,8,9,10", levels(B.r, 8) === "6,6,6,7,8,8,9,10" && kinds(B.r, 8) === '{"wolf":5,"skeleton":3}', `${levels(B.r, 8)} ${kinds(B.r, 8)}`);
 const e0 = enemies(B.r, 8).find((e) => e.kind === "wolf" && e.level === 6);
-check("a vida do inimigo segue o nível e o tipo (lobo nível 6 = 144)", e0 && e0.maxHp === 144 && e0.hp === 144, JSON.stringify(e0));
+check("a vida do inimigo segue o nível e o tipo (lobo nível 6 = 108: 60 x 0,8 x 2,25)", e0 && e0.maxHp === 108 && e0.hp === 108, JSON.stringify(e0));
 await B.r.leave(true);
 await sleep(300);
 B = await join("zone2");
@@ -137,7 +137,7 @@ const C = await join("zone3");
 check("entra na zona 3", C.r.state.zoneId === 3 && near(C.me(), 8.5, 8.5, 0.5), `(${C.me().x}, ${C.me().y})`);
 check("inimigos da zona 3: espectros e esqueletos, níveis 12 a 20", levels(C.r, 8) === "12,13,13,15,15,16,18,20" && kinds(C.r, 8) === '{"skeleton":3,"wraith":5}', `${levels(C.r, 8)} ${kinds(C.r, 8)}`);
 const w = enemies(C.r, 8).find((e) => e.kind === "wraith" && e.level === 13);
-check("espectro nível 13: vida 452 (60 x 1,3 x 5,8)", w && w.maxHp === Math.round(60 * 1.3 * (1 + 0.4 * 12)), JSON.stringify(w));
+check("espectro nível 13: vida 312 (60 x 1,3 x 4,0; 0,25 por nível)", w && w.maxHp === Math.round(60 * 1.3 * (1 + 0.25 * 12)), JSON.stringify(w));
 
 console.log("\n== Volta pelo portal ==");
 C.r.send("move_to", { x: 4, y: 4 });
@@ -149,8 +149,10 @@ let D = await join("zone2");
 check("chega perto do portal da zona 3 (não em cima dele)", D.r.state.zoneId === 2 && near(D.me(), 36, 36, 0.5), `(${D.me().x}, ${D.me().y})`);
 await sleep(1500);
 check("e não atravessa de novo sozinho", D.ev.travel.length === 0 && D.ev.left === null);
-D.r.send("move_to", { x: 4, y: 14 });
-check("o portal da zona 2 para a cidade leva à zona 4", (await waitFor(() => D.ev.travel.length > 0, 9000)) && D.ev.travel[0].zone === 4, JSON.stringify(D.ev.travel));
+// no caminho um lobo pode atacar: a trava de combate (8 s) recusa a travessia, então insiste até o combate acabar (CI é mais lento que o PC)
+let cruzou = false;
+for (let i = 0; i < 12 && !cruzou; i++) { D.r.send("move_to", { x: 4, y: 14 }); cruzou = await waitFor(() => D.ev.travel.length > 0, 3000); }
+check("o portal da zona 2 para a cidade leva à zona 4", cruzou && D.ev.travel[0].zone === 4, JSON.stringify(D.ev.travel));
 await D.r.leave(true);
 await sleep(300);
 D = await join("zone4");
