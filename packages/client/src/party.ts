@@ -120,7 +120,7 @@ const CSS = `
 .pt-mi{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .pt-mi small{flex:none;font:600 9px/1.2 "Cinzel",Georgia,serif;color:#7d8aa0;letter-spacing:.04em;text-align:right}
 @media (pointer:coarse){.pt-mi{padding:11px 10px}.pt-b{min-width:30px;height:24px}.pt-head{height:32px}}
-@media (max-height:480px){.pt-row{padding:3px 6px}.pt-mid{gap:2px}}
+@media (max-height:480px){.pt-row{padding:3px 6px}.pt-mid{gap:2px}.pt-mi,.pt-menu .pt-mi{padding:7px 10px}.pt-menu-h{padding-bottom:5px}}
 `;
 
 const ICON_CROWN = `<svg viewBox="0 0 16 16" width="12" height="12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h2v2h1V4h2V3h1V2h2v1h1v1h2v3h1V5h2v7H1z"/></svg>`;
@@ -393,16 +393,16 @@ export function mountParty(opts: PartyOptions): PartyUi {
     } else {
       const s = state();
       const soon = "Em breve";
-      menu.append(
-        item("Ver Perfil", null, soon), item("Pedido de amizade", null, soon), item("Sussurrar", null, soon), item("Trocar", send("trade_invite")), item("Bloquear", null, soon),
-      );
       const canInvite = (!s.inParty || s.leader) && s.size < PARTY_MAX && !t.inParty;
       const inviteWhy = t.inParty ? "Já está em um grupo" : s.inParty && !s.leader ? "Só o líder convida" : s.size >= PARTY_MAX ? "Seu grupo está cheio" : undefined;
       menu.append(
         item("Convidar para grupo", canInvite ? send("party_invite") : null, inviteWhy, true),
         item("Pedir para entrar no grupo", !s.inParty ? send("party_join") : null, s.inParty ? "Você já está em um grupo" : undefined),
-        item("Denunciar", () => denunciar(t.name), undefined, true), // sempre por último no menu do jogador
+        item("Trocar", send("trade_invite")),
       );
+      // o que ainda não existe fica por último: no celular deitado o menu rola e as ações úteis têm de aparecer primeiro
+      menu.append(item("Ver Perfil", null, soon), item("Pedido de amizade", null, soon), item("Sussurrar", null, soon), item("Bloquear", null, soon));
+      menu.append(item("Denunciar", () => denunciar(t.name), undefined, true)); // sempre por último no menu do jogador
     }
     menu.classList.add("on");
     if (mode === "dock") { // fixo ao lado do retrato do jogador: sem posição calculada
