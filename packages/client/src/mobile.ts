@@ -62,7 +62,7 @@ body.mob .st .sp{display:inline}
 /* ---------- grupo: recolhido sob o PvP ---------- */
 body.mob .pt{top:calc(${SAFE_T} + 80px*var(--hs));left:${SAFE_L};width:min(220px,52vw)}
 body.mob .pt-tog{width:calc(26px*var(--hs));height:calc(26px*var(--hs));font-size:15px;opacity:.7}
-body.mob .pt-menu.dock{top:calc(${SAFE_T} + 112px*var(--hs))}
+body.mob .pt-menu.dock{top:calc(${SAFE_T} + 112px*var(--hs));max-height:calc(100dvh - ${SAFE_T} - 124px*var(--hs))}
 /* ---------- chat: botão discreto sobre o joystick; o histórico só aparece quando aberto ---------- */
 body.mob .ch{left:${SAFE_L};bottom:calc(${SAFE_B} + 150px);width:min(300px,calc(100vw - 190px))}
 body.mob .ch-btn{width:calc(34px*var(--hs));height:calc(34px*var(--hs));border-radius:9px;opacity:.78}

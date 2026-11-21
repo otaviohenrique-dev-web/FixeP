@@ -106,9 +106,9 @@ const CSS = `
 .pt-menu{position:fixed;z-index:19;min-width:200px;max-width:min(260px,92vw);padding:8px;display:none;flex-direction:column;gap:3px;border-radius:12px;font-family:"Cinzel",Georgia,serif;
   background:linear-gradient(180deg,#1b2840,#0c121c);border:2px solid #c9a45c;box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,225,160,.25),0 10px 26px rgba(0,0,0,.7)}
 .pt-menu.on{display:flex}
-.pt-menu.dock{left:calc(max(12px,env(safe-area-inset-left)) + min(300px,64vw) + 12px);top:max(12px,env(safe-area-inset-top));z-index:17}
+.pt-menu.dock{left:calc(max(12px,env(safe-area-inset-left)) + min(300px,64vw) + 12px);top:max(12px,env(safe-area-inset-top));max-height:calc(100dvh - max(12px,env(safe-area-inset-top)) - 12px);overflow-y:auto;overscroll-behavior:contain;z-index:17}
 .pt-menu .pt-x{position:absolute;right:6px;top:6px;width:24px;height:24px;padding:0;border-radius:6px;border:1px solid var(--gold-d,#7a5f2e);background:transparent;color:#cfdcec;cursor:pointer;font:700 12px/1 Georgia,serif}
-@media (max-width:640px),(pointer:coarse) and (max-width:900px){.pt-menu.dock{left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 176px);max-width:min(260px,62vw)}}
+@media (max-width:640px),(pointer:coarse) and (max-width:900px){.pt-menu.dock{left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 176px);max-height:calc(100dvh - max(12px,env(safe-area-inset-top)) - 188px);max-width:min(260px,62vw)}}
 .pt-menu-h{display:flex;align-items:center;gap:8px;padding:2px 4px 8px;border-bottom:1px solid rgba(201,164,92,.35);margin-bottom:4px}
 .pt-menu-h .nm{font:700 13px/1.1 "Cinzel",Georgia,serif;letter-spacing:.06em;color:#f0dfb8;word-break:break-word}
 .pt-menu-h .sub{font:600 10px/1.2 "Cinzel",Georgia,serif;color:#9fb4cf;letter-spacing:.06em}
