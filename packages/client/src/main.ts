@@ -1259,7 +1259,8 @@ class WorldScene extends Phaser.Scene {
       }
     }
     // foco travado (toque ou clique): as habilidades mirram nele, mesmo com o mouse ou o polegar fora dele
-    const focus = this.targets().find((t) => t.key === this.lockKey);
+    // (a esquiva e as ações sem alcance não mirram no foco: a esquiva vai para onde o polegar/mouse aponta, não para cima do inimigo)
+    const focus = this.reach(a) > 0 ? this.targets().find((t) => t.key === this.lockKey) : undefined;
     if (focus) return { x: focus.x, y: focus.y };
     if (!this.touchMode) {
       const p = this.input.activePointer;
