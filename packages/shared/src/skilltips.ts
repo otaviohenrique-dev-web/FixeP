@@ -10,9 +10,9 @@ export const SKILL_TEXT: Record<string, { desc: string; tip: string }> = {
   "Queda do Colosso": { desc: "Um colosso de aço desaba no local marcado: dano enorme e atordoamento.", tip: "Telegrafada: use sobre inimigos já presos pelas Correntes." },
   // Arqueiro
   "Flecha": { desc: "Dispara uma flecha em linha reta.", tip: "Mantenha distância e atire entre as habilidades." },
-  "Perfurar": { desc: "Flecha veloz que atravessa todos os inimigos da linha.", tip: "Alinhe os inimigos num corredor para acertar vários." },
-  "Cilada": { desc: "Planta uma armadilha que dispara quando um inimigo pisa nela.", tip: "Coloque perto do Guerreiro ou atrás de você ao recuar." },
-  "Chuva": { desc: "Chuva de flechas na área marcada, depois de um breve atraso.", tip: "Boa contra grupos parados ou presos por controle." },
+  "Perfurar": { desc: "Flecha veloz que atravessa os inimigos da linha e quebra a armadura deles: todo o grupo passa a causar mais dano neles.", tip: "Abra a luta com ela: aliados e você aproveitam o dano extra. Alinhe os inimigos para acertar vários." },
+  "Cilada": { desc: "Planta uma armadilha que dispara quando um inimigo pisa nela: dano baixo e lentidão forte nos atingidos.", tip: "Coloque atrás de você ao recuar: quem pisar fica lento e não alcança você." },
+  "Chuva": { desc: "Chuva de flechas na área marcada, depois de um breve atraso. Ao acertar, seu ataque básico fica bem mais rápido.", tip: "Use em grupos e siga com ataques básicos enquanto a velocidade está alta." },
   "Salva Final": { desc: "Saraivada gigante de flechas sobre a área marcada.", tip: "Guarde para chefes e grupos cercados; o atraso é curto." },
   // Clérigo
   "Raio": { desc: "Raio de luz em linha reta.", tip: "Ataque básico barato: ajuda a regenerar a mana entre curas." },
@@ -61,6 +61,9 @@ export function skillTooltip(d: ActionDef, resourceName: string): SkillTooltipDa
   if (d.dash && d.kind === "dodge") s.push(`Distância: ${f(d.dash)} tiles`);
   if (d.lifeS) s.push(`Dura ${f(d.lifeS)} s (até ${d.maxActive ?? 1} ativas)`);
   if (d.pierce) s.push("Atravessa inimigos");
+  if (d.shredPct) s.push(`Quebra armadura: +${d.shredPct}% de dano recebido por ${f(d.shredS ?? 0)} s`);
+  if (d.slowPct) s.push(`Lentidão: -${d.slowPct}% por ${f(d.slowS ?? 0)} s`);
+  if (d.hasteAtkPct) s.push(`Ao acertar: ataque básico +${d.hasteAtkPct}% mais rápido por ${f(d.hasteS ?? 0)} s`);
   s.push(d.cost ? `Custo: ${d.cost} de ${resourceName}` : "Sem custo");
   s.push(`Recarga: ${f(d.cd)} s`);
   const t = SKILL_TEXT[d.name] ?? { desc: "", tip: "" };

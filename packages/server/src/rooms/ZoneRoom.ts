@@ -32,8 +32,8 @@ import type { QuestEvent, QuestDefsEvent, QuestDef, AcaoUsar } from "@frixep/sha
 const DEFS = carregarQuests(questsDoServidor());
 import { deposit, withdraw, moveInVault, moveCoins, vaultSnapshot, type Vault } from "../game/vault.js";
 
-interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string> }
-interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
+interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string>; shredPct?: number; shredS?: number }
+interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number; slowPct?: number; slowS?: number }
 interface Trade { a: string; b: string; offer: Record<string, TradeOffer>; ready: Record<string, boolean>; rev: number; seq: Record<string, number> }
 interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory; quests: QuestMap }
 
@@ -1341,7 +1341,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const aimDist = Math.hypot(dx, dy);
     if (aimDist < 0.01) { dx = Math.cos(p.face); dy = Math.sin(p.face); } else { dx /= aimDist; dy /= aimDist; }
     p.face = Math.atan2(dy, dx);
-    p.cdUntil[a] = this.t + (a === "attack" ? def.cd / Math.max(0.2, p.atkSpeed) : def.cd); // ataque básico: intervalo pela velocidade de ataque
+    p.cdUntil[a] = this.t + (a === "attack" ? def.cd / Math.max(0.2, p.atkSpeed * (this.t < p.hasteUntil ? 1 + p.hastePct : 1)) : def.cd); // ataque básico: intervalo pela velocidade de ataque
     if (a !== "attack" && a !== "dodge") this.questUso(id, p, a); // a habilidade disparou (quests "usar")
     p.tx = p.x; // ação interrompe o movimento
     p.ty = p.y;
@@ -1402,7 +1402,7 @@ export class ZoneRoom extends Room<ZoneState> {
         const sx = p.x + dx * 0.6, sy = p.y + dy * 0.6;
         const look = def.kind === "blast" ? "fire" : def.pierce ? "pierce" : p.cls === "mage" ? "arcane" : p.cls === "cleric" ? "bolt" : "arrow";
         const blast = def.kind === "blast" ? def.blast ?? 2 : 0;
-        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, blast, hit: new Set() });
+        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, blast, hit: new Set(), shredPct: def.shredPct, shredS: def.shredS });
         this.broadcast(Evt.Proj, { id: pid, x: sx, y: sy, dir: p.face, speed: def.speed ?? 12, range: def.range ?? 8, look, blast: blast || undefined });
         break;
       }
@@ -1413,7 +1413,7 @@ export class ZoneRoom extends Room<ZoneState> {
           this.removeTrap(old, "gone");
         }
         const pos = place();
-        const tr: Trap = { id: `t${++this.seq}`, owner: id, x: pos.x, y: pos.y, r: def.radius ?? 1.5, dmg, armAt: this.t + (def.armS ?? 0.5), expireAt: this.t + (def.lifeS ?? 20) };
+        const tr: Trap = { id: `t${++this.seq}`, owner: id, x: pos.x, y: pos.y, r: def.radius ?? 1.5, dmg, armAt: this.t + (def.armS ?? 0.5), expireAt: this.t + (def.lifeS ?? 20), slowPct: def.slowPct, slowS: def.slowS };
         this.traps.push(tr);
         this.broadcast(Evt.Trap, { id: tr.id, s: "set", x: tr.x, y: tr.y, r: tr.r });
         break;
@@ -1424,12 +1424,15 @@ export class ZoneRoom extends Room<ZoneState> {
         const delay = def.delayS ?? 0.8;
         this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: delay * 1000, friendly: true, fx: def.fx });
         this.pending.push({ at: this.t + delay, run: () => {
+          let hits = 0;
           this.hitEnemies(id, dmg, (e) => {
             const hit = dist(e.x, e.y, pos.x, pos.y) <= r + enemyKind(e.kind).radius;
             if (hit && def.stunS) this.stunEnemy(e, def.stunS);
             if (hit && def.rootS) this.rootEnemy(e, def.rootS);
+            if (hit) hits++;
             return hit;
           });
+          if (hits > 0 && def.hasteAtkPct) { p.hasteUntil = this.t + (def.hasteS ?? 5); p.hastePct = def.hasteAtkPct / 100; } // acertou: o ataque básico acelera
           this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, pos.x, pos.y) <= r + PLAYER_RADIUS);
         } });
         break;
@@ -1513,6 +1516,22 @@ export class ZoneRoom extends Room<ZoneState> {
     if (e.st === "windup") { e.st = "recover"; e.slam = false; e.recoverEnd = until; }
   }
 
+  /** Quebra a armadura: o inimigo recebe +pct% de dano de todas as fontes por s segundos (chefes: metade do bônus). */
+  private shredEnemy(e: Enemy, pct: number, s: number) {
+    if (e.st === "dead") return;
+    const k = enemyKind(e.kind).boss ? 0.5 : 1;
+    e.shredPct = Math.max(this.t < e.shredUntil ? e.shredPct : 0, (pct / 100) * k);
+    e.shredUntil = this.t + s;
+  }
+
+  /** Lentidão: o inimigo anda -pct% por s segundos (chefes resistem: força e duração caem para BOSS_CC_RESIST). */
+  private slowEnemy(e: Enemy, pct: number, s: number) {
+    if (e.st === "dead") return;
+    const boss = !!enemyKind(e.kind).boss;
+    e.slowPct = Math.max(this.t < e.slowUntil ? e.slowPct : 0, (pct / 100) * (boss ? BOSS_CC_RESIST : 1));
+    e.slowUntil = this.t + s * (boss ? BOSS_CC_RESIST : 1);
+  }
+
   /** Enraíza o inimigo (não anda; se o alvo estiver ao alcance, ainda ataca). Chefes resistem. */
   private rootEnemy(e: Enemy, s: number) {
     if (e.st === "dead") return;
@@ -1556,7 +1575,7 @@ export class ZoneRoom extends Room<ZoneState> {
       for (const [, eid, e] of cands) {
         pr.hit.add(eid);
         if (e instanceof Player) this.damagePvp(pr.owner, eid, e, pr.dmg);
-        else this.damageEnemy(pr.owner, eid, e, pr.dmg);
+        else { this.damageEnemy(pr.owner, eid, e, pr.dmg); if (pr.shredPct) this.shredEnemy(e, pr.shredPct, pr.shredS ?? 5); }
         if (!pr.pierce) { ended = true; break; } // flecha comum para no primeiro alvo
       }
       pr.x = nx;
@@ -1590,7 +1609,11 @@ export class ZoneRoom extends Room<ZoneState> {
       this.state.players.forEach((o, oid) => { if (this.canPvpHit(tr.owner, o, oid) && dist(o.x, o.y, tr.x, tr.y) <= tr.r + PLAYER_RADIUS) trigger = true; });
       if (!trigger) continue;
       this.removeTrap(tr, "boom");
-      this.hitEnemies(tr.owner, tr.dmg, (e) => dist(e.x, e.y, tr.x, tr.y) <= tr.r + enemyKind(e.kind).radius);
+      this.hitEnemies(tr.owner, tr.dmg, (e) => {
+        const hit = dist(e.x, e.y, tr.x, tr.y) <= tr.r + enemyKind(e.kind).radius;
+        if (hit && tr.slowPct) this.slowEnemy(e, tr.slowPct, tr.slowS ?? 4);
+        return hit;
+      });
       this.hitPlayers(tr.owner, tr.dmg, (o) => dist(o.x, o.y, tr.x, tr.y) <= tr.r + PLAYER_RADIUS);
     }
   }
@@ -1598,6 +1621,7 @@ export class ZoneRoom extends Room<ZoneState> {
   // ------------------------------------------------------------------ dano e recompensas
   private damageEnemy(by: string, eid: string, e: Enemy, baseDmg: number, refl = false) {
     if (e.st === "dead") return;
+    if (this.t < e.shredUntil) baseDmg *= 1 + e.shredPct; // armadura quebrada: toda fonte de dano ganha o bônus
     const crit = !refl && Math.random() < this.critChance(by);
     const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
     const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult : 1)));
@@ -1882,7 +1906,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const dx = x - e.x, dy = y - e.y;
     const d = Math.hypot(dx, dy);
     if (d < 0.01) return;
-    const step = Math.min(d, speed * dt);
+    const step = Math.min(d, speed * (this.t < e.slowUntil ? 1 - e.slowPct : 1) * dt);
     e.x += (dx / d) * step;
     e.y += (dy / d) * step;
     e.face = Math.atan2(dy, dx);

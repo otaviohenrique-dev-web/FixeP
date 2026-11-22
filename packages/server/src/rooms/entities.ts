@@ -48,6 +48,8 @@ export class Player extends Schema {
   cdUntil: Record<string, number> = {};
   /** comando guardado por um instante (durante esquiva/investida ou a poucos ms do fim da recarga): sai assim que puder */
   queued: { a: string; ax: number; ay: number; until: number } | null = null;
+  hasteUntil = 0; // bônus temporário de velocidade de ataque (Chuva)
+  hastePct = 0;
   atkSpeed = 1; // velocidade de ataque (1 = normal): o intervalo do ataque básico é cd / atkSpeed (itens e buffs futuros)
   dashVx = 0;
   dashVy = 0;
@@ -91,6 +93,10 @@ export class Enemy extends Schema {
   // --- só no servidor ---
   stunUntil = 0;
   rootUntil = 0;
+  shredUntil = 0; // quebra de armadura: recebe +shredPct de dano até shredUntil
+  shredPct = 0;
+  slowUntil = 0; // lentidão: anda -slowPct até slowUntil
+  slowPct = 0;
   sx = 0; // ponto de origem (spawn)
   sy = 0;
   targetId = "";

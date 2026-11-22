@@ -260,6 +260,12 @@ export interface ActionDef {
   lifeS?: number; // duração da armadilha
   delayS?: number; // atraso da chuva
   pullS?: number; // tempo da puxada (Compressor de Ar)
+  shredPct?: number; // quebra de armadura (Perfurar): inimigos atingidos recebem +% de dano de TODAS as fontes por shredS
+  shredS?: number;
+  slowPct?: number; // lentidão (Cilada): inimigos atingidos andam -% mais devagar por slowS (chefes resistem)
+  slowS?: number;
+  hasteAtkPct?: number; // Chuva: ao acertar ao menos um inimigo, o ataque básico do dono fica +% mais rápido por hasteS
+  hasteS?: number;
   stunS?: number; // tempo que os inimigos ficam atordoados depois de puxados
   maxActive?: number; // limite de armadilhas ativas
   blast?: number; // raio da explosão (kind "blast")
@@ -319,9 +325,9 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     resource: { name: "Foco", icon: "eye", color: 0x6fcf6f, max: 100, regen: 6, perLevel: 3 },
     actions: {
       attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 9, speed: 15, range: 9, radius: 0.35 },
-      skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 15, speed: 20, range: 12, radius: 0.5, pierce: true },
-      skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 18, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3 },
-      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 10, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows" },
+      skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 15, speed: 20, range: 12, radius: 0.5, pierce: true, shredPct: 20, shredS: 6 },
+      skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 10, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3, slowPct: 50, slowS: 5 },
+      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 17, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows", hasteAtkPct: 60, hasteS: 5 },
       ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 26, radius: 3.6, placeRange: 9, delayS: 1.0, fx: "arrows" },
       dodge: dodge(5, 1.6), // rolamento longo
     },

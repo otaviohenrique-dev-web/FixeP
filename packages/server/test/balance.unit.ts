@@ -63,6 +63,14 @@ check("classAction troca o Q só do Clérigo e só no modo 1", classAction("cler
 console.log("\n== PvP ==");
 check("canalização de 5 s e janela sem dano de 5 s; troca do Q exige alguns segundos fora de combate", PVP_CHANNEL_S === 5 && PVP_NO_DAMAGE_S === 5 && QMODE_SWAP_S >= 3);
 
+console.log("\n== Arqueiro: dano e quebra de armadura ==");
+const R = CLASS_DEFS.archer.actions;
+check("Q Perfurar: dano médio, atravessa e QUEBRA ARMADURA (bônus de dano recebido)", R.skill1.pierce === true && (R.skill1.shredPct ?? 0) >= 15 && (R.skill1.shredS ?? 0) >= 4 && R.skill1.dmg! >= 12);
+check("W Cilada: dano BAIXO (menor que o do Perfurar) e lentidão considerável e longa", R.skill2.kind === "trap" && R.skill2.dmg! < R.skill1.dmg! && (R.skill2.slowPct ?? 0) >= 40 && (R.skill2.slowS ?? 0) >= 4);
+check("E Chuva: dano significativo e ao acertar acelera o ataque básico", R.skill3.kind === "rain" && R.skill3.dmg! >= 15 && (R.skill3.hasteAtkPct ?? 0) >= 50 && (R.skill3.hasteS ?? 0) >= 3);
+check("R Salva Final segue como a maior fonte de dano em área da classe", R.ultimate.dmg! > Math.max(R.skill1.dmg!, R.skill2.dmg!, R.skill3.dmg!) && R.ultimate.kind === "rain");
+
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} verificações passaram`);
 process.exit(failed ? 1 : 0);
+
