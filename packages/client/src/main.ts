@@ -260,7 +260,7 @@ class WorldScene extends Phaser.Scene {
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
     if (!this.uiMounted) { this.mountUi(); this.uiMounted = true; }
-    else { this.econ.closeNpc(); this.vault.close(); this.econ.setTrade({ open: false }); this.party.closeMenu(); this.selId = ""; this.lockKey = ""; this.pendingNpc = null; this.pendingVault = false; }
+    else { this.econ.closeNpc(); this.vault.close(); this.econ.setTrade({ open: false }); this.party.clearTarget(); this.selId = ""; this.lockKey = ""; this.pendingNpc = null; this.pendingVault = false; }
     this.bindRoom(room, zone);
     T.mark("mundo");
     // 3) câmera exatamente sobre o personagem (sem deslizar), no zoom certo, antes de revelar
@@ -341,7 +341,7 @@ class WorldScene extends Phaser.Scene {
       },
     });
     this.chatUi = chat;
-    this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? ""), onMenuClose: () => { this.selId = ""; } });
+    this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? "") });
     this.party.setTouch(this.touchMode);
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
     this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }) });
@@ -653,7 +653,7 @@ class WorldScene extends Phaser.Scene {
 
   private deselect() {
     this.selId = "";
-    this.party.closeMenu();
+    this.party.clearTarget();
   }
 
   /** marcador de destino do clique (estilo RTS): anel que fecha sobre o ponto e some */
@@ -1309,7 +1309,12 @@ class WorldScene extends Phaser.Scene {
     if (this.selId) {
       const v = this.sprites.get(`p:${this.selId}`);
       if (!v || !this.state.players.has(this.selId)) this.deselect();
-      else if (v.obj.visible) this.selG.lineStyle(2, 0x6fe08a, 0.55 + 0.15 * Math.sin(time / 300)).strokeEllipse(v.obj.x, v.obj.y, 50, 25).fillStyle(0x6fe08a, 0.08).fillEllipse(v.obj.x, v.obj.y, 50, 25);
+      else if (v.obj.visible) {
+        this.selG.lineStyle(2, 0x6fe08a, 0.55 + 0.15 * Math.sin(time / 300)).strokeEllipse(v.obj.x, v.obj.y, 50, 25).fillStyle(0x6fe08a, 0.08).fillEllipse(v.obj.x, v.obj.y, 50, 25);
+        // linha do próprio jogador até o alvo (mostra onde ele está em relação a você)
+        const mine = this.sprites.get(`p:${this.room.sessionId}`);
+        if (mine?.obj.visible) this.selG.lineStyle(2, 0x6fe08a, 0.5).lineBetween(mine.obj.x, mine.obj.y, v.obj.x, v.obj.y);
+      }
     }
     if (this.lockKey && this.touchMode) {
       const v = this.sprites.get(this.lockKey);
