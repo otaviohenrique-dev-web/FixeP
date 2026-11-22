@@ -1,7 +1,7 @@
 // Teste de ponta a ponta do GRUPO (party): convite, pedido para entrar, aceite/recusa/expiração, limite, líder, expulsão,
 // XP com bônus, imunidade em PvP, grupo entre zonas, chat do grupo e mensagens inválidas.
 // (servidor com TEST_START_ZONE=1: personagens de teste nascem nas Cinzas, onde há inimigos e PvP; a cidade é testada em cidade.mjs)
-// Uso: PARTY_TEST=1 nos DOIS lados (servidor e teste; encurta convite para 4 s e tolerância de ausência para 3 s):
+// Uso: PARTY_TEST=1 nos DOIS lados (servidor e teste; encurta convite para 6 s e tolerância de ausência para 3 s):
 //   servidor: PARTY_TEST=1 PGLITE_DIR=memory API_RATE_MULT=50 PORT=2999 ... npx tsx src/index.ts   (sem carregar o .env)
 //   teste:    PARTY_TEST=1 SERVER=http://localhost:2999 node test/party.mjs
 import { Client } from "colyseus.js";
@@ -9,7 +9,7 @@ import { Client } from "colyseus.js";
 const HTTP = process.env.SERVER ?? "http://localhost:2999";
 const WS = HTTP.replace(/^http/, "ws");
 const FAST = process.env.PARTY_TEST === "1";
-const INVITE_WAIT = FAST ? 4600 : 31_000; // convite (4 s no teste rápido, 30 s no normal) + folga
+const INVITE_WAIT = FAST ? 6600 : 31_000; // convite (6 s no teste rápido, 30 s no normal) + folga
 const GRACE_WAIT = FAST ? 3600 : 46_000; // tolerância de ausência (3 s / 45 s) + folga
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
@@ -246,7 +246,7 @@ check("e o tempo de ausência não vale mais depois de voltar", R.members().leng
 console.log("\n== Convite pendente sobrevive a recarregar a página ==");
 const [T, U] = await Promise.all([spawn("warrior"), spawn("warrior")]);
 T.invite(U.name);
-await until(() => U.ev.invites.length === 1);
+check("o convite chegou ao alvo antes de ele recarregar", await until(() => U.ev.invites.length === 1));
 await U.room.leave(true);
 const U2 = await enter(U.acc, "zone");
 check("quem recarrega ainda vê o convite pendente (com a validade restante)", await until(() => U2.ev.invites.length === 1) && U2.ev.invites[0].from === T.name && U2.ev.invites[0].ms <= 30_000);

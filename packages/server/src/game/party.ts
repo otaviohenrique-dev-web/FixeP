@@ -14,7 +14,7 @@ import type { Player } from "../rooms/entities.js";
 
 // PARTY_TEST=1 só nos testes: convite e tolerância curtos e sem espera entre convites
 const TEST = process.env.PARTY_TEST === "1";
-export const INVITE_MS = TEST ? 4000 : PARTY_INVITE_S * 1000;
+export const INVITE_MS = TEST ? 6000 : PARTY_INVITE_S * 1000; // 6 s no teste: o CI lento leva mais de 2 s para sair e voltar à sala com o convite pendente
 export const GRACE_MS = TEST ? 3000 : 45_000;
 const COOLDOWN_MS = TEST ? 0 : 1500; // espera mínima entre convites do mesmo jogador (evita encher a tela dos outros)
 
