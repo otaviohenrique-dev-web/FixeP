@@ -1809,6 +1809,8 @@ export class ZoneRoom extends Room<ZoneState> {
 
     e.stunned = this.t < e.stunUntil;
     e.rooted = this.t < e.rootUntil;
+    e.shredded = this.t < e.shredUntil;
+    e.slowed = this.t < e.slowUntil;
     if (e.stunned) return; // atordoado: congelado (depois segue o estado em que estava)
 
     if (this.t < e.pullUntil) { // puxado para o centro: não age até terminar (depois fica atordoado em "recover")

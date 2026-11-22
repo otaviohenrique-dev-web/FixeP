@@ -1598,7 +1598,7 @@ class WorldScene extends Phaser.Scene {
 
     this.shadows.clear();
     const wv = this.cameras.main.worldView; // fora da tela: sem placa, sombra nem efeitos (culling)
-    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean; reflect?: boolean; stun?: boolean; root?: boolean; shield?: number }) => {
+    const place = (key: string, x: number, y: number, face: number, hp: number, maxHp: number, o: { dead: boolean; level: number; kind: PlateKind; hideWhenDead?: boolean; ember?: boolean; windup?: boolean; reflect?: boolean; stun?: boolean; root?: boolean; shred?: boolean; slow?: boolean; shield?: number }) => {
       const v = this.sprites.get(key);
       if (!v) return;
       const s = v.obj;
@@ -1650,6 +1650,21 @@ class WorldScene extends Phaser.Scene {
           this.bars.fillStyle(0xc4cbd4, 1).fillEllipse(x, y, i % 2 ? 8 : 5, 5).lineStyle(2, 0x4a3a22, 1).lineBetween(x, y, x + Math.cos(a) * 3, y - 9);
         }
       }
+      if (o.shred || o.slow) { // ícones de efeito sobre a barra de vida: escudo rachado (armadura quebrada) e floco de gelo (lento)
+        const icons = (o.shred ? 1 : 0) + (o.slow ? 1 : 0);
+        let ix = s.x - ((icons - 1) * 15) / 2;
+        const iy = s.y - v.headY - 50;
+        if (o.shred) {
+          const sh = [[-6, -7], [6, -7], [6, 1], [0, 8], [-6, 1]].map(([px, py]) => ({ x: ix + px, y: iy + py }));
+          this.bars.fillStyle(0xff9d4d, 1).fillPoints(sh, true, true).lineStyle(1.5, 0x3a1a08, 1).strokePoints(sh, true, true);
+          this.bars.lineStyle(2, 0xffffff, 1).beginPath().moveTo(ix + 1, iy - 7).lineTo(ix - 2, iy - 1).lineTo(ix + 2, iy + 2).lineTo(ix - 1, iy + 8).strokePath(); // rachadura
+          ix += 15;
+        }
+        if (o.slow) {
+          this.bars.fillStyle(0x16324a, 0.9).fillCircle(ix, iy, 7.5).lineStyle(1.5, 0x7fd0ff, 1).strokeCircle(ix, iy, 7.5);
+          for (let i = 0; i < 3; i++) { const a = (i * Math.PI) / 3; this.bars.lineStyle(1.6, 0xcdeeff, 1).lineBetween(ix - Math.cos(a) * 5, iy - Math.sin(a) * 5, ix + Math.cos(a) * 5, iy + Math.sin(a) * 5); }
+        }
+      }
       if (o.stun) { // atordoado: estrelas girando sobre a cabeça
         for (let i = 0; i < 3; i++) {
           const a = time / 200 + (i * Math.PI * 2) / 3;
@@ -1682,7 +1697,7 @@ class WorldScene extends Phaser.Scene {
       // o golpe cai quando o aviso (windup) termina: dispara a animação de ataque nessa virada
       if (this.prevSt.get(key) === "windup" && e.st === "recover") this.sprites.get(key)?.trigger("attack", time);
       this.prevSt.set(key, e.st);
-      place(key, e.x, e.y, e.face, e.hp, e.maxHp, { dead: e.st === "dead", hideWhenDead: true, windup: e.st === "windup", stun: !!e.stunned, root: !!e.rooted, level: Number(e.level) || 1, kind: "enemy" });
+      place(key, e.x, e.y, e.face, e.hp, e.maxHp, { dead: e.st === "dead", hideWhenDead: true, windup: e.st === "windup", stun: !!e.stunned, root: !!e.rooted, shred: !!e.shredded, slow: !!e.slowed, level: Number(e.level) || 1, kind: "enemy" });
     });
 
     const me = this.me();
