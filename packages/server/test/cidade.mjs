@@ -12,7 +12,7 @@ const until = async (fn, ms = 3000) => { const t0 = Date.now(); while (Date.now(
 
 async function account(cls = "warrior") {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = "Cd" + Math.random().toString(36).slice(2, 8);
+  const name = "Cd" + Math.random().toString(10).slice(2, 8);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
   return { token, name };
@@ -29,6 +29,7 @@ async function enter(acc, room = "zone4") {
   r.onMessage("travel", (m) => ev.travel.push(m));
   r.onMessage("hit", (m) => ev.hits.push(m));
   r.onMessage("died", () => ev.died++);
+  r.send("inv_sync", {}); // como o cliente: pede o inventário DEPOIS de registrar os receptores (a foto de entrada pode ter chegado antes)
   r.onMessage("*", () => {});
   r.onLeave((c) => (ev.left = c));
   const P = {
