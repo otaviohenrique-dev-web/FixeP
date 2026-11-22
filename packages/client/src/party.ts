@@ -27,8 +27,10 @@ export interface PartyUi {
   endInvite(): void;
   /** abre o menu do jogador ao lado de (x, y) em pixels da tela */
   openPlayerMenu(t: MenuTarget, x: number, y: number): void;
-  /** jogador selecionado no mundo: as opções aparecem fixas ao lado do retrato do próprio jogador (HUD) */
+  /** jogador selecionado no mundo: aparece um cartão no topo, ao lado do próprio retrato; o menu desce ao clicar nele */
   selectPlayer(t: MenuTarget): void;
+  /** o jogador selecionado foi desfeito: some o cartão e o menu */
+  clearTarget(): void;
   closeMenu(): void;
   setTouch(on: boolean): void;
   /** o jogador está em grupo, e é o líder? (o cliente só usa para habilitar botões; o servidor valida de verdade) */
@@ -109,6 +111,16 @@ const CSS = `
 .pt-menu.dock{left:calc(max(12px,env(safe-area-inset-left)) + min(300px,64vw) + 12px);top:max(12px,env(safe-area-inset-top));max-height:calc(100dvh - max(12px,env(safe-area-inset-top)) - 12px);overflow-y:auto;overscroll-behavior:contain;z-index:17}
 .pt-menu .pt-x{position:absolute;right:6px;top:6px;width:24px;height:24px;padding:0;border-radius:6px;border:1px solid var(--gold-d,#7a5f2e);background:transparent;color:#cfdcec;cursor:pointer;font:700 12px/1 Georgia,serif}
 @media (max-width:640px),(pointer:coarse) and (max-width:900px){.pt-menu.dock{left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 176px);max-height:calc(100dvh - max(12px,env(safe-area-inset-top)) - 188px);max-width:min(260px,62vw)}}
+/* ---------- cartão do jogador selecionado (topo, ao lado do próprio retrato) ---------- */
+.pt-tg-chip{position:fixed;z-index:16;display:none;align-items:center;gap:7px;height:44px;max-width:min(230px,calc(100vw - 190px));padding:0 10px 0 6px;box-sizing:border-box;border-radius:10px;cursor:pointer;
+  font-family:"Cinzel",Georgia,serif;color:#e6eef9;text-align:left;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+  left:calc(max(12px,env(safe-area-inset-left)) + min(300px,64vw) + 12px);top:max(12px,env(safe-area-inset-top));
+  background:linear-gradient(180deg,#1b2840,#0c121c);border:2px solid #c9a45c;box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,225,160,.25),0 6px 16px rgba(0,0,0,.6)}
+.pt-tg-chip.on{display:flex}
+.pt-tg-chip:focus-visible{outline:2px solid #ffd9a0;outline-offset:2px}
+.pt-tg-chip .mid{min-width:0;display:flex;flex-direction:column;gap:3px}
+.pt-tg-chip .nm{display:block;max-width:150px;font:700 12px/1.1 "Cinzel",Georgia,serif;letter-spacing:.06em;color:#f0dfb8;text-shadow:0 1px 3px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pt-tg-chip .sub{display:block;font:600 9px/1.2 "Cinzel",Georgia,serif;letter-spacing:.06em;color:#9fb4cf;white-space:nowrap}
 .pt-menu-h{display:flex;align-items:center;gap:8px;padding:2px 4px 8px;border-bottom:1px solid rgba(201,164,92,.35);margin-bottom:4px}
 .pt-menu-h .nm{font:700 13px/1.1 "Cinzel",Georgia,serif;letter-spacing:.06em;color:#f0dfb8;word-break:break-word}
 .pt-menu-h .sub{font:600 10px/1.2 "Cinzel",Georgia,serif;color:#9fb4cf;letter-spacing:.06em}
@@ -332,10 +344,34 @@ export function mountParty(opts: PartyOptions): PartyUi {
   menu.setAttribute("role", "menu");
   document.body.append(menu);
   let docked = false;
+
+  // cartão do jogador selecionado: clicar no nome desce o menu de opções logo abaixo dele
+  let target: MenuTarget | null = null;
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "pt-tg-chip";
+  chip.setAttribute("aria-label", "Opções do jogador selecionado");
+  const chipLv = document.createElement("span");
+  chipLv.className = "pt-lv";
+  const chipMid = document.createElement("span");
+  chipMid.className = "mid";
+  const chipNm = document.createElement("span");
+  chipNm.className = "nm";
+  const chipSub = document.createElement("span");
+  chipSub.className = "sub";
+  chipMid.append(chipNm, chipSub);
+  chip.append(chipLv, chipMid);
+  chip.addEventListener("click", () => {
+    if (!target) return;
+    if (docked && menu.classList.contains("on")) closeMenu();
+    else openMenu(target, 0, 0, "dock");
+  });
+  document.body.append(chip);
+
   function closeMenu() {
     const was = menu.classList.contains("on");
     menu.classList.remove("on", "dock");
-    menu.style.left = menu.style.top = "";
+    menu.style.left = menu.style.top = menu.style.maxHeight = "";
     const d = docked;
     docked = false;
     if (was && d) opts.onMenuClose?.();
@@ -399,10 +435,15 @@ export function mountParty(opts: PartyOptions): PartyUi {
       );
     }
     menu.classList.add("on");
-    if (mode === "dock") { // fixo ao lado do retrato do jogador: sem posição calculada
+    if (mode === "dock") { // logo abaixo do cartão do alvo; a borda inferior fica acima do fim da tela, então a última opção aparece cortada (indica rolagem)
       docked = true;
       menu.classList.add("dock");
-      menu.style.left = menu.style.top = "";
+      const r = chip.getBoundingClientRect();
+      const top = r.bottom + 6;
+      menu.style.top = `${top}px`;
+      menu.style.maxHeight = `${Math.max(140, window.innerHeight - top - 40)}px`;
+      const dw = menu.offsetWidth;
+      menu.style.left = `${Math.max(6, Math.min(window.innerWidth - dw - 6, r.left))}px`;
       return;
     }
     const w = menu.offsetWidth, hgt = menu.offsetHeight;
@@ -440,7 +481,18 @@ export function mountParty(opts: PartyOptions): PartyUi {
     },
     endInvite,
     openPlayerMenu: (t, x, y) => openMenu(t, x, y, "player"),
-    selectPlayer: (t) => openMenu(t, 0, 0, "dock"),
+    selectPlayer(t) {
+      target = t;
+      const tier = levelTier(t.level);
+      chipLv.style.setProperty("--tc", hex(LEVEL_TIER_COLORS[tier]));
+      chipLv.style.setProperty("--tl", mixWhite(LEVEL_TIER_COLORS[tier], 0.55));
+      chipLv.textContent = String(t.level);
+      chipNm.textContent = t.name;
+      chipSub.textContent = CLASS_DEFS[t.cls as CharClass]?.name ?? "Aventureiro";
+      chip.classList.add("on");
+      if (docked && menu.classList.contains("on")) openMenu(t, 0, 0, "dock"); // trocou de alvo com o menu aberto
+    },
+    clearTarget() { target = null; chip.classList.remove("on"); closeMenu(); },
     closeMenu,
     setTouch(on) { root.classList.toggle("touch", on); },
     state,
