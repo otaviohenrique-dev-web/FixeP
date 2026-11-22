@@ -31,6 +31,7 @@ import { mountLoading, type LoadingScreen } from "./loading";
 import { GroundLayer } from "./ground";
 import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
+import { mountDiario, type DiarioUi } from "./diario";
 import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
@@ -134,6 +135,7 @@ class WorldScene extends Phaser.Scene {
   private vault!: VaultUi;
   private pendingVault = false; // clicou no baú longe: abre quando chegar perto
   private econ!: EconomyUi;
+  private diario!: DiarioUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -326,6 +328,7 @@ class WorldScene extends Phaser.Scene {
     });
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
+    this.diario = mountDiario(); // rastreador e diário de quests (C1.3); depois do econ, que injeta o CSS de quests
     this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.armTravelWatch(); this.room.send(Msg.Travel, { to }); });
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
@@ -525,8 +528,8 @@ class WorldScene extends Phaser.Scene {
       else this.inv.toast(t[0], t[1]);
     });
     room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); });
-    room.onMessage(Evt.Quests, (m: QuestEvent) => this.econ.setQuests(m));
-    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => this.econ.setQuestDefs(m));
+    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); });
+    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); });
     this.room.send(Msg.InvSync, {});
     this.room.send(Msg.QuestSync, {}); // pede o estado e as definições das quests (depois de registrar os receptores)
     room.onMessage(Evt.Chat, (m: ChatEvent) => {
