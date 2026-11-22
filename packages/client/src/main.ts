@@ -1381,7 +1381,7 @@ class WorldScene extends Phaser.Scene {
   /** toque segurado numa habilidade de área: a prévia aparece; arrastar muda o ponto; soltar lança */
   aimStart(a: ActionId) {
     // área: mostra a área; alcance/direção (corpo a corpo, projétil): mostra o alcance e a linha até a mira; básico e buffs: nada
-    this.aimA = a !== "attack" && (this.isAreaSkill(a) || this.reach(a) > 0) ? a : null;
+    this.aimA = a !== "attack" && this.aimRange(a) > 0 ? a : null;
     this.aimScreen = null;
   }
   aimMove(x: number, y: number) { if (this.aimA) this.aimScreen = { x, y }; }
@@ -1416,9 +1416,19 @@ class WorldScene extends Phaser.Scene {
     this.aimG.lineStyle(2, col, 0.95).strokePoints(ring(cx, cy, r), true, true);
   }
 
+  /** alcance da mira manual (arrastar o dedo): habilidades de área, de alcance/direção e a esquiva (distância do pulo). 0 = sem mira manual.
+   *  O clérigo fica como está: só as habilidades de área dele (Compressor de Ar e Julgamento) têm mira manual. */
+  private aimRange(a: ActionId): number {
+    if (a === "attack") return 0;
+    if (this.isAreaSkill(a)) return this.reach(a);
+    if (this.cls === "cleric") return 0;
+    const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0);
+    return d.kind === "dodge" ? d.dash ?? 0 : this.reach(a);
+  }
+
   /** habilidade de alcance ou direção: anel do alcance e uma linha até a mira (arrastar muda a direção) */
   private drawReachAim(me: any, a: ActionId) {
-    const L = this.reach(a);
+    const L = this.aimRange(a);
     if (L <= 0) return;
     const mira = this.aimScreen ? this.aimGrid() : this.aim(a);
     const dx = mira.x - me.x, dy = mira.y - me.y, dd = Math.hypot(dx, dy) || 1;
