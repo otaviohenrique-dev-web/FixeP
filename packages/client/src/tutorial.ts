@@ -52,7 +52,10 @@ export function textoPasso(def: QuestDef, estado: QuestEstado["estado"] | undefi
 }
 
 export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; getZone(): number }): TutorialUi {
+  // a cena é refeita a cada travessia de zona: remove faixa e estilo da montagem anterior (senão a faixa velha fica na tela, parada no texto antigo)
+  document.querySelectorAll(".tut, style[data-tut]").forEach((e) => e.remove());
   const style = document.createElement("style");
+  style.dataset.tut = "1";
   style.textContent = CSS;
   document.head.append(style);
 
