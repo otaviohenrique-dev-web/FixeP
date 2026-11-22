@@ -1,5 +1,6 @@
 import { ZONES, type EnemyKind } from "./zones";
 import type { Rarity } from "./items";
+export * from "./quests";
 // Simulação em grade ortogonal (servidor). Isométrico é só projeção no cliente.
 // MAP_W/MAP_H/SPAWN são os da zona 1; cada zona tem os seus em ZONES (zones.ts).
 export const MAP_W = 40;
@@ -57,6 +58,10 @@ export const Msg = {
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
   Ready: "ready", // {}: o cliente terminou de carregar a zona e o jogador já pode agir: só então começa a contar a bolha de chegada
   QMode: "q_mode", // { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
+  QuestAccept: "quest_aceitar", // { id }: aceita uma quest (o servidor valida nível, pré-requisitos e se já aceitou)
+  QuestDeliver: "quest_entregar", // { id }: entrega uma quest pronta (perto do NPC dela, se houver); a recompensa sai na mesma transação
+  QuestTalk: "quest_falar", // { npc }: conversa com um NPC da zona (conta para objetivos "falar"; o servidor confere a distância)
+  QuestSync: "quest_sync", // {}: pede o estado das quests (o cliente pede depois de registrar os receptores)
 } as const;
 
 /** Eventos enviados pelo servidor. */
@@ -95,6 +100,7 @@ export const Evt = {
   MarketPage: "market_page", // MarketPage: resposta a MarketBrowse
   MarketMine: "market_mine", // MarketMineEvent: minhas listagens e vendas
   MarketDone: "market_done", // MarketDoneEvent: resultado de listar, comprar, cancelar ou recolher
+  Quests: "quest_estado", // QuestEvent: estado completo das quests do personagem (ao entrar e a cada mudança)
 } as const;
 
 // ------------------------------------------------------------ troca entre jogadores

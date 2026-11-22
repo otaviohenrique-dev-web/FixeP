@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 import { emptyVault, type Vault } from "../game/vault.js";
+import type { QuestMap, QuestRt } from "../game/quests.js";
+import type { EstadoQuest } from "@frixep/shared";
 import type { Db, Tx } from "./index.js";
 
 /** Zona de nascimento dos personagens novos: a cidade. Só os testes (nunca em produção) podem trocar, para as suítes antigas seguirem lutando na zona 1. */
@@ -227,6 +229,48 @@ export class Repo {
   async saveInventory(charId: string, inv: Inventory): Promise<void> {
     const rows = this.inventoryRows(inv);
     await this.db.tx(({ query: q }) => this.writeInventoryTx(q, charId, rows));
+  }
+
+  // ---- quests (C1.1)
+  /** Estado das quests do personagem (só as que ele aceitou ou entregou). */
+  async loadQuests(charId: string): Promise<QuestMap> {
+    const { rows } = await this.db.query<{ quest_id: string; estado: EstadoQuest; progresso: unknown }>(
+      "select quest_id, estado, progresso from quest_estado where personagem_id = $1", [charId]);
+    const qs: QuestMap = new Map();
+    for (const r of rows) {
+      const prog = typeof r.progresso === "string" ? JSON.parse(r.progresso) : r.progresso;
+      qs.set(r.quest_id, { id: r.quest_id, estado: r.estado, progresso: Array.isArray(prog) ? prog.map((n) => Math.max(0, Number(n) || 0)) : [] });
+    }
+    return qs;
+  }
+
+  /** Grava (cria ou atualiza) o estado dessas quests dentro de uma transação ou do banco. */
+  private async writeQuestsTx(q: Tx["query"], charId: string, list: QuestRt[]): Promise<void> {
+    if (!list.length) return;
+    const ph = list.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4}::jsonb, now())`).join(",");
+    await q(
+      `insert into quest_estado (personagem_id, quest_id, estado, progresso, atualizado_em) values ${ph}
+       on conflict (personagem_id, quest_id) do update set estado = excluded.estado, progresso = excluded.progresso, atualizado_em = now()`,
+      [charId, ...list.flatMap((r) => [r.id, r.estado, JSON.stringify(r.progresso)])],
+    );
+  }
+
+  /** Grava quests alteradas (salvamento periódico, ao sair e ao aceitar). */
+  async saveQuests(charId: string, list: QuestRt[]): Promise<void> {
+    await this.writeQuestsTx((sql, p) => this.db.query(sql, p), charId, list);
+  }
+
+  /**
+   * Entrega: marca a quest como entregue, sobe o XP e grava o novo inventário NA MESMA transação.
+   * Ou tudo é gravado ou nada (uma queda no meio não paga a recompensa pela metade).
+   */
+  async entregarQuest(charId: string, quest: QuestRt, level: number, xp: number, inv: Inventory): Promise<void> {
+    const ir = this.inventoryRows(inv);
+    await this.db.tx(async ({ query: q }) => {
+      await this.writeQuestsTx(q, charId, [quest]);
+      await q("update characters set level = $2, xp = $3, updated_at = now() where id = $1", [charId, level, xp]);
+      await this.writeInventoryTx(q, charId, ir);
+    });
   }
 
   /** Grava DOIS personagens na MESMA transação (a troca entre jogadores: ou grava os dois lados ou nenhum, sem duplicar nem perder item). */

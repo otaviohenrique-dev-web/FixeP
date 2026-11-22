@@ -2,6 +2,7 @@ import { Schema, MapSchema, type } from "@colyseus/schema";
 import { SPAWN, CLASS_DEFS, SKELETON, emptyBonuses, type GearBonuses } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 import type { Vault } from "../game/vault.js";
+import type { QuestMap } from "../game/quests.js";
 
 export class Player extends Schema {
   atGate = false; // na cidade: já está dentro do raio do portão (o mapa-mundo abre uma vez por entrada)
@@ -65,6 +66,9 @@ export class Player extends Schema {
   travelNoteAt = -1e9; // último aviso "em combate" ao tentar atravessar (para não repetir a cada tick)
   combatAt = -1e9; // último instante em que causou ou recebeu dano (a regeneração de vida espera PLAYER_REGEN_DELAY_S)
   regenAcc = 0; // fração de vida regenerada ainda não aplicada (hp é inteiro)
+  quests: QuestMap = new Map(); // quests do personagem (C1.1): carregadas do banco ao entrar
+  questDirty = new Set<string>(); // quests alteradas ainda não gravadas
+
 }
 
 export type EnemyState = "idle" | "chase" | "windup" | "recover" | "evade" | "dead";
