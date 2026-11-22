@@ -76,6 +76,7 @@ export const Evt = {
   Proj: "proj", // projétil criado (o cliente anima o voo)
   ProjEnd: "projend", // projétil terminou (acertou ou acabou o alcance)
   Trap: "trap", // armadilha: colocada, disparou ou sumiu
+  ActDenied: "act_denied", // { a }: o servidor não executou a ação (recurso, recarga, atordoado...): o cliente devolve a recarga que mostrou
   TravelDenied: "travel_denied", // {}: o servidor recusou a travessia (em combate): o cliente tira a tela de load que mostrou ao pisar no portão
   Shield: "shield", // { ms }: a bolha de chegada começou a contar (só para o dono; o cliente mostra o tempo restante)
   WorldMap: "world_map", // {}: o jogador pisou no portão da cidade: o cliente abre o mapa-mundo (escolher a zona); a escolha volta em Msg.Travel { to }

@@ -485,6 +485,7 @@ class WorldScene extends Phaser.Scene {
     // travessia aprovada pelo servidor: sai desta sala e entra na da nova zona, sem recarregar a página
     room.onMessage(Evt.WorldMap, () => { if (!this.busy && !this.entering) this.worldMap.open(); });
     room.onMessage(Evt.Travel, (m: TravelEvent) => this.travelTo(m.zone, room));
+    room.onMessage(Evt.ActDenied, (m: { a: ActionId }) => this.hud.clearCd(m.a)); // o servidor não fez a ação: devolve a recarga do botão
     room.onMessage(Evt.TravelDenied, () => { // recusado (em combate): tira o load que apareceu ao pisar no portão e devolve o controle na hora
       if (this.entering) return;
       this.gateBlock = true;

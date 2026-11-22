@@ -88,7 +88,7 @@ done
 echo "== Suítes com servidor de teste (um servidor novo por suíte)"
 # Padrão: sem variáveis extras.
 for file in test/anticheat.mjs test/chat.mjs test/mana.mjs test/pvp.mjs test/morte.mjs \
-            test/zones.mjs test/persistence.mjs; do
+            test/zones.mjs test/persistence.mjs test/fila.mjs; do
   if [ "$file" = test/morte.mjs ] || [ "$file" = test/zones.mjs ]; then run_case 2991 "" "$file" ""; elif [ "$file" = test/persistence.mjs ]; then run_case 2991 "TEST_START_ZONE=1 API_RATE_MULT=100" "$file" ""; else run_case 2991 "TEST_START_ZONE=1 API_RATE_MULT=100" "$file" ""; fi
 done
 # Economia, mercado e cidade (kit inicial; mercado com TTL curto).
