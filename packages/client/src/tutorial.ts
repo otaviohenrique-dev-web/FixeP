@@ -24,9 +24,16 @@ const CSS = `
   background:linear-gradient(180deg,rgba(20,34,52,.9),rgba(6,12,20,.9));border:1px solid rgba(255,150,70,.55);box-shadow:0 6px 18px rgba(0,0,0,.55)}
 .tut[hidden]{display:none}
 .tut small{display:block;margin-bottom:1px;font:700 9px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:#ffb072}
+.tut-hd{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tut-min{pointer-events:auto;cursor:pointer;width:22px;height:22px;margin:-3px -6px 0 0;padding:0;border-radius:50%;border:1px solid rgba(255,176,114,.6);background:rgba(10,16,26,.8);color:#ffb072;font:700 14px/1 Georgia,serif;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.tut.min{padding:3px 6px 3px 10px}
+.tut.min .tut-min{margin:0}
 @media (max-width:640px){.tut{max-width:calc(100vw - 24px);font-size:11px}}
 @media (pointer:coarse) and (orientation:landscape){.tut{max-width:min(400px,calc(100vw - 300px))}}
 `;
+
+const MIN_KEY = "frixep.tut.min";
+let minimizado = (() => { try { return localStorage.getItem(MIN_KEY) === "1"; } catch { return false; } })(); // a escolha vale também depois de trocar de zona
 
 const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
@@ -97,7 +104,23 @@ export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; 
     if (texto) {
       const s = document.createElement("small");
       s.textContent = `Tutorial · ${passos.indexOf(pendente) + 1}/${passos.length}`;
-      band.append(s, document.createTextNode(texto));
+      const btn = document.createElement("button"); // – minimiza a faixa para uma pílula; + abre de novo
+      btn.type = "button";
+      btn.className = "tut-min";
+      btn.textContent = minimizado ? "+" : "–";
+      btn.title = btn.ariaLabel = minimizado ? "Mostrar o tutorial" : "Minimizar o tutorial";
+      btn.addEventListener("pointerdown", (e) => e.stopPropagation()); // não repassa o toque ao jogo (não anda nem ataca)
+      btn.addEventListener("click", () => {
+        minimizado = !minimizado;
+        try { localStorage.setItem(MIN_KEY, minimizado ? "1" : "0"); } catch { /* sem armazenamento */ }
+        atualizar();
+      });
+      band.classList.toggle("min", minimizado);
+      const hd = document.createElement("div");
+      hd.className = "tut-hd";
+      hd.append(s, btn);
+      band.append(hd);
+      if (!minimizado) band.append(document.createTextNode(texto));
       band.hidden = false;
     } else {
       band.hidden = true;
