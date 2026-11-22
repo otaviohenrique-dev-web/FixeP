@@ -101,6 +101,7 @@ export const Evt = {
   MarketMine: "market_mine", // MarketMineEvent: minhas listagens e vendas
   MarketDone: "market_done", // MarketDoneEvent: resultado de listar, comprar, cancelar ou recolher
   Quests: "quest_estado", // QuestEvent: estado completo das quests do personagem (ao entrar e a cada mudança)
+  QuestDefs: "quest_defs", // QuestDefsEvent: definições das quests (nome, texto, objetivos, recompensa); vai ao pedir quest_sync
 } as const;
 
 // ------------------------------------------------------------ troca entre jogadores

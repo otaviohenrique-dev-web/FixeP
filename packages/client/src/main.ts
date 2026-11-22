@@ -8,7 +8,7 @@ import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, WORLD_GATE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
-  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type VaultSnapshot,
+  type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type VaultSnapshot, type QuestEvent, type QuestDefsEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
 } from "@frixep/shared";
 import { ensureLogin, logout, wsUrl } from "./auth";
@@ -524,8 +524,11 @@ class WorldScene extends Phaser.Scene {
       if (m.s === "cancel") this.hud.alert({ move: "Canalização cancelada: você se moveu", act: "Canalização cancelada: você agiu", damage: "Canalização interrompida: dano recebido" }[m.why ?? "damage"] ?? t[0]);
       else this.inv.toast(t[0], t[1]);
     });
-    room.onMessage(Evt.Notice, (m: NoticeEvent) => this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"));
+    room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); });
+    room.onMessage(Evt.Quests, (m: QuestEvent) => this.econ.setQuests(m));
+    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => this.econ.setQuestDefs(m));
     this.room.send(Msg.InvSync, {});
+    this.room.send(Msg.QuestSync, {}); // pede o estado e as definições das quests (depois de registrar os receptores)
     room.onMessage(Evt.Chat, (m: ChatEvent) => {
       this.chatUi.add(String(m.name), String(m.text), m.id === this.room.sessionId);
       this.say(String(m.id), String(m.text)); // balão sobre a cabeça de quem falou

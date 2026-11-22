@@ -28,6 +28,9 @@ export interface QuestEstado { id: string; estado: EstadoQuest; progresso: numbe
 /** Mensagem Evt.Quests: o estado COMPLETO das quests do personagem (ao entrar e a cada mudança). */
 export interface QuestEvent { quests: QuestEstado[] }
 
+/** Mensagem Evt.QuestDefs: definições (nome, texto, objetivos, recompensa) das quests, para o cliente mostrar. Vai ao pedir quest_sync. */
+export interface QuestDefsEvent { defs: QuestDef[] }
+
 export const QUEST_ID_RE = /^[a-z][a-z0-9_]{1,59}$/;
 export const QUEST_TEXTO_MAX = 200;
 export const QUEST_NIVEL_MAX = 50;
