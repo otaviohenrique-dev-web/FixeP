@@ -31,6 +31,7 @@ async function entrar(acc) {
   r.onMessage("quest_defs", (m) => (ev.defs = m));
   r.onMessage("inv", (m) => (ev.inv = m));
   r.onLeave(() => (ev.left = true));
+  // as mensagens enviadas ao entrar podem chegar antes dos receptores (CI lento): pede de novo, como faz o cliente
   const P = {
     r, ev,
     me: () => r.state.players.get(r.sessionId),
@@ -40,7 +41,9 @@ async function entrar(acc) {
     async walk(x, y) { r.send("move_to", { x, y }); await until(() => Math.hypot(P.me().x - x, P.me().y - y) < 0.6, 12000); },
     async sair() { ev.left = false; r.leave(); await until(() => ev.left, 3000); await sleep(400); }, // dá tempo do servidor gravar ao sair
   };
-  await until(() => ev.quests && ev.inv, 3000);
+  r.send("inv_sync", {});
+  r.send("quest_sync", {});
+  await until(() => ev.quests && ev.inv, 5000);
   return P;
 }
 
