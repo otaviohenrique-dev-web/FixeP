@@ -58,7 +58,7 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "skeleton", x: 30, y: 16, level: 1 },
       { kind: "skeleton", x: 31, y: 24, level: 1 },
       { kind: "skeleton", x: 26, y: 30, level: 1 },
-      { kind: "skeleton", x: 26, y: 36, level: 2 },
+      { kind: "skeleton", x: 37, y: 5, level: 2 }, // (era 26,36: colado em (26,30) e (31,24) puxava 3 de uma vez no primeiro abate do tutorial; agora fica longe do bando)
       { kind: "skeleton", x: 11, y: 12, level: 3 },
       // pontos de caça (grupos): quanto mais fundo no mapa (para leste), mais nível. Fora do raio seguro dos pontos de chegada, contando o spread.
       { kind: "skeleton", x: 5, y: 4, level: 2, levelMax: 3, count: 5, spread: 2.5 },

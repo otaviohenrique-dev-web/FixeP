@@ -1287,6 +1287,8 @@ class WorldScene extends Phaser.Scene {
     const focus = this.reach(a) > 0 ? this.targets().find((t) => t.key === this.lockKey) : undefined;
     if (focus) return { x: focus.x, y: focus.y };
     if (!this.touchMode) {
+      // ataque básico no teclado sem foco: mira no inimigo do alcance (como no toque), não no ponteiro nem na última direção
+      if (a === "attack") { const t = this.assistTarget(a); if (t) return { x: t.x, y: t.y }; }
       const p = this.input.activePointer;
       p.updateWorldPoint(this.cameras.main);
       return toGrid(p.worldX, p.worldY);
