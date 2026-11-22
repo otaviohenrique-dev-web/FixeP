@@ -56,6 +56,50 @@ export class Repo {
     return rows.length > 0;
   }
 
+  // ---- moderação (C0.6)
+  async getSancao(contaId: string): Promise<{ silenciadoAte: number | null; banido: boolean }> {
+    const { rows } = await this.db.query<{ silenciado_ate: Date | null; banido: boolean }>(
+      "select silenciado_ate, banido from sancoes where conta_id = $1", [contaId]);
+    const r = rows[0];
+    return { silenciadoAte: r?.silenciado_ate ? new Date(r.silenciado_ate).getTime() : null, banido: !!r?.banido };
+  }
+
+  /** grava o silêncio até `ateMs` (não mexe no banimento) */
+  async setSilencio(contaId: string, ateMs: number, motivo: string): Promise<void> {
+    await this.db.query(
+      `insert into sancoes (conta_id, silenciado_ate, motivo) values ($1, to_timestamp($2::float8 / 1000), $3)
+       on conflict (conta_id) do update set silenciado_ate = excluded.silenciado_ate, motivo = excluded.motivo, atualizado_em = now()`,
+      [contaId, ateMs, motivo]);
+  }
+
+  /** grava o banimento ou o retira (não mexe no silêncio) */
+  async setBanido(contaId: string, banido: boolean, motivo: string): Promise<void> {
+    await this.db.query(
+      `insert into sancoes (conta_id, banido, motivo) values ($1, $2, $3)
+       on conflict (conta_id) do update set banido = excluded.banido, motivo = excluded.motivo, atualizado_em = now()`,
+      [contaId, banido, motivo]);
+  }
+
+  /** personagem pelo nome (sem diferenciar maiúsculas/acentos, como na criação) */
+  async findCharacterByName(nome: string): Promise<{ id: string; account_id: string; name: string } | null> {
+    const { rows } = await this.db.query<{ id: string; account_id: string; name: string }>(
+      "select id, account_id, name from characters where name_key = $1", [nameKey(nome)]);
+    return rows[0] ?? null;
+  }
+
+  async addDenuncia(contaId: string, personagemId: string, nome: string, motivo: string): Promise<number> {
+    const { rows } = await this.db.query<{ id: string }>(
+      "insert into denuncias (denunciante_conta_id, denunciado_personagem_id, denunciado_nome, motivo) values ($1, $2, $3, $4) returning id",
+      [contaId, personagemId, nome, motivo]);
+    return Number(rows[0].id);
+  }
+
+  async denunciasAbertas(limite = 10): Promise<{ id: number; nome: string; motivo: string; criado_em: Date }[]> {
+    const { rows } = await this.db.query<{ id: string; nome: string; motivo: string; criado_em: Date }>(
+      "select id, denunciado_nome as nome, motivo, criado_em from denuncias where resolvida = false order by criado_em desc limit $1", [limite]);
+    return rows.map((r) => ({ id: Number(r.id), nome: r.nome, motivo: r.motivo, criado_em: r.criado_em }));
+  }
+
   async getCharacter(accountId: string): Promise<CharacterRow | null> {
     const { rows } = await this.db.query<CharacterRow>(
       "select id, account_id, name, class, level, xp, zone from characters where account_id = $1 order by created_at limit 1",

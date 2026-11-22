@@ -362,6 +362,19 @@ O servidor grava eventos de jogo na tabela `eventos` (migração `010_telemetria
 - **Teste:** `npx tsx test/telemetria.unit.ts` (dentro de `packages/server`), com banco embutido em memória.
 - O evento `passo_tutorial` já é aceito pela função `registrarEvento` (`packages/server/src/telemetria.ts`), mas ainda não é gerado, porque o tutorial não existe.
 
+## Moderação mínima (admin, C0.6)
+
+- **Quem é admin:** as contas listadas na variável de ambiente `ADMIN_ACCOUNT_IDS` (ids separados por vírgula). Sem a variável, ninguém é admin. Não cole esses ids em chats nem em arquivos versionados.
+- **Comandos no chat da zona** (só o admin; o resto do chat não os vê):
+  - `/silenciar <nome> <minutos> [motivo]`: o jogador não fala no chat (zona, grupo e troca) até o horário; ele recebe o aviso com a hora.
+  - `/banir <nome> [motivo]`: a conta não entra mais no jogo; a sessão aberta é derrubada.
+  - `/desbanir <nome>`: libera a conta de novo.
+  - `/denuncias`: lista as denúncias abertas.
+  - Nome com espaços vai entre aspas: `/banir "Nome Com Espaço" motivo`.
+- **Denúncia:** no menu do jogador (clicar no nome no mapa), o botão **Denunciar** fica por último. O motivo tem até 200 caracteres; cada conta pode denunciar 1 vez por minuto; denunciar a si mesmo é ignorado.
+- **Persistência:** sanções na tabela `sancoes` e denúncias na tabela `denuncias` (migração `011_moderacao.sql`). Os eventos `denuncia`, `silenciado` e `banido` vão para a telemetria.
+- **Teste:** `npx tsx test/moderacao.unit.ts` (sem servidor) e `test/moderacao.mjs` (com servidor de teste `ADMIN_TEST_FIRST_GUEST=1`, incluído no `run-all.sh`).
+
 ## Deploy
 
 `render.yaml` descreve os serviços do Render. Veja `docs/DEPLOY_SUPABASE_RENDER.md` (Parte 5).

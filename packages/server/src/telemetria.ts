@@ -7,7 +7,7 @@ import type { Db } from "./db/index.js";
  *  - Chamada sem `await` no caminho do combate: quem chama não espera o banco.
  *  - Não grava senha, token, e-mail nem IP: campos com esses nomes são descartados de `dados`.
  */
-export type TipoEvento = "login" | "criacao_personagem" | "passo_tutorial" | "primeiro_abate" | "nivel_5" | "saida";
+export type TipoEvento = "login" | "criacao_personagem" | "passo_tutorial" | "primeiro_abate" | "nivel_5" | "saida" | "denuncia" | "silenciado" | "banido";
 
 export interface CamposEvento {
   contaId?: string | null;

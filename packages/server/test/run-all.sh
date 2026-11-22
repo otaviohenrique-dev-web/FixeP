@@ -78,7 +78,7 @@ run_case() {
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
 for file in test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
-            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts; do
+            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"
   if npx tsx "$file"; then echo "OK  $file"; else echo "FALHA  $file"; FAILS+=("$file"); fi
@@ -106,6 +106,8 @@ run_case 2995 "LOOT_TEST=1 LOOT_LOCK_S=3 ENEMY_LEASH_TEST=9 TEST_START_ZONE=1" t
 # Grupo (convites e ausência encurtados) e chegada nas Cinzas.
 run_case 2996 "PARTY_TEST=1 TEST_START_ZONE=1 API_RATE_MULT=100" test/party.mjs "PARTY_TEST=1"
 run_case 2996 "TEST_START_ZONE=1" test/chegada.mjs ""
+# Moderação (C0.6): a primeira conta criada no servidor de teste vira admin (ADMIN_TEST_FIRST_GUEST=1, só não-produção).
+run_case 2997 "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/moderacao.mjs ""
 
 echo
 echo "Suítes executadas: $RAN"

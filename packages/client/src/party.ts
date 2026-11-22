@@ -351,6 +351,11 @@ export function mountParty(opts: PartyOptions): PartyUi {
     else b.addEventListener("click", () => { closeMenu(); onClick(); });
     return b;
   }
+  /** denúncia: pede o motivo (até 200 caracteres) e envia; o servidor grava e limita a 1 por minuto */
+  function denunciar(nome: string) {
+    const motivo = window.prompt(`Denunciar ${nome}. Motivo (até 200 caracteres):`);
+    if (motivo?.trim()) opts.send("report", { name: nome, motivo: motivo.trim().slice(0, 200) });
+  }
   function openMenu(t: MenuTarget, x: number, y: number, mode: "player" | "member" | "dock") {
     menu.classList.remove("dock");
     docked = false;
@@ -397,6 +402,7 @@ export function mountParty(opts: PartyOptions): PartyUi {
       );
       // o que ainda não existe fica por último: no celular deitado o menu rola e as ações úteis têm de aparecer primeiro
       menu.append(item("Ver Perfil", null, soon), item("Pedido de amizade", null, soon), item("Sussurrar", null, soon), item("Bloquear", null, soon));
+      menu.append(item("Denunciar", () => denunciar(t.name), undefined, true)); // sempre por último no menu do jogador
     }
     menu.classList.add("on");
     if (mode === "dock") { // fixo ao lado do retrato do jogador: sem posição calculada
