@@ -19,6 +19,7 @@ export interface HudOptions {
   /** prioridade do alvo sem foco (botões < e > ao lado do ataque básico) e quando o jogador troca */
   targetMode?: "low" | "near";
   onTargetMode?(m: "low" | "near"): void;
+  onNextTarget?(): void;
   /** botão de poção (no celular, onde não há tecla) */
   onPotion?(): void;
   /** o jogador ligou ou desligou a auto-poção (o botão "Auto" da barra) */
@@ -205,6 +206,7 @@ const CSS = `
 .hd-tm.on{opacity:1;border-color:#f0cf86;box-shadow:0 0 0 2px rgba(255,225,160,.35)}
 .hd.touch .hd-tm-low{right:90px;bottom:24px}
 .hd.touch .hd-tm-near{right:30px;bottom:92px}
+.hd.touch .hd-tm-next{right:172px;bottom:14px;width:34px;height:34px;opacity:.85}
 .hd.touch .hd-a-skill1{right:109px;bottom:13px}
 .hd.touch .hd-a-skill2{right:81px;bottom:81px}
 .hd.touch .hd-a-skill3{right:13px;bottom:109px}
@@ -433,6 +435,16 @@ export function mountHud(opts: HudOptions): Hud {
     });
     tmBtns.push([t, m, title]);
     bar.append(t);
+  }
+  { // botão ⟳: passa o foco para o próximo alvo (inimigo mais próximo depois do atual; clérigo na Cura Focada: próximo aliado)
+    const n = document.createElement("button");
+    n.type = "button";
+    n.className = "hd-tm hd-tm-next";
+    n.textContent = "⟳";
+    n.title = "Próximo alvo";
+    n.setAttribute("aria-label", "Próximo alvo");
+    n.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); opts.onNextTarget?.(); });
+    bar.append(n);
   }
   function paintTm() {
     for (const [t, m] of tmBtns) { t.classList.toggle("on", m === tMode); t.setAttribute("aria-pressed", String(m === tMode)); }
