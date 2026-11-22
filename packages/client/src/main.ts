@@ -331,7 +331,7 @@ class WorldScene extends Phaser.Scene {
   /** interface do DOM (HUD, mochila, loja, baú, chat, grupo, FPS) e entradas: montada UMA vez; as salas só trocam os receptores */
   private mountUi() {
     this.lowHp = mountLowHp();
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), aim: { start: (a, x, y) => this.aimStart(a, x, y), move: (x, y) => this.aimMove(x, y), end: () => this.aimEnd() }, targetMode: this.targetMode, onTargetMode: (m) => this.setTargetMode(m), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), aim: { start: (a, x, y) => this.aimStart(a, x, y), move: (x, y) => this.aimMove(x, y), end: () => this.aimEnd() }, onNextTarget: () => this.cycleTarget(), targetMode: this.targetMode, onTargetMode: (m) => this.setTargetMode(m), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
     this.hud.setAutoPotion(this.autoPot);
     this.joy = mountJoystick();
     this.applyTouch();
@@ -1349,6 +1349,30 @@ class WorldScene extends Phaser.Scene {
     if (Math.hypot(t.x - me.x, t.y - me.y) > TARGET_RANGE) this.lockKey = "";
   }
 
+  /** botão ⟳ (celular): passa para o próximo alvo, do mais perto ao mais longe; clérigo com a Cura Focada percorre os aliados */
+  private cycleTarget() {
+    const me = this.me();
+    if (!me || me.dead) return;
+    const dist = (o: { x: number; y: number }) => Math.hypot(o.x - me.x, o.y - me.y);
+    if (this.cls === "cleric" && Number(me.qMode) === 1) {
+      const al: { id: string; p: any }[] = [];
+      this.state.players.forEach((p: any, id: string) => { if (id !== this.room.sessionId && !p.dead && dist(p) <= TARGET_RANGE) al.push({ id, p }); });
+      if (!al.length) return;
+      al.sort((a, b) => dist(a.p) - dist(b.p));
+      const nx = al[(al.findIndex((x) => x.id === this.selId) + 1) % al.length];
+      this.selId = nx.id;
+      this.party.selectPlayer({ name: String(nx.p.name), level: Number(nx.p.level) || 1, cls: String(nx.p.cls), inParty: !!nx.p.party });
+      navigator.vibrate?.(8);
+      return;
+    }
+    const ts = this.targets().filter((t) => dist(t) <= TARGET_RANGE).sort((a, b) => dist(a) - dist(b));
+    if (!ts.length) return;
+    this.lockKey = ts[(ts.findIndex((t) => t.key === this.lockKey) + 1) % ts.length].key;
+    this.chase = null;
+    if (this.selId) this.deselect();
+    navigator.vibrate?.(8);
+  }
+
   setTargetMode(m: "low" | "near") {
     this.targetMode = m;
     try { localStorage.setItem(TMODE_KEY, m); } catch { /* sem armazenamento */ }
@@ -1400,7 +1424,7 @@ class WorldScene extends Phaser.Scene {
     this.aimOrigin = { x, y };
   }
   aimMove(x: number, y: number) {
-    if (!this.aimA) return;
+    if (!this.aimA || this.cls === "cleric") return; // clérigo: o alvo da cura é o aliado selecionado/mais ferido, não se arrasta
     const dx = x - this.aimOrigin.x, dy = y - this.aimOrigin.y;
     this.aimScreen = Math.hypot(dx, dy) < AIM_DEAD_PX ? null : { x: dx, y: dy }; // dedo de volta ao centro: a mira volta a seguir o alvo
   }
@@ -1440,7 +1464,7 @@ class WorldScene extends Phaser.Scene {
   private aimRange(a: ActionId): number {
     if (a === "attack") return 0;
     if (this.isAreaSkill(a)) return this.reach(a);
-    if (this.cls === "cleric") return 0;
+    if (this.cls === "cleric") return classAction(this.cls, a, Number(this.me()?.qMode) || 0).kind === "healFocus" ? this.reach(a) : 0; // Cura Focada: mostra quem vai ser curado (sem mira manual)
     const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0);
     return d.kind === "dodge" ? d.dash ?? 0 : this.reach(a);
   }
@@ -1461,6 +1485,10 @@ class WorldScene extends Phaser.Scene {
     this.aimG.lineStyle(2, 0xffffff, 0.3).strokePoints(pts, true, true);
     const from = toScreen(me.x, me.y), to = toScreen(me.x + ux * L, me.y + uy * L);
     this.aimG.lineStyle(3, 0xffe08a, 0.85).lineBetween(from.sx, from.sy, to.sx, to.sy);
+    if (this.cls === "cleric" && !this.aimScreen) { // Cura Focada: anel verde no aliado que vai receber a cura
+      const t = toScreen(mira.x, mira.y);
+      this.aimG.lineStyle(3, 0x6fe08a, 0.95).strokeEllipse(t.sx, t.sy, 56, 28).lineBetween(from.sx, from.sy, t.sx, t.sy);
+    }
   }
 
   /** círculo verde sutil sob o jogador selecionado e anel vermelho sob o alvo travado (toque e computador) */
@@ -1509,7 +1537,7 @@ class WorldScene extends Phaser.Scene {
       const reach = this.reach("attack");
       if (t && reach > 0 && Math.hypot(t.x - me.x, t.y - me.y) > reach) { this.chase = { key: this.lockKey }; this.chaseMoveAt = 0; return; }
     }
-    if (a !== "attack") this.chase = null;
+    if (a !== "attack") { this.chase = null; if (this.touchMode) navigator.vibrate?.(10); }
     if (a === "attack") this.nextBasicAt = performance.now() + classAction(this.cls, "attack", Number(me.qMode) || 0).cd * 1000;
     const { x, y } = this.aimA === a && this.aimScreen ? this.aimGrid() : this.aim(a);
     const payload: ActPayload = { a, ax: x, ay: y };
