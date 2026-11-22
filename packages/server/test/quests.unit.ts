@@ -190,7 +190,7 @@ console.log("\n== Tutorial (C1.4): cadeia, objetivos usar/equipar e recompensa p
   check("todas as quests do tutorial têm dica (toque e teclado)", tut.every((d) => !!d.dica?.toque && !!d.dica?.teclado));
   check("passo 1 é chegar (zona 4); 2 abater esqueleto na zona 1; 3 usar skill1; 4 coletar poção; 5 equipar armadura",
     tut.find((d) => d.id === ids[0])!.objetivos[0].tipo === "chegar"
-    && JSON.stringify(tut.find((d) => d.id === ids[1])!.objetivos[0]) === JSON.stringify({ tipo: "abater", kind: "skeleton", qtd: 2, zona: 1 })
+    && JSON.stringify(tut.find((d) => d.id === ids[1])!.objetivos[0]) === JSON.stringify({ tipo: "abater", kind: "skeleton", qtd: 1, zona: 1 })
     && JSON.stringify(tut.find((d) => d.id === ids[2])!.objetivos[0]) === JSON.stringify({ tipo: "usar", acao: "skill1", qtd: 1 })
     && JSON.stringify(tut.find((d) => d.id === ids[3])!.objetivos[0]) === JSON.stringify({ tipo: "coletar", itemId: "pocao_de_vida", qtd: 1 })
     && JSON.stringify(tut.find((d) => d.id === ids[4])!.objetivos[0]) === JSON.stringify({ tipo: "equipar", slot: "armor" }));

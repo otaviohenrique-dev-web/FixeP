@@ -37,5 +37,6 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | PD-09 | Passo 4 do tutorial (poção) completa sem andar | **Baixa** | A poção vem da recompensa do passo 3, então o objetivo "coletar" já está cumprido quando o passo 4 é aceito. Mesmo assim o passo ensina a abrir a mochila e entregar. Ideal: um drop garantido de tutorial. Desvio do pedido: a armadura da classe sai como recompensa do passo 4 (não do 5), para o passo 5 poder ser "equipar" sem depender de um item de outra fonte. |
 | PD-03 | Cobertura de CI só do servidor | **Baixa** | O cliente (Phaser/Vite) só passa pelo typecheck; não há teste automático de interface. Avaliar após a etapa C1. |
 | PD-04 | Servidores de teste esquecidos no Windows | **Baixa** | O `run-all.sh` agora encerra a árvore de processos; se uma rodada for interrompida à força, restam processos `tsx src/index.ts`. Encerre-os pelo Gerenciador de Tarefas. |
+| PD-10 | Quest de teste `caca_aos_ossos` (C1.1) aparece junto do tutorial | **Baixa** | O jogador novo vê 2 quests no Garrick (Primeiros Passos e Caça aos Ossos). A C1.5 troca a quest de teste pelas quests reais; até lá, a `quests.mjs` ainda a usa. |
 
 Regra: pendência **Alta** não passa de marco; **Média** deve ser resolvida até o fim da etapa seguinte; **Baixa** entra quando houver folga.

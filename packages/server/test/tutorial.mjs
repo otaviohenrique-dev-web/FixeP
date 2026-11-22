@@ -82,12 +82,11 @@ async function rodar(cls) {
   check(`${pre} entregar a 1 (no Garrick) a marca como entregue`, await until(() => P.estado(T[0]) === "entregue"), JSON.stringify(P.q(T[0])));
   check(`${pre} a recompensa da 1 dá XP`, await until(() => (P.me().xp ?? 0) > xp0 || (P.me().level ?? 1) > lv0));
 
-  // 2. abater 2 esqueletos (atalho de teste: a progressão é a mesma do combate)
+  // 2. abater 1 esqueleto (atalho de teste: a progressão é a mesma do combate)
   P.r.send("quest_aceitar", { id: T[1] });
   check(`${pre} a quest 2 abre depois da 1`, await until(() => P.estado(T[1]) === "ativa"), JSON.stringify(P.q(T[1])));
   P.r.send("quest_teste_abate", { kind: "skeleton", zona: 1 });
-  P.r.send("quest_teste_abate", { kind: "skeleton", zona: 1 });
-  check(`${pre} dois esqueletos da zona 1 completam a 2`, await until(() => P.estado(T[1]) === "pronta"), JSON.stringify(P.q(T[1])));
+  check(`${pre} um esqueleto da zona 1 completa a 2`, await until(() => P.estado(T[1]) === "pronta"), JSON.stringify(P.q(T[1])));
   await P.walk(GARRICK.x, GARRICK.y); // volta ao Garrick para entregar
   P.r.send("quest_entregar", { id: T[1] });
   check(`${pre} entregar a 2`, await until(() => P.estado(T[1]) === "entregue"));
