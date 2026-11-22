@@ -1,19 +1,19 @@
 // Diário e rastreador de quests (C1.3): funções PURAS (sem DOM, sem rede). O cliente só mostra o resultado daqui;
 // a regra de progresso, de escolha da quest do rastreador e de agrupamento do diário fica testada em packages/server/test/diario.unit.ts.
-import type { Objetivo, QuestDef, QuestEstado } from "./quests";
+import { objetivoContavel, type Objetivo, type QuestDef, type QuestEstado } from "./quests";
 
 /** Nome curto para o rastreador (linha de uma HUD pequena). */
 export const RASTREADOR_NOME_MAX = 28;
 
 /** "2/3" para objetivos com quantidade (abater, coletar); "feito" ou "falta" para os de sim/não (falar, chegar). */
 export function formatarProgresso(o: Objetivo, valor: number): string {
-  if (o.tipo === "abater" || o.tipo === "coletar") return `${Math.min(Math.max(0, valor), o.qtd)}/${o.qtd}`;
+  if (objetivoContavel(o) && "qtd" in o) return `${Math.min(Math.max(0, valor), o.qtd)}/${o.qtd}`;
   return valor >= 1 ? "feito" : "falta";
 }
 
 /** Índice do primeiro objetivo ainda não cumprido; -1 se todos estão cumpridos. */
 export function objetivoAtual(def: QuestDef, progresso: number[]): number {
-  return def.objetivos.findIndex((o, i) => (progresso[i] ?? 0) < (o.tipo === "abater" || o.tipo === "coletar" ? o.qtd : 1));
+  return def.objetivos.findIndex((o, i) => (progresso[i] ?? 0) < (objetivoContavel(o) && "qtd" in o ? o.qtd : 1));
 }
 
 /** Encurta um texto com reticências, sem cortar no meio de uma palavra quando dá. */
@@ -38,7 +38,7 @@ export function linhaRastreador(def: QuestDef, est: QuestEstado, nomeNpc: (id: s
   if (i < 0) return nome;
   const o = def.objetivos[i];
   const prog = formatarProgresso(o, est.progresso[i] ?? 0);
-  return o.tipo === "abater" || o.tipo === "coletar" ? `${nome} ${prog}` : `${nome}: ${prog}`;
+  return objetivoContavel(o) ? `${nome} ${prog}` : `${nome}: ${prog}`;
 }
 
 /**

@@ -1,0 +1,12 @@
+{
+  "id": "tutorial_1_andar",
+  "nome": "Primeiros Passos",
+  "texto": "Bem-vindo a Brasalume. Ande até a bandeira, perto do comerciante, e volte para ele.",
+  "nivelMin": 1,
+  "npc": "merchant",
+  "objetivos": [
+    { "tipo": "chegar", "zona": 4, "x": 24, "y": 22, "raio": 2.5 }
+  ],
+  "recompensa": { "xp": 20, "ferro": 10, "itens": [] },
+  "dica": { "toque": "Toque no chão para andar até a bandeira.", "teclado": "Clique no chão para andar até a bandeira." }
+}

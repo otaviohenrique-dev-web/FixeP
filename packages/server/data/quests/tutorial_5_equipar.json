@@ -1,0 +1,13 @@
+{
+  "id": "tutorial_5_equipar",
+  "nome": "Vestindo-se",
+  "texto": "Equipe a armadura que Garrick lhe deu. Armadura equipada protege no combate.",
+  "nivelMin": 1,
+  "npc": "merchant",
+  "preRequisitos": ["tutorial_4_pocao"],
+  "objetivos": [
+    { "tipo": "equipar", "slot": "armor" }
+  ],
+  "recompensa": { "xp": 60, "ferro": 30, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }] },
+  "dica": { "toque": "Abra a mochila, toque na armadura e equipe.", "teclado": "Abra a mochila (tecla I), clique na armadura e equipe." }
+}

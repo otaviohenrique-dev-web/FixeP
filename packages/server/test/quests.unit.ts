@@ -1,13 +1,13 @@
 // Testes unitários do motor de quests (C1.1): formato dos JSON, aceitar, progresso, entrega e mochila cheia.
 // Uso: npx tsx test/quests.unit.ts   (sem servidor e sem banco: são funções puras)
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { INV_SLOTS, type QuestDef } from "@frixep/shared";
+import { INV_SLOTS, validarFormatoQuest, type QuestDef } from "@frixep/shared";
 import { emptyInventory, addItem } from "../src/game/inventory.js";
 import {
   carregarQuests, QUESTS_DIR, aceitar, progredirAbate, progredirFala, progredirChegada, atualizarColetas, aplicarRecompensa,
-  xpAposGanho, estadoParaCliente, contarItem, type QuestMap, type QuestRt,
+  xpAposGanho, estadoParaCliente, contarItem, progredirUso, resolverItem, type QuestMap, type QuestRt,
 } from "../src/game/quests.js";
 
 const results: boolean[] = [];
@@ -135,7 +135,7 @@ console.log("== Entrega: recompensa, mochila cheia e uma vez só ==");
   aceitar(qs, d, "teste", 5, emptyInventory());
   const rt = qs.get("teste")!;
   const antes = emptyInventory();
-  const naoEntregue = aplicarRecompensa(antes, def);
+  const naoEntregue = aplicarRecompensa(antes, def, "warrior");
   check("recompensa é calculada na cópia (o original não muda)", naoEntregue.ok && antes.iron === 0 && contarItem(antes, "pocao_de_vida") === 0);
   if (naoEntregue.ok) {
     check("recompensa dá tostões e itens na cópia", naoEntregue.inv.iron === 30 && contarItem(naoEntregue.inv, "pocao_de_vida") === 2);
@@ -145,7 +145,7 @@ console.log("== Entrega: recompensa, mochila cheia e uma vez só ==");
   for (let i = 0; i < INV_SLOTS; i++) cheia.slots[i] = { id: "espada_1m_common", qty: 1 };
   cheia.iron = 5;
   const snap = JSON.stringify(cheia);
-  const recusa = aplicarRecompensa(cheia, def);
+  const recusa = aplicarRecompensa(cheia, def, "warrior");
   check("mochila cheia: recusa", !recusa.ok, recusa.ok ? "aceitou" : recusa.error);
   check("mochila cheia: nada se perde (inventário igual ao de antes)", JSON.stringify(cheia) === snap);
   // entregar: marca como entregue e não aceita nem entrega de novo
@@ -162,7 +162,7 @@ console.log("== Entrega: recompensa, mochila cheia e uma vez só ==");
   inv.slots[INV_SLOTS - 1] = { id: pot, qty: 10 };
   const qs = novo();
   aceitar(qs, d, "com_coletar", 1, inv);
-  const r = aplicarRecompensa(inv, def);
+  const r = aplicarRecompensa(inv, def, "warrior");
   check("entrega tira os itens de coletar e paga", r.ok && contarItem(r.inv, pot) === 0 && r.inv.iron === 7 && contarItem(inv, pot) === 10);
 }
 
@@ -177,6 +177,67 @@ console.log("== XP e fotografia ==");
   const foto = estadoParaCliente(qs);
   check("fotografia para o cliente tem id, estado e progresso", foto.length === 1 && foto[0].progresso[0] === 1 && foto[0].estado === "ativa", JSON.stringify(foto));
   void d;
+}
+
+console.log("\n== Tutorial (C1.4): cadeia, objetivos usar/equipar e recompensa por classe ==");
+{
+  const tut = [...carregarQuests(QUESTS_DIR).values()].filter((d) => d.id.startsWith("tutorial_"));
+  const ids = ["tutorial_1_andar", "tutorial_2_primeiro_abate", "tutorial_3_habilidade", "tutorial_4_pocao", "tutorial_5_equipar"];
+  check("tutorial tem as 5 quests", ids.every((id) => tut.some((d) => d.id === id)), tut.map((d) => d.id).join(","));
+  const pre = Object.fromEntries(tut.map((d) => [d.id, d.preRequisitos]));
+  check("cadeia: cada quest tem como pré-requisito a anterior (a 1 não tem)",
+    pre[ids[0]].length === 0 && ids.slice(1).every((id, i) => JSON.stringify(pre[id]) === JSON.stringify([ids[i]])), JSON.stringify(pre));
+  check("todas as quests do tutorial têm dica (toque e teclado)", tut.every((d) => !!d.dica?.toque && !!d.dica?.teclado));
+  check("passo 1 é chegar (zona 4); 2 abater esqueleto na zona 1; 3 usar skill1; 4 coletar poção; 5 equipar armadura",
+    tut.find((d) => d.id === ids[0])!.objetivos[0].tipo === "chegar"
+    && JSON.stringify(tut.find((d) => d.id === ids[1])!.objetivos[0]) === JSON.stringify({ tipo: "abater", kind: "skeleton", qtd: 1, zona: 1 })
+    && JSON.stringify(tut.find((d) => d.id === ids[2])!.objetivos[0]) === JSON.stringify({ tipo: "usar", acao: "skill1", qtd: 1 })
+    && JSON.stringify(tut.find((d) => d.id === ids[3])!.objetivos[0]) === JSON.stringify({ tipo: "coletar", itemId: "pocao_de_vida", qtd: 1 })
+    && JSON.stringify(tut.find((d) => d.id === ids[4])!.objetivos[0]) === JSON.stringify({ tipo: "equipar", slot: "armor" }));
+  const r4 = tut.find((d) => d.id === ids[3])!;
+  check("recompensa com {classe} resolve para cada classe (guerreiro, arqueiro, clérigo, mago)",
+    ["warrior", "archer", "cleric", "mage"].every((c) => resolverItem(r4.recompensa.itens[0].id, c) === `${c}_armor_common`));
+  check("resolverItem troca só o marcador", resolverItem("{classe}_armor_common", "mage") === "mage_armor_common" && resolverItem("pocao_de_vida", "mage") === "pocao_de_vida");
+
+  // uso de habilidade: só conta quando a ação é a da quest, e só para quem está com a quest ativa
+  const dU = defs(base({ id: "usar_skill", objetivos: [{ tipo: "usar", acao: "skill1", qtd: 2 }], npc: null }));
+  const qU = novo();
+  aceitar(qU, dU, "usar_skill", 1, emptyInventory());
+  check("usar: outra habilidade não conta", progredirUso(qU, dU, "skill2").length === 0 && qU.get("usar_skill")!.progresso[0] === 0);
+  progredirUso(qU, dU, "skill1");
+  check("usar: 1 uso de 2 ainda ativa", qU.get("usar_skill")!.estado === "ativa" && qU.get("usar_skill")!.progresso[0] === 1);
+  progredirUso(qU, dU, "skill1");
+  check("usar: 2 usos completam (pronta)", qU.get("usar_skill")!.estado === "pronta" && qU.get("usar_skill")!.progresso[0] === 2);
+  progredirUso(qU, dU, "skill1");
+  check("usar: não passa do total", qU.get("usar_skill")!.progresso[0] === 2);
+  const qF = novo();
+  qF.set("usar_skill", { id: "usar_skill", estado: "entregue", progresso: [2] });
+  check("usar: quest entregue não conta de novo", progredirUso(qF, dU, "skill1").length === 0);
+
+  // equipar: acompanha o equipamento (equipa = cumprido; tira = volta)
+  const dE = defs(base({ id: "equipar_x", objetivos: [{ tipo: "equipar", slot: "armor" }], npc: null }));
+  const inv = emptyInventory();
+  const qE = novo();
+  aceitar(qE, dE, "equipar_x", 1, inv);
+  check("equipar: sem armadura fica ativa", qE.get("equipar_x")!.estado === "ativa");
+  inv.equip.armor = "warrior_armor_common";
+  atualizarColetas(qE.get("equipar_x")!, dE.get("equipar_x")!, inv);
+  check("equipar: com armadura equipada fica pronta", qE.get("equipar_x")!.estado === "pronta");
+  inv.equip.armor = null;
+  atualizarColetas(qE.get("equipar_x")!, dE.get("equipar_x")!, inv);
+  check("equipar: tirar a armadura volta a ativa", qE.get("equipar_x")!.estado === "ativa");
+
+  // recompensa com {classe}: o mago recebe a armadura de mago
+  const dR = defs(base({ id: "rec_classe", npc: null, objetivos: [{ tipo: "equipar", slot: "armor" }], recompensa: { xp: 0, ferro: 0, itens: [{ id: "{classe}_armor_common", qtd: 1 }] } }));
+  const rr = aplicarRecompensa(emptyInventory(), dR.get("rec_classe")!, "mage");
+  check("entrega dá a armadura da classe (mago)", rr.ok && contarItem(rr.inv, "mage_armor_common") === 1 && contarItem(rr.inv, "warrior_armor_common") === 0);
+
+  // formato: usar e equipar com valores errados são recusados com mensagem clara
+  const base0 = JSON.parse(readFileSync(path.join(QUESTS_DIR, "tutorial_3_habilidade.json"), "utf8"));
+  check("formato recusa acao de usar inválida", lancaCom(() => validarFormatoQuest({ ...base0, objetivos: [{ tipo: "usar", acao: "dodge", qtd: 1 }] }, "tutorial_3_habilidade.json"), '"acao"') === "");
+  check("formato recusa slot de equipar inválido", lancaCom(() => validarFormatoQuest({ ...base0, objetivos: [{ tipo: "equipar", slot: "anel" }] }, "tutorial_3_habilidade.json"), '"slot"') === "");
+  check("formato recusa dica longa demais", lancaCom(() => validarFormatoQuest({ ...base0, dica: { toque: "x".repeat(121), teclado: "ok" } }, "tutorial_3_habilidade.json"), '"dica"') === "");
+  check("formato aceita quest sem dica (campo opcional)", !!validarFormatoQuest({ ...base0, dica: undefined }, "tutorial_3_habilidade.json").id);
 }
 
 const falhas = results.filter((r) => !r).length;
