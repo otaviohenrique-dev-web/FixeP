@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_08_habilidade_1",
+  "nome": "Golpe Treinado",
+  "texto": "Use a habilidade 1 cinco vezes em combate. Espere a recarga entre os usos.",
+  "nivelMin": 5,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_07_elmo"],
+  "objetivos": [{ "tipo": "usar", "acao": "skill1", "qtd": 5 }],
+  "recompensa": { "xp": 29, "ferro": 25, "itens": [{ "id": "pocao_de_vida", "qtd": 1 }] },
+  "dica": { "toque": "Toque no botão de habilidade 1 (o primeiro da barra).", "teclado": "Aperte Q para usar a habilidade 1." }
+}

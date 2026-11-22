@@ -1,0 +1,10 @@
+{
+  "id": "cadeia_11_ossos_gelo",
+  "nome": "Esqueletos da Floresta",
+  "texto": "Esqueletos também vagam pela floresta. Derrote 4 e volte para Garrick.",
+  "nivelMin": 7,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_10_lobos"],
+  "objetivos": [{ "tipo": "abater", "kind": "skeleton", "qtd": 4, "zona": 2 }],
+  "recompensa": { "xp": 46, "ferro": 35, "itens": [] }
+}

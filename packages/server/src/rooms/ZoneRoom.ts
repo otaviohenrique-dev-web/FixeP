@@ -25,11 +25,11 @@ import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuse
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
-import { carregarQuests, aceitar, progredirAbate, progredirFala, progredirChegada, progredirUso, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
+import { carregarQuests, questsDoServidor, aceitar, progredirAbate, progredirFala, progredirChegada, progredirUso, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
 import type { QuestEvent, QuestDefsEvent, QuestDef, AcaoUsar } from "@frixep/shared";
 
 /** Quests carregadas dos JSON em packages/server/data/quests. Se algum estiver errado, o servidor nem sobe (mensagem diz o arquivo). */
-const DEFS = carregarQuests();
+const DEFS = carregarQuests(questsDoServidor());
 import { deposit, withdraw, moveInVault, moveCoins, vaultSnapshot, type Vault } from "../game/vault.js";
 
 interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string> }

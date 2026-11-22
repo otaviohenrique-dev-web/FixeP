@@ -1,0 +1,10 @@
+{
+  "id": "cadeia_10_lobos",
+  "nome": "Lobos do Gelo",
+  "texto": "Derrote 5 lobos na Floresta Gélida e volte para Garrick. Os lobos atacam em grupo: puxe um de cada vez.",
+  "nivelMin": 6,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_09_floresta"],
+  "objetivos": [{ "tipo": "abater", "kind": "wolf", "qtd": 5, "zona": 2 }],
+  "recompensa": { "xp": 37, "ferro": 30, "itens": [{ "id": "pocao_de_vida", "qtd": 1 }] }
+}

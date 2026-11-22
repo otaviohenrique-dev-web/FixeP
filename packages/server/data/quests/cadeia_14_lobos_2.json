@@ -1,0 +1,10 @@
+{
+  "id": "cadeia_14_lobos_2",
+  "nome": "Caçada aos Lobos",
+  "texto": "Derrote 5 lobos da Floresta Gélida e volte para Garrick. Você recebe um par de botas.",
+  "nivelMin": 8,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_13_habilidade_3"],
+  "objetivos": [{ "tipo": "abater", "kind": "wolf", "qtd": 5, "zona": 2 }],
+  "recompensa": { "xp": 57, "ferro": 40, "itens": [{ "id": "{classe}_boots_common", "qtd": 1 }] }
+}

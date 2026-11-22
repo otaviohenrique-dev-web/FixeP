@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_07_elmo",
+  "nome": "Vestindo a Cabeça",
+  "texto": "Você recebeu um elmo. Abra a mochila e equipe-o para proteger a cabeça.",
+  "nivelMin": 4,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_06_ossos"],
+  "objetivos": [{ "tipo": "equipar", "slot": "helmet" }],
+  "recompensa": { "xp": 23, "ferro": 20, "itens": [] },
+  "dica": { "toque": "Abra a mochila, toque no elmo e equipe.", "teclado": "Abra a mochila (tecla I), clique no elmo e equipe." }
+}

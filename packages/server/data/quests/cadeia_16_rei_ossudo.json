@@ -1,0 +1,10 @@
+{
+  "id": "cadeia_16_rei_ossudo",
+  "nome": "Rei Ossudo (opcional)",
+  "texto": "O Rei Ossudo, chefe das Cinzas, é perigoso: enfrente-o em grupo, com cuidado.",
+  "nivelMin": 9,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_15_botas"],
+  "objetivos": [{ "tipo": "abater", "kind": "bone_king", "qtd": 1, "zona": 1 }],
+  "recompensa": { "xp": 72, "ferro": 60, "itens": [{ "id": "{classe}_armor_uncommon", "qtd": 1 }] }
+}

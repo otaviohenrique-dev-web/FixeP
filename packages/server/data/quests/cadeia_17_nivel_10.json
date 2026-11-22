@@ -1,0 +1,10 @@
+{
+  "id": "cadeia_17_nivel_10",
+  "nome": "Último Pedido",
+  "texto": "Você chegou perto do nível 10. Volte a Garrick para o último pedido da cidade.",
+  "nivelMin": 10,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_15_botas"],
+  "objetivos": [{ "tipo": "falar", "npc": "merchant" }],
+  "recompensa": { "xp": 89, "ferro": 60, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }] }
+}
