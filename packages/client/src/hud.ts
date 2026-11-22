@@ -207,6 +207,9 @@ const CSS = `
 .hd.touch .hd-tm-low{right:200px;bottom:10px}
 .hd.touch .hd-tm-near{right:200px;bottom:52px}
 .hd.touch .hd-tm-next{right:200px;bottom:94px}
+.hd-cancel{display:none;position:fixed;right:max(26px,env(safe-area-inset-right));top:30%;width:58px;height:58px;border-radius:50%;place-items:center;font:700 26px/1 Georgia,serif;color:#ffd9d3;background:rgba(40,10,12,.72);border:3px solid #c25a4e;pointer-events:none;z-index:60}
+.hd-cancel.on{display:grid}
+.hd-cancel.hot{background:rgba(190,40,30,.9);color:#fff;border-color:#ffb0a4;transform:scale(1.15)}
 .hd-tm svg{width:17px;height:17px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .hd.touch .hd-a-skill1{right:109px;bottom:13px}
 .hd.touch .hd-a-skill2{right:81px;bottom:81px}
@@ -284,6 +287,10 @@ export function mountHud(opts: HudOptions): Hud {
     <div class="hd-lv">NV 1</div>
     <div class="hd-xp"><i></i></div>`;
   document.body.append(root);
+  const cancelEl = document.createElement("div"); // ✕ no canto: arrastar a skill até aqui e soltar cancela o lançamento
+  cancelEl.className = "hd-cancel"; cancelEl.textContent = "✕"; cancelEl.setAttribute("aria-hidden", "true");
+  document.body.append(cancelEl);
+  const overCancel = (x: number, y: number) => { const r = cancelEl.getBoundingClientRect(); return x >= r.left - 18 && x <= r.right + 18 && y >= r.top - 18 && y <= r.bottom + 18; };
 
   const dead = document.createElement("div");
   dead.className = "hd-dead";
@@ -363,7 +370,7 @@ export function mountHud(opts: HudOptions): Hud {
   window.addEventListener("blur", hideTip);
   function pressable(el: HTMLElement, act: () => void, html: () => string, aimOf?: ActionId) {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let held = false, touching = false, moved = false, sx = 0, sy = 0, lx = 0, ly = 0;
+    let held = false, touching = false, moved = false, sx = 0, sy = 0, lx = 0, ly = 0, pid = -1, inCancel = false; // pid: só o dedo que apertou o botão mexe na mira (o outro dedo é o do joystick)
     const clear = () => { clearTimeout(timer); timer = undefined; };
     el.addEventListener("contextmenu", (e) => e.preventDefault());
     el.addEventListener("pointerenter", (e) => {
@@ -374,24 +381,24 @@ export function mountHud(opts: HudOptions): Hud {
     el.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       if (e.pointerType === "mouse") { clear(); hideTip(); act(); return; }
-      touching = true; held = false; moved = false; sx = e.clientX; sy = e.clientY; clear();
+      touching = true; held = false; moved = false; pid = e.pointerId; inCancel = false; sx = e.clientX; sy = e.clientY; clear();
       if (aimOf) opts.aim?.start(aimOf, e.clientX, e.clientY); // prévia de área aparece já ao apertar
       timer = setTimeout(() => { if (moved) return; held = true; showTip(el, html()); navigator.vibrate?.(8); }, TIP_MS);
     });
     // arrastar com o dedo move a mira (habilidades de área); só vira balão se o dedo ficar parado
     window.addEventListener("pointermove", (e) => {
-      if (!touching || e.pointerType === "mouse") return;
+      if (!touching || e.pointerType === "mouse" || e.pointerId !== pid) return; // ignora o dedo do joystick
       if (!moved && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { moved = true; clear(); }
       lx = e.clientX; ly = e.clientY;
-      if (moved && aimOf) opts.aim?.move(e.clientX, e.clientY);
+      if (moved && aimOf) { const hot = inCancel = overCancel(e.clientX, e.clientY); cancelEl.classList.add("on"); cancelEl.classList.toggle("hot", hot); opts.aim?.move(e.clientX, e.clientY); }
     });
     const end = (fire: boolean) => {
       if (!touching) return;
-      touching = false; clear();
+      touching = false; clear(); cancelEl.classList.remove("on", "hot");
       if (held) { hideTip(); held = false; if (aimOf) opts.aim?.end(); return; } // soltar fecha o balão, sem disparar
       // arrastou e soltou em cima do próprio botão: cancela o lançamento
       const r = el.getBoundingClientRect();
-      const cancel = !!aimOf && moved && lx >= r.left - 12 && lx <= r.right + 12 && ly >= r.top - 12 && ly <= r.bottom + 12;
+      const cancel = !!aimOf && moved && (inCancel || lx >= r.left - 12 && lx <= r.right + 12 && ly >= r.top - 12 && ly <= r.bottom + 12);
       if (fire && !cancel) act();
       if (aimOf) opts.aim?.end();
     };
