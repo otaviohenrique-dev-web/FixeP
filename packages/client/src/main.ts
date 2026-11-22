@@ -425,13 +425,14 @@ class WorldScene extends Phaser.Scene {
       if (!a || e.repeat || menuOpen()) return;
       e.preventDefault();
       (document.activeElement as HTMLElement | null)?.blur?.(); // ESPAÇO não deve "clicar" no botão focado
-      if (this.isAreaSkill(a)) { this.aimStart(a); return; } // habilidade de área: segurar mostra a prévia em volta do mouse; soltar lança
+      if (this.aimRange(a) > 0) { this.aimStart(a); return; } // com mira manual (área, Q, esquiva...): segurar a tecla mostra a prévia na direção do mouse; soltar lança. Sem mira (buffs, clérigo): lança na hora
       this.hud.trigger(a);
     });
     window.addEventListener("keyup", (e) => {
       const a = keys[e.code];
       if (a && this.aimA === a) { this.hud.trigger(a); this.aimEnd(); }
     });
+    window.addEventListener("blur", () => this.aimEnd()); // perdeu o foco da janela com a tecla segurada: cancela a mira em vez de ficar presa
   }
 
   /** receptores da sala atual (cada zona é uma sala): estado, eventos de combate, mochila, grupo e chat */
