@@ -1268,6 +1268,12 @@ export class ZoneRoom extends Room<ZoneState> {
       if (m !== p.mana) p.mana = m;
     }
 
+    if (p.queued) { // comando guardado: sai quando o deslocamento acabou e a recarga está pronta; vence em meio segundo
+      const q = p.queued;
+      if (this.t > q.until) { p.queued = null; this.sendTo(id, Evt.ActDenied, { a: q.a }); }
+      else if (p.dashLeft <= 0 && this.t >= (p.cdUntil[q.a] ?? 0) - 0.05) { p.queued = null; this.doAction(id, p, q.a as ActionId, q.ax, q.ay); }
+    }
+
     if (p.dashLeft > 0) {
       const step = Math.min(dt, p.dashLeft);
       p.x = clamp(p.x + p.dashVx * step, 0, this.zone.w - 1);
@@ -1303,20 +1309,29 @@ export class ZoneRoom extends Room<ZoneState> {
     return best;
   }
 
+  private queueAct(p: Player, a: ActionId, ax: number, ay: number) { p.queued = { a, ax, ay, until: this.t + 0.5 }; }
+
+  private sendTo(id: string, evt: string, payload: unknown) { this.clients.getById(id)?.send(evt, payload); }
+
   private doAction(id: string, p: Player, a: ActionId, ax: number, ay: number) {
     const def: ActionDef = effectiveAction(classAction(p.cls as CharClass, a, p.qMode), a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
-    if (this.t < (p.cdUntil[a] ?? 0) - 0.05) return; // em recarga (tolerância de rede)
-    if (p.dashLeft > 0) return; // não age durante o deslocamento
+    const left = (p.cdUntil[a] ?? 0) - this.t;
+    if (left > 0.05) { // em recarga (tolerância de rede)
+      if (left <= 0.25) this.queueAct(p, a, ax, ay); // quase pronta: guarda o comando em vez de perdê-lo
+      else this.sendTo(id, Evt.ActDenied, { a });
+      return;
+    }
+    if (p.dashLeft > 0) return this.queueAct(p, a, ax, ay); // durante a esquiva/investida: o comando espera o fim do deslocamento
     if (a !== "dodge") this.breakShield(p); // atacar ou usar habilidade estoura a bolha de chegada
 
     // Ressurgir sem ninguém caído por perto: avisa e NÃO gasta a recarga
     const fallen = def.kind === "revive" ? this.nearestDead(p, def.radius ?? 0) : null;
-    if (def.kind === "revive" && !fallen) return this.notify(id, "Ninguém caído por perto.");
+    if (def.kind === "revive" && !fallen) { this.sendTo(id, Evt.ActDenied, { a }); return this.notify(id, "Ninguém caído por perto."); }
 
     // custo do recurso: sem o suficiente a ação NÃO acontece e a recarga NÃO é gasta
     const cost = def.cost ?? 0;
     if (cost > 0) {
-      if (p.manaF < cost) return this.notify(id, `${this.classOf(p).resource.name} insuficiente.`);
+      if (p.manaF < cost) { this.sendTo(id, Evt.ActDenied, { a }); return this.notify(id, `${this.classOf(p).resource.name} insuficiente.`); }
       p.manaF -= cost;
       p.mana = Math.floor(p.manaF);
     }
@@ -1326,7 +1341,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const aimDist = Math.hypot(dx, dy);
     if (aimDist < 0.01) { dx = Math.cos(p.face); dy = Math.sin(p.face); } else { dx /= aimDist; dy /= aimDist; }
     p.face = Math.atan2(dy, dx);
-    p.cdUntil[a] = this.t + def.cd;
+    p.cdUntil[a] = this.t + (a === "attack" ? def.cd / Math.max(0.2, p.atkSpeed) : def.cd); // ataque básico: intervalo pela velocidade de ataque
     if (a !== "attack" && a !== "dodge") this.questUso(id, p, a); // a habilidade disparou (quests "usar")
     p.tx = p.x; // ação interrompe o movimento
     p.ty = p.y;

@@ -31,6 +31,8 @@ export interface HudOptions {
 }
 export interface Hud {
   trigger(a: ActionId): void;
+  /** o servidor não executou a ação: devolve a recarga que o botão mostrou */
+  clearCd(a: ActionId): void;
   /** barra de vida vermelha (com a sombra que desce devagar ao levar dano) e os números "67/170" */
   setHp(hp: number, max: number): void;
   /** bolha de chegada: segundos restantes (-1 = protegido durante o carregamento, sem contagem; null = sem bolha) */
@@ -557,7 +559,7 @@ export function mountHud(opts: HudOptions): Hud {
       potCd.style.height = "0";
     }
     for (const [a, e] of els) {
-      const left = (cdUntil[a] ?? 0) - now;
+      const left = a === "attack" ? 0 : (cdUntil[a] ?? 0) - now; // o ataque básico não tem recarga na tela: só o ritmo (velocidade de ataque), sem relógio no botão
       const total = defs[a].cd * 1000;
       if (left > 0) {
         e.btn.classList.add("cool");
@@ -576,6 +578,7 @@ export function mountHud(opts: HudOptions): Hud {
 
   return {
     trigger,
+    clearCd(a) { delete cdUntil[a]; },
     setHp(hp, max) {
       const m = Math.max(1, max), r = Math.max(0, Math.min(1, hp / m));
       hpFill.style.transform = `scaleX(${r})`;

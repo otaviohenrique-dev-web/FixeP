@@ -46,6 +46,9 @@ export class Player extends Schema {
   tx = SPAWN.x;
   ty = SPAWN.y;
   cdUntil: Record<string, number> = {};
+  /** comando guardado por um instante (durante esquiva/investida ou a poucos ms do fim da recarga): sai assim que puder */
+  queued: { a: string; ax: number; ay: number; until: number } | null = null;
+  atkSpeed = 1; // velocidade de ataque (1 = normal): o intervalo do ataque básico é cd / atkSpeed (itens e buffs futuros)
   dashVx = 0;
   dashVy = 0;
   dashLeft = 0;
