@@ -231,6 +231,18 @@ export class Repo {
     await this.db.tx(({ query: q }) => this.writeInventoryTx(q, charId, rows));
   }
 
+  // ---- dicas contextuais (C1.6): uma vez por personagem; o id é validado contra a lista fixa do shared
+  /** Ids de dicas já vistas pelo personagem. */
+  async loadDicas(charId: string): Promise<string[]> {
+    const { rows } = await this.db.query<{ dica_id: string }>("select dica_id from dicas_vistas where personagem_id = $1", [charId]);
+    return rows.map((r) => r.dica_id);
+  }
+
+  /** Marca a dica como vista (repetir não faz nada). */
+  async marcarDica(charId: string, dicaId: string): Promise<void> {
+    await this.db.query("insert into dicas_vistas (personagem_id, dica_id) values ($1, $2) on conflict (personagem_id, dica_id) do nothing", [charId, dicaId]);
+  }
+
   // ---- quests (C1.1)
   /** Estado das quests do personagem (só as que ele aceitou ou entregou). */
   async loadQuests(charId: string): Promise<QuestMap> {

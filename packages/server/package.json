@@ -35,6 +35,8 @@
     "test:curandeiro": "node test/curandeiro.mjs",
     "test:balance:unit": "tsx test/balance.unit.ts",
     "test:telemetria:unit": "tsx test/telemetria.unit.ts",
+    "test:dicas:unit": "tsx test/dicas.unit.ts",
+    "test:dicas": "node test/dicas.mjs",
     "test:ci": "bash test/run-all.sh"
   },
   "dependencies": {
