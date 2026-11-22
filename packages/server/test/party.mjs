@@ -1,7 +1,7 @@
 // Teste de ponta a ponta do GRUPO (party): convite, pedido para entrar, aceite/recusa/expiração, limite, líder, expulsão,
 // XP com bônus, imunidade em PvP, grupo entre zonas, chat do grupo e mensagens inválidas.
 // (servidor com TEST_START_ZONE=1: personagens de teste nascem nas Cinzas, onde há inimigos e PvP; a cidade é testada em cidade.mjs)
-// Uso: PARTY_TEST=1 nos DOIS lados (servidor e teste; encurta convite para 2 s e tolerância de ausência para 3 s):
+// Uso: PARTY_TEST=1 nos DOIS lados (servidor e teste; encurta convite para 4 s e tolerância de ausência para 3 s):
 //   servidor: PARTY_TEST=1 PGLITE_DIR=memory API_RATE_MULT=50 PORT=2999 ... npx tsx src/index.ts   (sem carregar o .env)
 //   teste:    PARTY_TEST=1 SERVER=http://localhost:2999 node test/party.mjs
 import { Client } from "colyseus.js";
@@ -9,7 +9,7 @@ import { Client } from "colyseus.js";
 const HTTP = process.env.SERVER ?? "http://localhost:2999";
 const WS = HTTP.replace(/^http/, "ws");
 const FAST = process.env.PARTY_TEST === "1";
-const INVITE_WAIT = FAST ? 2600 : 31_000; // convite (2 s no teste rápido, 30 s no normal) + folga
+const INVITE_WAIT = FAST ? 4600 : 31_000; // convite (4 s no teste rápido, 30 s no normal) + folga
 const GRACE_WAIT = FAST ? 3600 : 46_000; // tolerância de ausência (3 s / 45 s) + folga
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
@@ -21,7 +21,7 @@ const until = async (fn, ms = 3000) => { const t0 = Date.now(); while (Date.now(
 
 async function account(cls) {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = "Pt" + Math.random().toString(36).slice(2, 8);
+  const name = "Pt" + Math.random().toString(10).slice(2, 8);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error(`criar ${cls}: ${cr.status}`);
   return { token, name };
@@ -114,7 +114,7 @@ E.invite(B.name);
 check("convidar quem já está em grupo é recusado", await until(() => E.said("já está em um grupo")));
 E.invite(E.name);
 check("auto-convite é recusado", await until(() => E.said("a si mesmo")));
-E.invite("NomeQueNaoExiste" + Math.random().toString(36).slice(2, 6));
+E.invite("NomeQueNaoExiste" + Math.random().toString(10).slice(2, 6));
 check("convidar jogador inexistente/offline é recusado", await until(() => E.said("não encontrado")));
 A.join(E.name);
 check("quem já tem grupo não pode pedir para entrar em outro", await until(() => A.said("já está em um grupo")) && E.ev.invites.length === 0);
