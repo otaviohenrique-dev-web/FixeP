@@ -7,6 +7,7 @@ const HTTP = process.env.SERVER ?? "http://localhost:2999";
 const WS = HTTP.replace(/^http/, "ws");
 let ROOM = "zone4"; // as lojas ficam na cidade; a seção do abate vai às Cinzas (zona 1)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(cond, ms = 3000, step = 60) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (cond()) return true; await sleep(step); } return cond(); }
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push(ok);
@@ -15,7 +16,7 @@ const check = (name, ok, detail = "") => {
 
 async function account(prefix) {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = prefix + Math.random().toString(36).slice(2, 7);
+  const name = prefix + Math.random().toString(10).slice(2, 7);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
   if (!cr.ok) throw new Error("criar personagem falhou " + cr.status);
   return { token, name };
@@ -322,6 +323,10 @@ console.log("\n== 7. Abate: tostões garantidos, sacola e Óbolo no chão ==");
   const bags = [];
   A.room.state.items.forEach((g) => { if (g.itemId === "coin_iron" || g.itemId === "coin_obol") bags.push(g.itemId + "x" + g.qty); });
   check("a sacola de tostões cai no chão como os itens (o Óbolo, perto do matador, já é pego sozinho)", bags.includes("coin_iron" + "x25") || A.st.coins.some((c) => c.iron === 25), bags.join(", "));
+  // a sacola que ainda está no chão (25 de ferro) ainda será pega; se o próprio jogador já a pegou durante o combate, ela já
+  // está em `direct` (o aviso de moedas também conta a pega): esperado = pagamentos + sacola que ficou no chão (medido ANTES de recolher)
+  const sacolaNoChao = [...A.room.state.items.values()].filter((g) => g.itemId === "coin_iron").reduce((n, g) => n + g.qty, 0);
+  const esperadoFerro = ironAntes + direct + sacolaNoChao;
   // recolhe
   const tc = Date.now();
   while (Date.now() - tc < 9000 && [...A.room.state.items.values()].some((g) => g.itemId.startsWith("coin_"))) {
@@ -329,8 +334,9 @@ console.log("\n== 7. Abate: tostões garantidos, sacola e Óbolo no chão ==");
     A.room.send("move_to", { x: g.x, y: g.y });
     await sleep(300);
   }
-  await sleep(300);
-  check("pegar as moedas do chão soma ao saldo e não ocupa a mochila", A.st.snap.iron >= ironAntes + direct + 25 && A.st.snap.obols === obolAntes + 1, `iron ${ironAntes}->${A.st.snap.iron} obols ${obolAntes}->${A.st.snap.obols}`);
+  // espera a fotografia do inventário chegar (condição, não tempo fixo); a checagem continua igual
+  await until(() => A.st.snap.iron >= esperadoFerro && A.st.snap.obols === obolAntes + 1, 5000);
+  check("pegar as moedas do chão soma ao saldo e não ocupa a mochila", A.st.snap.iron >= esperadoFerro && A.st.snap.obols === obolAntes + 1, `iron ${ironAntes}->${A.st.snap.iron} obols ${obolAntes}->${A.st.snap.obols}`);
 }
 
 console.log("\n== 8. Persistência do saldo ==");

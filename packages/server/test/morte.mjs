@@ -12,7 +12,7 @@ const until = async (fn, ms) => { for (let t = 0; t < ms; t += 100) { if (fn()) 
 
 async function account(tag, cls = "warrior") {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = tag + Math.random().toString(36).slice(2, 7);
+  const name = tag + Math.random().toString(10).slice(2, 7);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error("criar personagem " + cr.status);
   return { token, name };

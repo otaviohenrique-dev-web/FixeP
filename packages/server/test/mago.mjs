@@ -17,7 +17,7 @@ async function until(cond, ms = 15000, step = 100) {
 }
 
 const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-const name = "Mag" + Math.random().toString(36).slice(2, 7);
+const name = "Mag" + Math.random().toString(10).slice(2, 7);
 const bad = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "necromante" }) });
 check("classe inexistente é recusada", bad.status === 400);
 const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "mage" }) });

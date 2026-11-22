@@ -21,7 +21,7 @@ const until = async (fn, ms = 3000) => { const t0 = Date.now(); while (Date.now(
 
 async function account(cls) {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = "Pt" + Math.random().toString(36).slice(2, 8);
+  const name = "Pt" + Math.random().toString(10).slice(2, 8);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error(`criar ${cls}: ${cr.status}`);
   return { token, name };
@@ -114,7 +114,7 @@ E.invite(B.name);
 check("convidar quem já está em grupo é recusado", await until(() => E.said("já está em um grupo")));
 E.invite(E.name);
 check("auto-convite é recusado", await until(() => E.said("a si mesmo")));
-E.invite("NomeQueNaoExiste" + Math.random().toString(36).slice(2, 6));
+E.invite("NomeQueNaoExiste" + Math.random().toString(10).slice(2, 6));
 check("convidar jogador inexistente/offline é recusado", await until(() => E.said("não encontrado")));
 A.join(E.name);
 check("quem já tem grupo não pode pedir para entrar em outro", await until(() => A.said("já está em um grupo")) && E.ev.invites.length === 0);

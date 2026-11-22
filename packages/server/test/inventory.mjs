@@ -13,7 +13,7 @@ const check = (name, ok, detail = "") => {
 const alive = async () => { try { return (await fetch(`${HTTP}/health`, { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; } };
 
 const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-const name = "Inv" + Math.random().toString(36).slice(2, 8);
+const name = "Inv" + Math.random().toString(10).slice(2, 8);
 const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
 if (!cr.ok) throw new Error("criar personagem de teste falhou " + cr.status);
 

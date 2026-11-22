@@ -13,7 +13,7 @@ const check = (name, ok, detail = "") => {
 };
 
 const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-const name = "Zn" + Math.random().toString(36).slice(2, 8);
+const name = "Zn" + Math.random().toString(10).slice(2, 8);
 const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
 if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
 const zoneApi = async () => (await (await fetch(`${HTTP}/api/me`, { headers: { Authorization: `Bearer ${token}` } })).json()).character.zone;
@@ -168,7 +168,7 @@ await D.r.leave(true);
 console.log("\n== Em combate não se atravessa ==");
 {
   const g = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const nm = "Cb" + Math.random().toString(36).slice(2, 8);
+  const nm = "Cb" + Math.random().toString(10).slice(2, 8);
   await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${g.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: nm, class: "warrior" }) });
   const h = await join("zone4", g.token);
   h.r.send("move_to", { x: 24, y: 2 });

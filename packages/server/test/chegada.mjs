@@ -13,7 +13,7 @@ const until = async (fn, ms = 5000, step = 50) => { const t0 = Date.now(); while
 
 async function account(cls = "warrior") {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = "Ch" + Math.random().toString(36).slice(2, 8);
+  const name = "Ch" + Math.random().toString(10).slice(2, 8);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
   return token;

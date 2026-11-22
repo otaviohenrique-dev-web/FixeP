@@ -13,7 +13,7 @@ const check = (name, ok, detail = "") => {
 
 async function spawn(prefix) {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = prefix + Math.random().toString(36).slice(2, 7);
+  const name = prefix + Math.random().toString(10).slice(2, 7);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
   if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
   const room = await new Client(WS).joinOrCreate("zone", { token });
