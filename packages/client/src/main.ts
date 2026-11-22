@@ -51,6 +51,11 @@ const toGrid = (sx: number, sy: number) => ({
   x: (sx / (TILE_W / 2) + sy / (TILE_H / 2)) / 2,
   y: (sy / (TILE_H / 2) - sx / (TILE_W / 2)) / 2,
 });
+/** alcance máximo (tiles) para manter o foco e a seleção: mais longe que isso, o alvo se solta */
+const TARGET_RANGE = 14;
+/** prioridade do alvo sem foco: "low" = menos vida em % (padrão); "near" = mais próximo. Fica salva neste navegador */
+const TMODE_KEY = "frixep.tmode";
+function savedTargetMode(): "low" | "near" { try { return localStorage.getItem(TMODE_KEY) === "near" ? "near" : "low"; } catch { return "low"; } }
 // um círculo de raio r (tiles) vira uma elipse no chão isométrico
 const ELL_W = Math.SQRT2 * TILE_W; // por unidade de raio => largura total
 const ELL_H = Math.SQRT2 * TILE_H;
@@ -141,7 +146,14 @@ class WorldScene extends Phaser.Scene {
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
-  private lockKey = ""; // alvo travado do toque ("e:id" ou "p:id"): as ações mirram nele
+  private lockKey = ""; // alvo travado ("e:id" ou "p:id"; toque ou clique): as ações mirram nele
+  private aimG!: Phaser.GameObjects.Graphics; // prévia da área da habilidade de área (arrastada com o dedo)
+  private aimA: ActionId | null = null; // habilidade de área sendo mirada (botão segurado)
+  private aimScreen: { x: number; y: number } | null = null; // onde o dedo está (tela), depois de arrastar
+  private chase: { key: string } | null = null; // ataque básico: andando até o alvo travado que saiu do alcance
+  private chaseMoveAt = 0; // próximo reenvio do destino enquanto anda atrás do alvo
+  private nextBasicAt = 0; // quando o ataque básico volta a estar pronto (ms do navegador)
+  private targetMode: "low" | "near" = savedTargetMode(); // prioridade sem foco (botões < e > do ataque básico)
   private uiScale = 1; // contra-escala dos textos quando a câmera se afasta (celular)
 
   private get state(): any { return this.room?.state; }
@@ -262,6 +274,7 @@ class WorldScene extends Phaser.Scene {
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
     this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId }); // faixa do tutorial e bandeira (C1.4)
     this.selG = this.add.graphics().setDepth(0.35);
+    this.aimG = this.add.graphics().setDepth(0.36);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
     if (!this.uiMounted) { this.mountUi(); this.uiMounted = true; }
@@ -315,7 +328,7 @@ class WorldScene extends Phaser.Scene {
   /** interface do DOM (HUD, mochila, loja, baú, chat, grupo, FPS) e entradas: montada UMA vez; as salas só trocam os receptores */
   private mountUi() {
     this.lowHp = mountLowHp();
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), aim: { start: (a) => this.aimStart(a), move: (x, y) => this.aimMove(x, y), end: () => this.aimEnd() }, targetMode: this.targetMode, onTargetMode: (m) => this.setTargetMode(m), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
     this.hud.setAutoPotion(this.autoPot);
     this.joy = mountJoystick();
     this.applyTouch();
@@ -378,9 +391,13 @@ class WorldScene extends Phaser.Scene {
       }
       if (ptr.wasTouch || this.touchMode) { // no celular quem anda é o joystick; tocar num inimigo trava a mira nele, tocar no vazio solta
         this.lockKey = this.enemyAt(ptr.worldX, ptr.worldY) ?? "";
+        this.chase = null;
         if (this.selId) this.deselect();
         return;
       }
+      // no computador: clicar num inimigo trava o foco nele (sem andar até ele); clicar no chão mantém o foco (Esc solta)
+      const foe = this.enemyAt(ptr.worldX, ptr.worldY);
+      if (foe) { this.lockKey = foe; this.chase = null; if (this.selId) this.deselect(); return; }
       if (this.selId) this.deselect();
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
       const near = this.ground.nearest(x, y, 0.9); // clicar num item no chão também pede para pegá-lo (se estiver ao alcance)
@@ -404,7 +421,7 @@ class WorldScene extends Phaser.Scene {
     };
     window.addEventListener("keydown", (e) => {
       if (isTypingTarget() || this.busy) return; // digitando no chat
-      if (e.code === "Escape" && this.selId) this.deselect();
+      if (e.code === "Escape") { this.lockKey = ""; this.chase = null; if (this.selId) this.deselect(); }
       if (e.code === "KeyZ" && !e.repeat && !menuOpen() && this.cls === "cleric") { this.hud.toggleQ(); return; } // Z: alterna o Q do Clérigo
       if (e.code === "KeyF" && !e.repeat && !menuOpen()) { // F: bebe a primeira poção
         this.drinkPotion();
@@ -414,8 +431,14 @@ class WorldScene extends Phaser.Scene {
       if (!a || e.repeat || menuOpen()) return;
       e.preventDefault();
       (document.activeElement as HTMLElement | null)?.blur?.(); // ESPAÇO não deve "clicar" no botão focado
+      if (this.aimRange(a) > 0) { this.aimStart(a); return; } // com mira manual (área, Q, esquiva...): segurar a tecla mostra a prévia na direção do mouse; soltar lança. Sem mira (buffs, clérigo): lança na hora
       this.hud.trigger(a);
     });
+    window.addEventListener("keyup", (e) => {
+      const a = keys[e.code];
+      if (a && this.aimA === a) { this.hud.trigger(a); this.aimEnd(); }
+    });
+    window.addEventListener("blur", () => this.aimEnd()); // perdeu o foco da janela com a tecla segurada: cancela a mira em vez de ficar presa
   }
 
   /** receptores da sala atual (cada zona é uma sala): estado, eventos de combate, mochila, grupo e chat */
@@ -1242,6 +1265,10 @@ class WorldScene extends Phaser.Scene {
         return { x: best.x, y: best.y };
       }
     }
+    // foco travado (toque ou clique): as habilidades mirram nele, mesmo com o mouse ou o polegar fora dele
+    // (a esquiva e as ações sem alcance não mirram no foco: a esquiva vai para onde o polegar/mouse aponta, não para cima do inimigo)
+    const focus = this.reach(a) > 0 ? this.targets().find((t) => t.key === this.lockKey) : undefined;
+    if (focus) return { x: focus.x, y: focus.y };
     if (!this.touchMode) {
       const p = this.input.activePointer;
       p.updateWorldPoint(this.cameras.main);
@@ -1266,55 +1293,169 @@ class WorldScene extends Phaser.Scene {
     switch (d.kind) {
       case "melee": return (d.offset ?? 0) + (d.radius ?? 1) + 1;
       case "dashHit": return (d.dash ?? 0) + (d.radius ?? 1);
-      case "projectile": return d.range ?? 8;
+      case "projectile": case "blast": case "healFocus": return d.range ?? 8; // Bola de Fogo (mago) e Cura Focada (clérigo) também têm alcance
       case "trap": case "rain": return d.placeRange ?? 8;
       case "pull": return 6;
       default: return 0;
     }
   }
 
-  /** alvos possíveis: inimigos vivos e, com você em PvP, outros jogadores em PvP que não são do seu grupo */
-  private targets(): { key: string; x: number; y: number }[] {
+  /** alvos possíveis: inimigos vivos e, com você em PvP, outros jogadores em PvP que não são do seu grupo; `r` = vida (0 a 1) */
+  private targets(): { key: string; x: number; y: number; r: number }[] {
     const me = this.me();
-    const out: { key: string; x: number; y: number }[] = [];
+    const out: { key: string; x: number; y: number; r: number }[] = [];
     if (!me) return out;
-    this.state.enemies.forEach((e: any, id: string) => { if (e.st !== "dead") out.push({ key: `e:${id}`, x: e.x, y: e.y }); });
+    this.state.enemies.forEach((e: any, id: string) => { if (e.st !== "dead") out.push({ key: `e:${id}`, x: e.x, y: e.y, r: e.hp / Math.max(1, e.maxHp) }); });
     if (me.pvp) {
       const mine = String(me.party ?? "");
       this.state.players.forEach((p: any, id: string) => {
         if (id === this.room.sessionId || p.dead || !p.pvp || (mine && p.party === mine)) return;
-        out.push({ key: `p:${id}`, x: p.x, y: p.y });
+        out.push({ key: `p:${id}`, x: p.x, y: p.y, r: p.hp / Math.max(1, p.maxHp) });
       });
     }
     return out;
   }
 
-  /** alvo travado (se ainda vale e está ao alcance) ou o mais próximo ao alcance da ação */
-  private assistTarget(a: ActionId): { key: string; x: number; y: number } | null {
+  /** sem foco: o alvo com menos vida dentro do alcance da ação (empate: o mais próximo); com foco, o foco se ele estiver no alcance */
+  private assistTarget(a: ActionId): { key: string; x: number; y: number; r: number } | null {
     const me = this.me();
     const reach = this.reach(a);
     if (!me || reach <= 0) return null;
-    let best: { key: string; x: number; y: number } | null = null, bd = reach;
+    let best: { key: string; x: number; y: number; r: number } | null = null, bd = Infinity;
     for (const t of this.targets()) {
       const d = Math.hypot(t.x - me.x, t.y - me.y);
-      if (t.key === this.lockKey && d <= reach) return t;
-      if (d < bd) { bd = d; best = t; }
+      if (d > reach) continue;
+      if (t.key === this.lockKey) return t;
+      const better = !best || (this.targetMode === "near" ? d < bd : t.r < best.r || (t.r === best.r && d < bd));
+      if (better) { best = t; bd = d; }
     }
     if (best) this.lockKey = best.key;
     return best;
   }
 
-  /** solta o alvo travado se ele morreu, saiu do PvP ou está longe demais */
+  /** solta o foco se o alvo saiu do PvP ou está longe demais; se ele morreu, o próximo alvo no alcance vira o foco; a seleção se desfaz ao se afastar */
   private checkLock() {
-    if (!this.lockKey) { if (this.touchMode) this.assistTarget("attack"); return; } // sem alvo: já mostra o mais próximo ao alcance do ataque
     const me = this.me();
+    if (me && this.selId) {
+      const s = this.state.players.get(this.selId);
+      if (!s || Math.hypot(s.x - me.x, s.y - me.y) > TARGET_RANGE) this.deselect();
+    }
+    if (!this.lockKey) { if (this.touchMode) this.assistTarget("attack"); return; } // sem foco: no celular já mostra o mais próximo ao alcance do ataque
     const t = this.targets().find((x) => x.key === this.lockKey);
-    if (!me || !t || Math.hypot(t.x - me.x, t.y - me.y) > 14) this.lockKey = "";
+    if (!me || !t) { this.lockKey = ""; if (me) this.assistTarget("attack"); return; } // morreu (ou saiu do PvP): pega o próximo
+    if (Math.hypot(t.x - me.x, t.y - me.y) > TARGET_RANGE) this.lockKey = "";
   }
 
-  /** círculo verde sutil sob o jogador selecionado e anel vermelho sob o alvo travado (toque) */
+  setTargetMode(m: "low" | "near") {
+    this.targetMode = m;
+    try { localStorage.setItem(TMODE_KEY, m); } catch { /* sem armazenamento */ }
+  }
+
+  /** habilidade de área (armadilha, chuva, puxada): a mira mostra a área */
+  private isAreaSkill(a: ActionId): boolean {
+    const me = this.me();
+    const k = me ? classAction(this.cls, a, Number(me.qMode) || 0).kind : "";
+    return k === "trap" || k === "rain" || k === "pull";
+  }
+
+  /** ataque básico em andamento: confere se o alvo ainda existe e se já está no alcance; então ataca (respeitando a recarga) */
+  private updateChase(time: number) {
+    if (!this.chase) return;
+    const me = this.me();
+    const t = this.targets().find((q) => q.key === this.chase!.key);
+    if (!me || me.dead || !t || this.lockKey !== this.chase.key || this.joy?.vector()) { this.chase = null; return; }
+    const reach = this.reach("attack");
+    const d = Math.hypot(t.x - me.x, t.y - me.y);
+    if (d <= reach) {
+      if (performance.now() >= this.nextBasicAt) { this.chase = null; this.act("attack"); }
+      return;
+    }
+    if (time >= this.chaseMoveAt) { // reenvia o destino (o alvo também anda): para a uma distância de ataque
+      this.chaseMoveAt = time + 250;
+      const k = (reach * 0.8) / d;
+      this.room.send(Msg.MoveTo, { x: t.x - (t.x - me.x) * k, y: t.y - (t.y - me.y) * k });
+    }
+  }
+
+  /** ponto da mira arrastada (em tiles), a partir da posição do dedo na tela */
+  private aimGrid(): { x: number; y: number } {
+    const rect = this.game.canvas.getBoundingClientRect();
+    const k = this.scale.width / Math.max(1, rect.width);
+    const w = this.cameras.main.getWorldPoint((this.aimScreen!.x - rect.left) * k, (this.aimScreen!.y - rect.top) * k);
+    return toGrid(w.x, w.y);
+  }
+
+  /** toque segurado numa habilidade de área: a prévia aparece; arrastar muda o ponto; soltar lança */
+  aimStart(a: ActionId) {
+    // área: mostra a área; alcance/direção (corpo a corpo, projétil): mostra o alcance e a linha até a mira; básico e buffs: nada
+    this.aimA = a !== "attack" && this.aimRange(a) > 0 ? a : null;
+    this.aimScreen = null;
+  }
+  aimMove(x: number, y: number) { if (this.aimA) this.aimScreen = { x, y }; }
+  aimEnd() { this.aimA = null; this.aimScreen = null; this.aimG?.clear(); }
+
+  /** prévia da área (armadilha, chuva, puxada) com o mesmo limite de alcance e a mesma regra de ponto do servidor */
+  private drawAimPreview(time: number) {
+    const me = this.me();
+    if (!me || !this.aimA) return;
+    const def = classAction(this.cls, this.aimA, Number(me.qMode) || 0);
+    if (!this.isAreaSkill(this.aimA)) { this.drawReachAim(me, this.aimA); return; }
+    const range = def.placeRange ?? 8;
+    const r = def.radius ?? (def.kind === "pull" ? 4 : def.kind === "rain" ? 2 : 1.5);
+    const mira = this.aimScreen ? this.aimGrid() : this.aim(this.aimA);
+    const dx = mira.x - me.x, dy = mira.y - me.y, dd = Math.hypot(dx, dy);
+    const ux = dd < 0.01 ? Math.cos(me.face) : dx / dd, uy = dd < 0.01 ? Math.sin(me.face) : dy / dd;
+    const d = Math.min(dd < 0.01 ? range * 0.5 : dd, range); // a área nunca passa do alcance
+    const cx = me.x + ux * d, cy = me.y + uy * d;
+    const ring = (x: number, y: number, rad: number) => {
+      const pts: { x: number; y: number }[] = [];
+      for (let i = 0; i < 48; i++) {
+        const an = (i / 48) * Math.PI * 2;
+        const p = toScreen(x + Math.cos(an) * rad, y + Math.sin(an) * rad);
+        pts.push({ x: p.sx, y: p.sy });
+      }
+      return pts;
+    };
+    const col = def.kind === "pull" ? 0x9fd8ff : 0xff9a4d;
+    const pulse = 0.7 + 0.2 * Math.sin(time / 150);
+    this.aimG.lineStyle(2, 0xffffff, 0.3).strokePoints(ring(me.x, me.y, range), true, true); // alcance máximo
+    this.aimG.fillStyle(col, 0.22 * pulse).fillPoints(ring(cx, cy, r), true, true);
+    this.aimG.lineStyle(2, col, 0.95).strokePoints(ring(cx, cy, r), true, true);
+  }
+
+  /** alcance da mira manual (arrastar o dedo): habilidades de área, de alcance/direção e a esquiva (distância do pulo). 0 = sem mira manual.
+   *  O clérigo fica como está: só as habilidades de área dele (Compressor de Ar e Julgamento) têm mira manual. */
+  private aimRange(a: ActionId): number {
+    if (a === "attack") return 0;
+    if (this.isAreaSkill(a)) return this.reach(a);
+    if (this.cls === "cleric") return 0;
+    const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0);
+    return d.kind === "dodge" ? d.dash ?? 0 : this.reach(a);
+  }
+
+  /** habilidade de alcance ou direção: anel do alcance e uma linha até a mira (arrastar muda a direção) */
+  private drawReachAim(me: any, a: ActionId) {
+    const L = this.aimRange(a);
+    if (L <= 0) return;
+    const mira = this.aimScreen ? this.aimGrid() : this.aim(a);
+    const dx = mira.x - me.x, dy = mira.y - me.y, dd = Math.hypot(dx, dy) || 1;
+    const ux = dd < 0.01 ? Math.cos(me.face) : dx / dd, uy = dd < 0.01 ? Math.sin(me.face) : dy / dd;
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i < 48; i++) {
+      const an = (i / 48) * Math.PI * 2;
+      const p = toScreen(me.x + Math.cos(an) * L, me.y + Math.sin(an) * L);
+      pts.push({ x: p.sx, y: p.sy });
+    }
+    this.aimG.lineStyle(2, 0xffffff, 0.3).strokePoints(pts, true, true);
+    const from = toScreen(me.x, me.y), to = toScreen(me.x + ux * L, me.y + uy * L);
+    this.aimG.lineStyle(3, 0xffe08a, 0.85).lineBetween(from.sx, from.sy, to.sx, to.sy);
+  }
+
+  /** círculo verde sutil sob o jogador selecionado e anel vermelho sob o alvo travado (toque e computador) */
   private drawMarks(time: number) {
     this.selG.clear();
+    this.aimG.clear();
+    if (this.aimA) this.drawAimPreview(time);
     if (this.selId) {
       const v = this.sprites.get(`p:${this.selId}`);
       if (!v || !this.state.players.has(this.selId)) this.deselect();
@@ -1325,11 +1466,16 @@ class WorldScene extends Phaser.Scene {
         if (mine?.obj.visible) this.selG.lineStyle(2, 0x6fe08a, 0.5).lineBetween(mine.obj.x, mine.obj.y, v.obj.x, v.obj.y);
       }
     }
-    if (this.lockKey && this.touchMode) {
+    if (this.lockKey) {
       const v = this.sprites.get(this.lockKey);
       if (v?.obj.visible) {
         const k = 1 + 0.06 * Math.sin(time / 180);
-        this.selG.lineStyle(3, 0xff5a4a, 0.9).strokeEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k).fillStyle(0xff5a4a, 0.12).fillEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k);
+        // vermelho enquanto o alvo está ao alcance do ataque básico; apagado quando ele sai do alcance
+        const me = this.me();
+        const ft = this.targets().find((q) => q.key === this.lockKey);
+        const inR = !!me && !!ft && Math.hypot(ft.x - me.x, ft.y - me.y) <= this.reach("attack");
+        const col = inR ? 0xff5a4a : 0x9aa3b0, alpha = inR ? 1 : 0.5;
+        this.selG.lineStyle(3, col, 0.9 * alpha).strokeEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k).fillStyle(col, 0.12 * alpha).fillEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k);
       }
     }
   }
@@ -1345,7 +1491,15 @@ class WorldScene extends Phaser.Scene {
   private act(a: ActionId) {
     const me = this.me();
     if (!me || me.dead || !this.room || this.busy) return;
-    const { x, y } = this.aim(a);
+    // ataque básico com o alvo travado fora do alcance: anda até ele e ataca ao chegar (o joystick cancela)
+    if (a === "attack" && this.lockKey) {
+      const t = this.targets().find((q) => q.key === this.lockKey);
+      const reach = this.reach("attack");
+      if (t && reach > 0 && Math.hypot(t.x - me.x, t.y - me.y) > reach) { this.chase = { key: this.lockKey }; this.chaseMoveAt = 0; return; }
+    }
+    if (a !== "attack") this.chase = null;
+    if (a === "attack") this.nextBasicAt = performance.now() + classAction(this.cls, "attack", Number(me.qMode) || 0).cd * 1000;
+    const { x, y } = this.aimA === a && this.aimScreen ? this.aimGrid() : this.aim(a);
     const payload: ActPayload = { a, ax: x, ay: y };
     this.room.send(Msg.Act, payload);
     // resposta imediata no cliente (o servidor continua sendo quem decide o resultado)
@@ -1383,6 +1537,7 @@ class WorldScene extends Phaser.Scene {
       if (this.pendingVault && nearV) { this.pendingVault = false; this.vault.open(); }
     }
     this.checkLock();
+    this.updateChase(time);
     timed("marcas", () => this.drawMarks(time));
     timed("portais", () => this.gates?.update(time));
     const frozen = time < this.hitstopUntil; // hitstop: congela a interpolação por instantes

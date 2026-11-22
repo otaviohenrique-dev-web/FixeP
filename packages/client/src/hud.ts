@@ -14,6 +14,11 @@ export interface HudOptions {
   name?: string;
   /** chamado quando o jogador aciona uma ação e ela não está em recarga local */
   onAction(a: ActionId): void;
+  /** toque segurado numa habilidade: prévia de área; arrastar move a mira; soltar lança (o cliente decide o que mira) */
+  aim?: { start(a: ActionId): void; move(x: number, y: number): void; end(): void };
+  /** prioridade do alvo sem foco (botões < e > ao lado do ataque básico) e quando o jogador troca */
+  targetMode?: "low" | "near";
+  onTargetMode?(m: "low" | "near"): void;
   /** botão de poção (no celular, onde não há tecla) */
   onPotion?(): void;
   /** o jogador ligou ou desligou a auto-poção (o botão "Auto" da barra) */
@@ -195,6 +200,11 @@ const CSS = `
 .hd.touch .hd-bar{left:auto;right:max(10px,env(safe-area-inset-right));bottom:calc(max(10px,env(safe-area-inset-bottom)) + 14px);transform:none;display:block;width:224px;height:232px;padding:0;background:none;border:0;box-shadow:none}
 .hd.touch .hd-btn{position:absolute;width:54px;height:54px;border-radius:50%}
 .hd.touch .hd-btn.big{width:80px;height:80px;right:0;bottom:0}
+.hd-tm{display:none;position:absolute;width:30px;height:30px;padding:0;border-radius:50%;place-items:center;cursor:pointer;font:700 15px/1 "Cinzel",Georgia,serif;color:#f0dfb8;background:rgba(12,18,28,.85);border:2px solid #7a5f2e;opacity:.55;touch-action:manipulation;-webkit-tap-highlight-color:transparent;z-index:3}
+.hd.touch .hd-tm{display:grid}
+.hd-tm.on{opacity:1;border-color:#f0cf86;box-shadow:0 0 0 2px rgba(255,225,160,.35)}
+.hd.touch .hd-tm-low{right:90px;bottom:24px}
+.hd.touch .hd-tm-near{right:30px;bottom:92px}
 .hd.touch .hd-a-skill1{right:109px;bottom:13px}
 .hd.touch .hd-a-skill2{right:81px;bottom:81px}
 .hd.touch .hd-a-skill3{right:13px;bottom:109px}
@@ -348,9 +358,9 @@ export function mountHud(opts: HudOptions): Hud {
   function hideTip() { tipEl.classList.remove("on"); tipFor = null; }
   document.addEventListener("pointerdown", (e) => { if (tipFor && !tipFor.contains(e.target as Node)) hideTip(); }, true);
   window.addEventListener("blur", hideTip);
-  function pressable(el: HTMLElement, act: () => void, html: () => string) {
+  function pressable(el: HTMLElement, act: () => void, html: () => string, aimOf?: ActionId) {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let held = false, touching = false;
+    let held = false, touching = false, moved = false, sx = 0, sy = 0, lx = 0, ly = 0;
     const clear = () => { clearTimeout(timer); timer = undefined; };
     el.addEventListener("contextmenu", (e) => e.preventDefault());
     el.addEventListener("pointerenter", (e) => {
@@ -361,14 +371,26 @@ export function mountHud(opts: HudOptions): Hud {
     el.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       if (e.pointerType === "mouse") { clear(); hideTip(); act(); return; }
-      touching = true; held = false; clear();
-      timer = setTimeout(() => { held = true; showTip(el, html()); navigator.vibrate?.(8); }, TIP_MS);
+      touching = true; held = false; moved = false; sx = e.clientX; sy = e.clientY; clear();
+      if (aimOf) opts.aim?.start(aimOf); // prévia de área aparece já ao apertar
+      timer = setTimeout(() => { if (moved) return; held = true; showTip(el, html()); navigator.vibrate?.(8); }, TIP_MS);
+    });
+    // arrastar com o dedo move a mira (habilidades de área); só vira balão se o dedo ficar parado
+    window.addEventListener("pointermove", (e) => {
+      if (!touching || e.pointerType === "mouse") return;
+      if (!moved && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { moved = true; clear(); }
+      lx = e.clientX; ly = e.clientY;
+      if (moved && aimOf) opts.aim?.move(e.clientX, e.clientY);
     });
     const end = (fire: boolean) => {
       if (!touching) return;
       touching = false; clear();
-      if (held) { hideTip(); held = false; return; } // soltar fecha o balão, sem disparar
-      if (fire) act();
+      if (held) { hideTip(); held = false; if (aimOf) opts.aim?.end(); return; } // soltar fecha o balão, sem disparar
+      // arrastou e soltou em cima do próprio botão: cancela o lançamento
+      const r = el.getBoundingClientRect();
+      const cancel = !!aimOf && moved && lx >= r.left - 12 && lx <= r.right + 12 && ly >= r.top - 12 && ly <= r.bottom + 12;
+      if (fire && !cancel) act();
+      if (aimOf) opts.aim?.end();
     };
     el.addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") end(true); });
     el.addEventListener("pointercancel", () => end(false));
@@ -388,10 +410,34 @@ export function mountHud(opts: HudOptions): Hud {
     b.innerHTML = `<span class="hd-key">${def.key}</span>${art ? `<span class="hd-art"><img src="${art}" alt="" draggable="false"></span>` : def.icon ? `<span class="hd-ic">${ICON[def.icon] ?? ""}</span>` : ""}<span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
     // pointerdown: resposta imediata no toque, sem esperar o "click"
     // toque: dispara ao soltar (um toque longo abre o balão em vez de disparar); mouse: dispara ao apertar
-    pressable(b, () => trigger(a), () => tipHtml(skillTooltip(defs[a], res.name)));
+    pressable(b, () => trigger(a), () => tipHtml(skillTooltip(defs[a], res.name)), a);
     bar.append(b);
     els.set(a, { btn: b, cd: b.querySelector(".hd-cd")!, n: b.querySelector(".hd-cdn")! });
   }
+
+  // prioridade do alvo sem foco: "<" menos vida em % (padrão) e ">" mais próximo; ficam ao lado do ataque básico (só no celular)
+  let tMode: "low" | "near" = opts.targetMode ?? "low";
+  const tmBtns: [HTMLButtonElement, "low" | "near", string][] = [];
+  for (const [m, label, title] of [["low", "<", "Prioridade: menos vida (%)"], ["near", ">", "Prioridade: mais próximo"]] as const) {
+    const t = document.createElement("button");
+    t.type = "button";
+    t.className = `hd-tm hd-tm-${m}`;
+    t.textContent = label;
+    t.title = title;
+    t.setAttribute("aria-label", title);
+    t.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      tMode = m;
+      paintTm();
+      opts.onTargetMode?.(m);
+    });
+    tmBtns.push([t, m, title]);
+    bar.append(t);
+  }
+  function paintTm() {
+    for (const [t, m] of tmBtns) { t.classList.toggle("on", m === tMode); t.setAttribute("aria-pressed", String(m === tMode)); }
+  }
+  paintTm();
 
   // Clérigo: botão ⇄ no Q para alternar entre Cura em Área e Cura Focada (também a tecla Z); o servidor só troca fora de combate
   const qBtn = els.get("skill1")!.btn;
