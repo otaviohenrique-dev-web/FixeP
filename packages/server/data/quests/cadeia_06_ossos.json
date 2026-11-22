@@ -1,0 +1,10 @@
+{
+  "id": "cadeia_06_ossos",
+  "nome": "Ossos das Cinzas",
+  "texto": "Os esqueletos das Cinzas estão saindo do chão. Derrote 4, ataque os que estiverem sozinhos, e volte para Garrick.",
+  "nivelMin": 4,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_05_cinzas"],
+  "objetivos": [{ "tipo": "abater", "kind": "skeleton", "qtd": 4, "zona": 1 }],
+  "recompensa": { "xp": 23, "ferro": 25, "itens": [{ "id": "{classe}_helmet_common", "qtd": 1 }] }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_09_floresta",
+  "nome": "Floresta Gélida",
+  "texto": "Pelo mapa-mundo, vá até a Floresta Gélida. Lobos andam em bando: lute só contra os que estiverem separados.",
+  "nivelMin": 6,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_08_habilidade_1"],
+  "objetivos": [{ "tipo": "chegar", "zona": 2, "x": 8, "y": 10, "raio": 6 }],
+  "recompensa": { "xp": 37, "ferro": 30, "itens": [{ "id": "pocao_de_vida", "qtd": 1 }] },
+  "dica": { "toque": "Ande até o portão do norte, pise nele e escolha Floresta Gélida no mapa.", "teclado": "Ande até o portão do norte, passe por ele e escolha Floresta Gélida no mapa." }
+}

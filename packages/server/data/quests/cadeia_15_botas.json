@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_15_botas",
+  "nome": "Passos Leves",
+  "texto": "Equipe as botas que você recebeu. Botas equipadas fazem as habilidades voltarem mais cedo.",
+  "nivelMin": 9,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_14_lobos_2"],
+  "objetivos": [{ "tipo": "equipar", "slot": "boots" }],
+  "recompensa": { "xp": 72, "ferro": 40, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }] },
+  "dica": { "toque": "Abra a mochila, toque nas botas e equipe.", "teclado": "Abra a mochila (tecla I), clique nas botas e equipe." }
+}

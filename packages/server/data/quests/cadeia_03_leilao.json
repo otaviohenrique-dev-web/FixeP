@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_03_leilao",
+  "nome": "O Leilão",
+  "texto": "Ossian vende itens a outros jogadores no leilão. Fale com ele para conhecer o leilão.",
+  "nivelMin": 3,
+  "npc": "auctioneer",
+  "preRequisitos": ["cadeia_02_pocoes"],
+  "objetivos": [{ "tipo": "falar", "npc": "auctioneer" }],
+  "recompensa": { "xp": 19, "ferro": 15, "itens": [] },
+  "dica": { "toque": "Ossian fica ao norte da praça, perto da fonte. Toque nele.", "teclado": "Ossian fica ao norte da praça, perto da fonte. Clique nele." }
+}

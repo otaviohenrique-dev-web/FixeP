@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_02_pocoes",
+  "nome": "Estoque de Poções",
+  "texto": "Garrick vende Poções de Vida. Tenha 4 na mochila: compre o que faltar na loja dele.",
+  "nivelMin": 3,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_01_ferreira"],
+  "objetivos": [{ "tipo": "coletar", "itemId": "pocao_de_vida", "qtd": 4 }],
+  "recompensa": { "xp": 19, "ferro": 20, "itens": [] },
+  "dica": { "toque": "Toque em Garrick, abra a loja e compre Poções de Vida.", "teclado": "Clique em Garrick, abra a loja e compre Poções de Vida." }
+}

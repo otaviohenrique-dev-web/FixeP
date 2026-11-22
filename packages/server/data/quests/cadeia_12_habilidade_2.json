@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_12_habilidade_2",
+  "nome": "Segunda Técnica",
+  "texto": "Use a habilidade 2 três vezes em combate. Ela fica ao lado da habilidade 1.",
+  "nivelMin": 7,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_11_ossos_gelo"],
+  "objetivos": [{ "tipo": "usar", "acao": "skill2", "qtd": 3 }],
+  "recompensa": { "xp": 46, "ferro": 30, "itens": [] },
+  "dica": { "toque": "Toque no botão de habilidade 2 (o segundo da barra).", "teclado": "Aperte W para usar a habilidade 2." }
+}

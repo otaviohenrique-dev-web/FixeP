@@ -21,6 +21,11 @@ export type Defs = ReadonlyMap<string, QuestDef>;
 
 // ------------------------------------------------------------------ dados (packages/server/data/quests)
 export const QUESTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../data/quests");
+/** Quests de fixture para o teste automatizado (quests.mjs): só com QUEST_TEST=1 e QUEST_FIXTURE=1, nunca em produção. */
+export const QUESTS_FIXTURE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../test/fixtures/quests_teste");
+/** Pasta de quests que o servidor carrega: a do jogo, salvo nos testes que pedem a fixture. */
+export const questsDoServidor = (): string =>
+  process.env.QUEST_TEST === "1" && process.env.QUEST_FIXTURE === "1" && process.env.NODE_ENV !== "production" ? QUESTS_FIXTURE_DIR : QUESTS_DIR;
 
 /**
  * Lê e valida todas as quests de uma pasta. Falha com mensagem clara (arquivo + campo) se algum JSON estiver errado.

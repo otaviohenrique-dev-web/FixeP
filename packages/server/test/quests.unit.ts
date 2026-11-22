@@ -3,10 +3,10 @@
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { INV_SLOTS, validarFormatoQuest, type QuestDef } from "@frixep/shared";
+import { INV_SLOTS, validarFormatoQuest, xpToNext, type QuestDef } from "@frixep/shared";
 import { emptyInventory, addItem } from "../src/game/inventory.js";
 import {
-  carregarQuests, QUESTS_DIR, aceitar, progredirAbate, progredirFala, progredirChegada, atualizarColetas, aplicarRecompensa,
+  carregarQuests, QUESTS_DIR, QUESTS_FIXTURE_DIR, aceitar, progredirAbate, progredirFala, progredirChegada, atualizarColetas, aplicarRecompensa,
   xpAposGanho, estadoParaCliente, contarItem, progredirUso, resolverItem, type QuestMap, type QuestRt,
 } from "../src/game/quests.js";
 
@@ -27,9 +27,53 @@ const novo = (): QuestMap => new Map();
 console.log("== Dados do jogo (packages/server/data/quests) ==");
 {
   const reais = carregarQuests(QUESTS_DIR);
-  check("carrega as quests de dados do jogo", reais.has("caca_aos_ossos"), [...reais.keys()].join(","));
-  const q = reais.get("caca_aos_ossos")!;
-  check("quest de teste: objetivo de abater 3 esqueletos na zona 1, NPC merchant", q.npc === "merchant" && q.objetivos[0].tipo === "abater" && q.objetivos[0].qtd === 3, JSON.stringify(q.objetivos));
+  check("carrega as quests de dados do jogo", reais.size > 0, [...reais.keys()].join(","));
+  check("PD-10: a quest de teste caca_aos_ossos saiu dos dados do jogo", !reais.has("caca_aos_ossos"));
+  const fixture = carregarQuests(QUESTS_FIXTURE_DIR);
+  const q = fixture.get("caca_aos_ossos");
+  check("fixture de teste: caca_aos_ossos com abater 3 esqueletos na zona 1, NPC merchant", !!q && q.npc === "merchant" && q.objetivos[0].tipo === "abater" && q.objetivos[0].qtd === 3, JSON.stringify(q?.objetivos));
+}
+
+console.log("== Cadeia de quests 1 a 10 (C1.5) ==");
+{
+  const reais = carregarQuests(QUESTS_DIR);
+  const cadeia = [...reais.values()].filter((d) => d.id.startsWith("cadeia_"));
+  const todas = [...reais.values()];
+  check("cadeia tem de 15 a 20 quests", cadeia.length >= 15 && cadeia.length <= 20, `${cadeia.length}`);
+  const porId = new Map(reais);
+  // sem ciclo: a partir de cada quest, seguindo os pré-requisitos, nunca se volta à própria quest
+  const temCiclo = (id: string, pilha: string[]): boolean => {
+    if (pilha.includes(id)) return true;
+    return (porId.get(id)?.preRequisitos ?? []).some((p) => temCiclo(p, [...pilha, id]));
+  };
+  check("cadeia: todo pré-requisito existe (já conferido na carga) e não há ciclo", todas.every((d) => !temCiclo(d.id, [])));
+  check("cadeia: começa no fim do tutorial (pré-requisito tutorial_5_equipar) e a 1ª quest tem nível 3",
+    cadeia.some((d) => d.preRequisitos.includes("tutorial_5_equipar") && d.nivelMin === 3));
+  check("cadeia: todas as quests têm NPC que existe (npc preenchido)", cadeia.every((d) => d.npc !== null));
+  check("cadeia: nivelMin só sobe ao longo da cadeia (cada quest não é menor que o pré-requisito)",
+    cadeia.every((d) => d.preRequisitos.every((p) => (porId.get(p)?.nivelMin ?? 0) <= d.nivelMin)));
+  check("cadeia: níveis de 3 a 10", cadeia.every((d) => d.nivelMin >= 3 && d.nivelMin <= 10));
+  check("cadeia: abater na zona 1 até 4 e na zona 2 até 5; chefe da zona 1 só como quest opcional", cadeia.every((d) =>
+    d.objetivos.every((o) => o.tipo !== "abater" || (o.zona === 1 && o.qtd <= 4) || (o.zona === 2 && o.qtd <= 5) || (o.kind === "bone_king" && o.zona === 1 && o.qtd === 1 && d.nivelMin >= 8))));
+  check("cadeia: recompensa de XP entre 8% e 15% do XP do nível da quest (sem passar do esperado)", cadeia.every((d) => {
+    const base = xpToNext(d.nivelMin);
+    return d.recompensa.xp >= Math.floor(base * 0.08) && d.recompensa.xp <= Math.ceil(base * 0.15);
+  }), cadeia.map((d) => `${d.id}:${d.recompensa.xp}`).join(" "));
+  check("cadeia: todas dão um pouco de ferro (10 a 60)", cadeia.every((d) => d.recompensa.ferro >= 10 && d.recompensa.ferro <= 60));
+  check("cadeia: itens de recompensa com {classe} só comuns ou incomuns", cadeia.every((d) => d.recompensa.itens.every((i) => !i.id.includes("{classe}") || /_(common|uncommon)$/.test(i.id))));
+  check("cadeia: textos com até 2 frases (até 200 caracteres)", cadeia.every((d) => d.texto.length <= 200 && (d.texto.match(/[.!?](\s|$)/g) ?? []).length <= 2));
+  // progressão: quem entrega uma quest consegue aceitar a seguinte no nível em que chega (sem buracos até o nível 10)
+  const feitas = new Set(["tutorial_5_equipar"]);
+  for (let nivel = 3; nivel <= 10; nivel++) {
+    const disponiveis = () => cadeia.filter((d) => !feitas.has(d.id) && d.nivelMin <= nivel && d.preRequisitos.every((p) => feitas.has(p)));
+    let aq = disponiveis();
+    while (aq.length) { feitas.add(aq[0].id); aq = disponiveis(); }
+  }
+  check("progressão: no nível 10 o jogador consegue entregar a cadeia inteira (sem buracos)", cadeia.every((d) => feitas.has(d.id)),
+    cadeia.filter((d) => !feitas.has(d.id)).map((d) => d.id).join(","));
+  for (let nivel = 3; nivel <= 10; nivel++) {
+    check(`nível ${nivel}: existe ao menos uma quest com nivelMin <= ${nivel}`, cadeia.some((d) => d.nivelMin <= nivel));
+  }
 }
 
 console.log("== Validação do formato (falha com mensagem clara) ==");

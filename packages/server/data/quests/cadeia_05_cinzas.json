@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_05_cinzas",
+  "nome": "O Portão do Norte",
+  "texto": "Abra o mapa-mundo pelo portão do norte e vá até as Cinzas. Lá estão os esqueletos.",
+  "nivelMin": 3,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_04_bau"],
+  "objetivos": [{ "tipo": "chegar", "zona": 1, "x": 12, "y": 31, "raio": 5 }],
+  "recompensa": { "xp": 19, "ferro": 20, "itens": [{ "id": "pocao_de_vida", "qtd": 1 }] },
+  "dica": { "toque": "Ande até o portão do norte, pise nele e escolha Cinzas no mapa.", "teclado": "Ande até o portão do norte, passe por ele e escolha Cinzas no mapa." }
+}

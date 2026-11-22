@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_01_ferreira",
+  "nome": "Brasa, a Ferreira",
+  "texto": "Brasa forja e funde equipamento na praça. Fale com ela para conhecer a forja.",
+  "nivelMin": 3,
+  "npc": "smith",
+  "preRequisitos": ["tutorial_5_equipar"],
+  "objetivos": [{ "tipo": "falar", "npc": "smith" }],
+  "recompensa": { "xp": 19, "ferro": 20, "itens": [] },
+  "dica": { "toque": "Toque em Brasa, à direita da fonte, e converse com ela.", "teclado": "Clique em Brasa, à direita da fonte, e converse com ela." }
+}

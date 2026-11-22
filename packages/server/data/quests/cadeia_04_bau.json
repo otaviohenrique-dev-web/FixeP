@@ -1,0 +1,11 @@
+{
+  "id": "cadeia_04_bau",
+  "nome": "O Baú da Praça",
+  "texto": "Guarde itens no baú de armazenamento para não carregá-los. Ande até ele.",
+  "nivelMin": 3,
+  "npc": "merchant",
+  "preRequisitos": ["cadeia_03_leilao"],
+  "objetivos": [{ "tipo": "chegar", "zona": 4, "x": 31, "y": 30, "raio": 2.5 }],
+  "recompensa": { "xp": 19, "ferro": 15, "itens": [] },
+  "dica": { "toque": "Ande até o baú, ao sul de Brasa. Toque nele para guardar itens.", "teclado": "Ande até o baú, ao sul de Brasa. Clique nele para guardar itens." }
+}
