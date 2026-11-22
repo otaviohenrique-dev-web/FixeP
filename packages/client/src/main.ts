@@ -1285,7 +1285,7 @@ class WorldScene extends Phaser.Scene {
     switch (d.kind) {
       case "melee": return (d.offset ?? 0) + (d.radius ?? 1) + 1;
       case "dashHit": return (d.dash ?? 0) + (d.radius ?? 1);
-      case "projectile": return d.range ?? 8;
+      case "projectile": case "blast": case "healFocus": return d.range ?? 8; // Bola de Fogo (mago) e Cura Focada (clérigo) também têm alcance
       case "trap": case "rain": return d.placeRange ?? 8;
       case "pull": return 6;
       default: return 0;
