@@ -15,7 +15,7 @@ export interface HudOptions {
   /** chamado quando o jogador aciona uma ação e ela não está em recarga local */
   onAction(a: ActionId): void;
   /** toque segurado numa habilidade: prévia de área; arrastar move a mira; soltar lança (o cliente decide o que mira) */
-  aim?: { start(a: ActionId): void; move(x: number, y: number): void; end(): void };
+  aim?: { start(a: ActionId, x: number, y: number): void; move(x: number, y: number): void; end(): void };
   /** prioridade do alvo sem foco (botões < e > ao lado do ataque básico) e quando o jogador troca */
   targetMode?: "low" | "near";
   onTargetMode?(m: "low" | "near"): void;
@@ -372,7 +372,7 @@ export function mountHud(opts: HudOptions): Hud {
       e.preventDefault();
       if (e.pointerType === "mouse") { clear(); hideTip(); act(); return; }
       touching = true; held = false; moved = false; sx = e.clientX; sy = e.clientY; clear();
-      if (aimOf) opts.aim?.start(aimOf); // prévia de área aparece já ao apertar
+      if (aimOf) opts.aim?.start(aimOf, e.clientX, e.clientY); // prévia de área aparece já ao apertar
       timer = setTimeout(() => { if (moved) return; held = true; showTip(el, html()); navigator.vibrate?.(8); }, TIP_MS);
     });
     // arrastar com o dedo move a mira (habilidades de área); só vira balão se o dedo ficar parado
