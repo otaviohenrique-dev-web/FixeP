@@ -89,6 +89,8 @@ export class Enemy extends Schema {
   @type("number") level = 1;
   @type("boolean") stunned = false; // atordoado: não age (o cliente mostra estrelas)
   @type("boolean") rooted = false; // enraizado: não anda (o cliente mostra raízes/correntes)
+  @type("boolean") shredded = false; // armadura quebrada: recebe mais dano (o cliente mostra um escudo rachado)
+  @type("boolean") slowed = false; // lento (o cliente mostra um floco de gelo)
 
   // --- só no servidor ---
   stunUntil = 0;
