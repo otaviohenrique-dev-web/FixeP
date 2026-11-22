@@ -44,6 +44,8 @@ import { checkGpu } from "./gpucheck";
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
 
 const TILE_W = 64;
+const AIM_DEAD_PX = 24; // arrasto menor que isso mantém a mira automática no alvo travado
+const AIM_FULL_PX = 110; // arrasto que chega ao alcance máximo
 const TILE_H = 32;
 // projeção iso: grade (x,y) -> tela, e inversa
 const toScreen = (x: number, y: number) => ({ sx: (x - y) * (TILE_W / 2), sy: (x + y) * (TILE_H / 2) });
@@ -149,7 +151,8 @@ class WorldScene extends Phaser.Scene {
   private lockKey = ""; // alvo travado ("e:id" ou "p:id"; toque ou clique): as ações mirram nele
   private aimG!: Phaser.GameObjects.Graphics; // prévia da área da habilidade de área (arrastada com o dedo)
   private aimA: ActionId | null = null; // habilidade de área sendo mirada (botão segurado)
-  private aimScreen: { x: number; y: number } | null = null; // onde o dedo está (tela), depois de arrastar
+  private aimScreen: { x: number; y: number } | null = null; // arrasto do dedo (px na tela, relativo ao toque inicial); null = mira automática no alvo
+  private aimOrigin = { x: 0, y: 0 };
   private chase: { key: string } | null = null; // ataque básico: andando até o alvo travado que saiu do alcance
   private chaseMoveAt = 0; // próximo reenvio do destino enquanto anda atrás do alvo
   private nextBasicAt = 0; // quando o ataque básico volta a estar pronto (ms do navegador)
@@ -328,7 +331,7 @@ class WorldScene extends Phaser.Scene {
   /** interface do DOM (HUD, mochila, loja, baú, chat, grupo, FPS) e entradas: montada UMA vez; as salas só trocam os receptores */
   private mountUi() {
     this.lowHp = mountLowHp();
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), aim: { start: (a) => this.aimStart(a), move: (x, y) => this.aimMove(x, y), end: () => this.aimEnd() }, targetMode: this.targetMode, onTargetMode: (m) => this.setTargetMode(m), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), aim: { start: (a, x, y) => this.aimStart(a, x, y), move: (x, y) => this.aimMove(x, y), end: () => this.aimEnd() }, targetMode: this.targetMode, onTargetMode: (m) => this.setTargetMode(m), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
     this.hud.setAutoPotion(this.autoPot);
     this.joy = mountJoystick();
     this.applyTouch();
@@ -1377,21 +1380,30 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** ponto da mira arrastada (em tiles), a partir da posição do dedo na tela */
+  /** ponto da mira arrastada (em tiles): estilo joystick, a partir do personagem, na direção do arrasto (relativo ao ponto onde o dedo apertou) */
   private aimGrid(): { x: number; y: number } {
-    const rect = this.game.canvas.getBoundingClientRect();
-    const k = this.scale.width / Math.max(1, rect.width);
-    const w = this.cameras.main.getWorldPoint((this.aimScreen!.x - rect.left) * k, (this.aimScreen!.y - rect.top) * k);
-    return toGrid(w.x, w.y);
+    const me = this.me();
+    const v = this.aimScreen;
+    if (!me || !v || !this.aimA) return me ? { x: me.x, y: me.y } : { x: 0, y: 0 };
+    const g = toGrid(v.x, v.y);
+    const n = Math.hypot(g.x, g.y) || 1;
+    const L = this.aimRange(this.aimA) || 6;
+    const dist = L * Math.min(1, Math.hypot(v.x, v.y) / AIM_FULL_PX); // arrasto curto = perto, longo = alcance máximo
+    return { x: me.x + (g.x / n) * dist, y: me.y + (g.y / n) * dist };
   }
 
-  /** toque segurado numa habilidade de área: a prévia aparece; arrastar muda o ponto; soltar lança */
-  aimStart(a: ActionId) {
+  /** toque segurado numa habilidade: a prévia aparece já seguindo o alvo travado; arrastar além da zona morta assume a mira manual; soltar lança */
+  aimStart(a: ActionId, x = 0, y = 0) {
     // área: mostra a área; alcance/direção (corpo a corpo, projétil): mostra o alcance e a linha até a mira; básico e buffs: nada
     this.aimA = a !== "attack" && this.aimRange(a) > 0 ? a : null;
     this.aimScreen = null;
+    this.aimOrigin = { x, y };
   }
-  aimMove(x: number, y: number) { if (this.aimA) this.aimScreen = { x, y }; }
+  aimMove(x: number, y: number) {
+    if (!this.aimA) return;
+    const dx = x - this.aimOrigin.x, dy = y - this.aimOrigin.y;
+    this.aimScreen = Math.hypot(dx, dy) < AIM_DEAD_PX ? null : { x: dx, y: dy }; // dedo de volta ao centro: a mira volta a seguir o alvo
+  }
   aimEnd() { this.aimA = null; this.aimScreen = null; this.aimG?.clear(); }
 
   /** prévia da área (armadilha, chuva, puxada) com o mesmo limite de alcance e a mesma regra de ponto do servidor */
