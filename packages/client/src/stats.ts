@@ -19,6 +19,7 @@ const CSS = `
   font:600 11px/1.5 ui-monospace,Consolas,"Courier New",monospace;letter-spacing:.02em;color:#bcd8f5;text-align:right;white-space:nowrap;
   background:rgba(6,12,20,.72);border:1px solid rgba(160,200,240,.22)}
 .st b{font-weight:700}
+@media (max-width:620px){.st{top:max(104px,calc(env(safe-area-inset-top) + 100px))}} /* em tela estreita a carteira desce para logo abaixo dos botões: as métricas descem junto */
 .st.off{display:none}
 .st .sp{display:none;font-style:normal}
 .st .dot{display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;vertical-align:middle;background:#3ddc6b;animation:st-pulse 1.8s ease-out infinite}

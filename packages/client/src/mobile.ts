@@ -38,10 +38,10 @@ body.mob .hd-tr .hd-thin{height:calc(3px*var(--hs))}
 body.mob .hd-tt{font-size:calc(7px*var(--hs))}
 body.mob .hd-shd{font-size:calc(7px*var(--hs));letter-spacing:.12em}
 body.mob .hd-tr .hd-txt{letter-spacing:.08em}
-body.mob .hd-pvp{left:${SAFE_L};top:calc(${SAFE_T} + 50px*var(--hs));height:calc(26px*var(--hs));padding:0 8px 0 6px;font-size:calc(9px*var(--hs));gap:4px;border-radius:8px;opacity:.82}
+body.mob .hd-pvp{left:${SAFE_L};top:calc(${SAFE_T} + 70px*var(--hs));height:calc(26px*var(--hs));padding:0 8px 0 6px;font-size:calc(9px*var(--hs));gap:4px;border-radius:8px;opacity:.82}
 body.mob .hd-pvp.on,body.mob .hd-pvp.chan{opacity:1}
 body.mob .hd-pvp svg{width:12px;height:12px}
-body.mob .hd-alert{top:calc(${SAFE_T} + 64px*var(--hs));font-size:11px;padding:6px 12px}
+body.mob .hd-alert{top:${SAFE_T};max-width:calc(100vw - 300px);font-size:11px;padding:6px 10px;text-align:center} /* aviso no centro da faixa de cima: fica entre o canto esquerdo e os botões da direita */
 body.mob .hd-lv{left:${SAFE_L};bottom:calc(max(2px,env(safe-area-inset-bottom)) + 7px);font-size:8px;opacity:.7}
 /* ---------- canto inferior direito: arco de botões compacto sob o polegar ---------- */
 body.mob .hd.touch .hd-bar{right:${SAFE_R};bottom:calc(${SAFE_B} + 10px);transform:scale(calc(.82*var(--hs)));transform-origin:100% 100%}
@@ -49,6 +49,9 @@ body.mob .hd.touch .hd-btn{opacity:.86;border-width:2px;transition:transform .08
 body.mob .hd.touch .hd-btn:active{transform:scale(.88);filter:brightness(1.45);opacity:1;box-shadow:inset 0 0 0 2px rgba(255,225,160,.55),0 0 18px rgba(255,190,90,.7)}
 body.mob .hd.touch .hd-btn.cool{opacity:.7}
 body.mob .hd.touch .hd-chan{bottom:calc(${SAFE_B} + 190px*var(--hs));left:50%;width:min(220px,48vw)}
+/* prioridade de alvo (< e >): fica logo à esquerda da barra de habilidades, escalada junto com ela (sem cobrir os botões) */
+body.mob .hd.touch .hd-tm-low{right:calc(100% + 6px);bottom:4px}
+body.mob .hd.touch .hd-tm-near{right:calc(100% + 6px);bottom:40px}
 /* ---------- canto superior direito: menu, bolsa, carteira (menores e translúcidos) ---------- */
 body.mob .gm-btn,body.mob .iv-btn{top:${SAFE_T};width:calc(36px*var(--hs));height:calc(36px*var(--hs));opacity:.85;backdrop-filter:none;-webkit-backdrop-filter:none}
 body.mob .gm-btn svg,body.mob .iv-btn svg{width:calc(18px*var(--hs));height:calc(18px*var(--hs))}
@@ -56,11 +59,10 @@ body.mob .gm-btn{right:${SAFE_R}}
 body.mob .iv-btn{right:calc(max(8px,env(safe-area-inset-right)) + 42px*var(--hs))}
 body.mob .ec-wallet{top:calc(${SAFE_T} + 42px*var(--hs));right:${SAFE_R};height:calc(22px*var(--hs));padding:0 8px;gap:8px;font-size:calc(11px*var(--hs));opacity:.8;backdrop-filter:none;-webkit-backdrop-filter:none}
 body.mob .ec-wallet img,body.mob .ec-wallet .ec-coin{width:calc(14px*var(--hs));height:calc(14px*var(--hs))}
-body.mob .st{top:auto;right:auto;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 14px);padding:2px 7px;font-size:10px;line-height:1.35;opacity:.8;text-align:center} /* métricas (FPS/ping): pequenas, embaixo no centro, longe das moedas */
-body.mob .st br{display:none}
-body.mob .st .sp{display:inline}
+/* métricas (FPS/ping/online): canto direito, logo abaixo da carteira, em linhas curtas; longe da barra de habilidades e do joystick */
+body.mob .st{top:calc(${SAFE_T} + 70px*var(--hs));right:${SAFE_R};left:auto;bottom:auto;transform:none;padding:3px 6px;font-size:9px;line-height:1.3;opacity:.8;text-align:right}
 /* ---------- grupo: recolhido sob o PvP ---------- */
-body.mob .pt{top:calc(${SAFE_T} + 80px*var(--hs));left:${SAFE_L};width:min(220px,52vw)}
+body.mob .pt{top:calc(${SAFE_T} + 98px*var(--hs));left:${SAFE_L};width:min(220px,52vw)}
 body.mob .pt-tog{width:calc(26px*var(--hs));height:calc(26px*var(--hs));font-size:15px;opacity:.7}
 body.mob .pt-tg-chip{left:calc(${SAFE_L} + 170px*var(--hs));top:${SAFE_T};height:calc(38px*var(--hs));gap:calc(5px*var(--hs))}
 body.mob .pt-tg-chip .pt-lv{min-width:calc(20px*var(--hs));height:calc(20px*var(--hs));font-size:calc(10px*var(--hs))}
@@ -84,6 +86,13 @@ body.mob .ec-near{left:${SAFE_L};transform:none;bottom:calc(${SAFE_B} + 196px);m
 body.mob .gm-hs{display:block}
 `;
 
+/**
+ * Fator extra por orientação, somado à escala escolhida pelo jogador.
+ * Na vertical a tela é estreita (o HUD disputa a largura com o centro); na horizontal é baixa (o HUD disputa a altura).
+ */
+const ORIENT_K = { portrait: 0.9, landscape: 0.8 };
+const LANDSCAPE = "(orientation:landscape)";
+
 let scaleId: ScaleId = "m";
 try {
   const s = localStorage.getItem(KEY);
@@ -92,7 +101,8 @@ try {
 
 function apply() {
   const v = HUD_SCALES.find((s) => s.id === scaleId)!.v;
-  document.body.style.setProperty("--hs", String(v));
+  const land = typeof matchMedia === "function" && matchMedia(LANDSCAPE).matches;
+  document.body.style.setProperty("--hs", String(v * (land ? ORIENT_K.landscape : ORIENT_K.portrait)));
 }
 
 export function hudScaleLabel(): string {
@@ -109,6 +119,7 @@ export function cycleHudScale(): string {
 }
 
 let styled = false;
+let watching = false;
 /** liga ou desliga o layout compacto do celular */
 export function setMobileUi(on: boolean) {
   if (!styled) {
@@ -116,6 +127,10 @@ export function setMobileUi(on: boolean) {
     const st = document.createElement("style");
     st.textContent = CSS;
     document.head.append(st); // por último no <head>: vence as regras dos outros módulos em empate de especificidade
+  }
+  if (!watching && typeof matchMedia === "function") { // girar o aparelho recalcula o tamanho
+    watching = true;
+    try { matchMedia(LANDSCAPE).addEventListener("change", apply); } catch { /* navegador antigo: fica com o tamanho da abertura */ }
   }
   document.body.classList.toggle("mob", on);
   apply();

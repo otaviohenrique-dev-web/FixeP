@@ -125,7 +125,8 @@ const CSS = `
 @keyframes hd-hplow{0%,100%{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 0 rgba(255,40,50,0)}50%{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 10px rgba(255,40,50,.7)}}
 @media (prefers-reduced-motion:reduce){.hd-hp.low .hd-track{animation:none;box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 8px rgba(255,40,50,.6)}}
 /* faixa de nível: linha fina de XP com texto pequeno, sem competir com a vida */
-.hd-tr{gap:6px;margin-top:-1px}
+.hd-tr{flex-direction:column;align-items:stretch;gap:2px;margin-top:-1px} /* o nome da zona fica numa linha própria, abaixo da barra de XP (não passa por cima dela) */
+.hd-tr .hd-thin{flex:none}
 .hd-thin{position:relative;flex:1;height:4px;border-radius:2px;overflow:hidden;background:rgba(0,0,0,.6);box-shadow:0 0 0 1px rgba(122,95,46,.55)}
 .hd-thin .hd-fill{background:linear-gradient(90deg,var(--tc),var(--tl))}
 .hd-tt{flex:none;font:700 8px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:var(--tl);opacity:.85;text-shadow:0 1px 2px #000;white-space:nowrap}
@@ -225,7 +226,7 @@ const CSS = `
 .hd.touch .hd-cost{left:0;right:0;bottom:5px;text-align:center}
 .hd-btn.ult{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.35),0 0 10px rgba(255,190,90,.25)}
 /* ---------- PvP: botão sob o retrato, barra de canalização e avisos ---------- */
-.hd-pvp{position:absolute;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 78px);pointer-events:auto;display:flex;align-items:center;gap:6px;
+.hd-pvp{position:absolute;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 124px);pointer-events:auto;display:flex;align-items:center;gap:6px;
   height:30px;padding:0 12px 0 8px;border-radius:10px;cursor:pointer;color:#e9c98a;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;
   background:linear-gradient(180deg,#22304a,#0d1522);border:2px solid var(--gold-d);box-shadow:inset 0 0 0 1px rgba(255,225,160,.2),0 2px 6px rgba(0,0,0,.6);
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;transition:border-color .15s,box-shadow .15s,color .15s}
