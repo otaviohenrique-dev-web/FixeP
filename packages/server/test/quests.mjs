@@ -25,9 +25,10 @@ async function conta() {
 async function entrar(acc) {
   const r = await new Client(WS).joinOrCreate("zone4", { token: acc.token });
   await new Promise((ok) => (r.state?.players ? ok() : r.onStateChange.once(ok)));
-  const ev = { notice: [], quests: null, inv: null, left: false };
+  const ev = { notice: [], quests: null, defs: null, inv: null, left: false };
   r.onMessage("notice", (m) => ev.notice.push(String(m.text)));
   r.onMessage("quest_estado", (m) => (ev.quests = m));
+  r.onMessage("quest_defs", (m) => (ev.defs = m));
   r.onMessage("inv", (m) => (ev.inv = m));
   r.onLeave(() => (ev.left = true));
   const P = {
@@ -48,6 +49,11 @@ let P = await entrar(acc);
 
 console.log("\n== Quests: aceitar e progredir ==");
 check("ao entrar, o servidor manda a lista de quests (vazia)", !!P.ev.quests && P.ev.quests.quests.length === 0, JSON.stringify(P.ev.quests));
+// C1.2: o cliente pede quest_sync e recebe as definições (a caixa do NPC mostra nome, texto, objetivos e recompensa)
+P.r.send("quest_sync", {});
+const defCaca = () => P.ev.defs?.defs?.find((d) => d.id === QID);
+check("quest_sync devolve as definições com o NPC que dá a quest", await until(() => defCaca()?.npc === "merchant"), JSON.stringify(defCaca()?.npc));
+check("definição traz nome, texto e recompensa (para a caixa)", !!defCaca()?.nome && !!defCaca()?.texto && defCaca()?.recompensa?.xp === 60 && defCaca()?.recompensa?.itens?.[0]?.qtd === 2);
 P.r.send("quest_aceitar", { id: QID });
 await until(() => P.said("Chegue mais perto"));
 check("aceitar longe do NPC é recusado", !P.quest() && P.said("Chegue mais perto"), JSON.stringify(P.ev.notice));

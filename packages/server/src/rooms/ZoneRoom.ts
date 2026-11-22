@@ -26,7 +26,7 @@ import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
 import { carregarQuests, aceitar, progredirAbate, progredirFala, progredirChegada, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
-import type { QuestEvent, QuestDef } from "@frixep/shared";
+import type { QuestEvent, QuestDefsEvent, QuestDef } from "@frixep/shared";
 
 /** Quests carregadas dos JSON em packages/server/data/quests. Se algum estiver errado, o servidor nem sobe (mensagem diz o arquivo). */
 const DEFS = carregarQuests();
@@ -285,7 +285,12 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.QuestAccept, (client, p: { id?: unknown }) => { if (this.allow(client)) this.questAceitar(client.sessionId, p?.id); });
     this.onMessage(Msg.QuestDeliver, (client, p: { id?: unknown }) => { if (this.allow(client)) this.questEntregar(client.sessionId, p?.id); });
     this.onMessage(Msg.QuestTalk, (client, p: { npc?: unknown }) => { if (this.allow(client)) this.questFalar(client.sessionId, p?.npc); });
-    this.onMessage(Msg.QuestSync, (client) => { const pl = this.state.players.get(client.sessionId); if (pl) this.sendQuests(client.sessionId, pl); });
+    this.onMessage(Msg.QuestSync, (client) => {
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl) return;
+      this.sendQuests(client.sessionId, pl);
+      client.send(Evt.QuestDefs, { defs: [...DEFS.values()] } satisfies QuestDefsEvent);
+    });
     if (process.env.QUEST_TEST === "1" && process.env.NODE_ENV !== "production") {
       // só nos testes automatizados (QUEST_TEST=1, nunca em produção): simula abates de um tipo numa zona, para testar a progressão sem combate longo
       this.onMessage("quest_teste_abate", (client, p: { kind?: unknown; zona?: unknown }) => {

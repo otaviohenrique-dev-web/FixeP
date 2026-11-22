@@ -1,10 +1,11 @@
 import { isTypingTarget } from "./keys";
 import { mountMarket } from "./market";
+import { mountQuests } from "./quests";
 import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  TRADE_CHAT_MAX_LEN, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent,
+  TRADE_CHAT_MAX_LEN, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
 } from "@frixep/shared";
 
 /**
@@ -29,6 +30,10 @@ export interface EconomyUi {
   setMarketPage(p: MarketPage): void;
   setMarketMine(m: MarketMineEvent): void;
   setMarketDone(d: MarketDoneEvent): void;
+  /** quests (C1.2): estado e definições vindos do servidor, e recusas/avisos para a caixa do NPC */
+  setQuests(ev: QuestEvent): void;
+  setQuestDefs(ev: QuestDefsEvent): void;
+  questNotice(text: string, ok: boolean): void;
 }
 
 const CSS = `
@@ -192,10 +197,17 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
 
   const market = mountMarket({ send: opts.send, toast: opts.toast, getClass: opts.getClass });
   const closeNpc = () => { back.classList.remove("open"); market.close(); npc = null; picked.clear(); confirmSell.clear(); };
+  // caixa de quests do NPC (C1.2): abre antes do comércio quando o NPC dá ou recebe quest; "Comércio" dentro dela abre a loja
+  const quest = mountQuests({ send: opts.send, getLevel: opts.getLevel, onTrade: (n) => openShop(n) });
   function openNpc(n: NpcDef) {
     if (tradeOpen) return;
     opts.onNpc?.(n);
     if (n.kind === "auctioneer") { closeNpc(); market.open(n); return; }
+    if (quest.open(n)) return;
+    openShop(n);
+  }
+  function openShop(n: NpcDef) {
+    if (tradeOpen) return;
     market.close();
     npc = n; tab = "buy"; picked.clear(); confirmSell.clear();
     back.classList.add("open");
@@ -626,7 +638,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     if (e.code === "Escape" && tradeOpen) { e.stopImmediatePropagation(); e.preventDefault(); cancelTrade(); return; }
     if (e.code === "Escape" && back.classList.contains("open")) { e.stopImmediatePropagation(); e.preventDefault(); closeNpc(); return; }
     if (isTypingTarget() || e.repeat) return;
-    if (e.code === "KeyG" && nearNpc && !tradeOpen && !document.querySelector(".ec-back.open, .iv-back.open, .gm-back.open")) { e.preventDefault(); openNpc(nearNpc); } // G: falar com o NPC ao lado
+    if (e.code === "KeyG" && nearNpc && !tradeOpen && !document.querySelector(".ec-back.open, .iv-back.open, .gm-back.open, .qst-back.open")) { e.preventDefault(); openNpc(nearNpc); } // G: falar com o NPC ao lado
   }, true);
 
   const paintWallet = () => { wIronN.textContent = num(snap.iron); wObolN.textContent = num(snap.obols); };
@@ -643,7 +655,10 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     },
     openNpc,
     closeNpc,
-    isNpcOpen: () => back.classList.contains("open") || market.isOpen(),
+    isNpcOpen: () => back.classList.contains("open") || market.isOpen() || quest.isOpen(),
+    setQuests: (ev) => quest.setQuests(ev),
+    setQuestDefs: (ev) => quest.setDefs(ev),
+    questNotice: (text, ok) => quest.notice(text, ok),
     setNearNpc(n) {
       nearNpc = n;
       near.classList.toggle("show", !!n && !tradeOpen && !back.classList.contains("open") && !market.isOpen());
