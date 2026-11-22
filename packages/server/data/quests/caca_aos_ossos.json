@@ -1,0 +1,15 @@
+{
+  "id": "caca_aos_ossos",
+  "nome": "Caça aos Ossos",
+  "texto": "Os esqueletos das Cinzas estão saindo do chão. Derrote três e volte para Garrick.",
+  "nivelMin": 1,
+  "npc": "merchant",
+  "objetivos": [
+    { "tipo": "abater", "kind": "skeleton", "qtd": 3, "zona": 1 }
+  ],
+  "recompensa": {
+    "xp": 60,
+    "ferro": 40,
+    "itens": [{ "id": "pocao_de_vida", "qtd": 2 }]
+  }
+}

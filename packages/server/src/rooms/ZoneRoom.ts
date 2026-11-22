@@ -25,18 +25,24 @@ import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuse
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
+import { carregarQuests, aceitar, progredirAbate, progredirFala, progredirChegada, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
+import type { QuestEvent, QuestDef } from "@frixep/shared";
+
+/** Quests carregadas dos JSON em packages/server/data/quests. Se algum estiver errado, o servidor nem sobe (mensagem diz o arquivo). */
+const DEFS = carregarQuests();
 import { deposit, withdraw, moveInVault, moveCoins, vaultSnapshot, type Vault } from "../game/vault.js";
 
 interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string> }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number }
 interface Trade { a: string; b: string; offer: Record<string, TradeOffer>; ready: Record<string, boolean>; rev: number; seq: Record<string, number> }
-interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory }
+interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory; quests: QuestMap }
 
 // uma sessão por conta em TODAS as zonas: conta -> (sala, sessão) atual; a chegada de uma travessia guarda de onde veio
 const active = new Map<string, { room: ZoneRoom; sid: string }>();
 const arrivals = new Map<string, number>(); // personagem -> zona de origem da travessia (consumido ao entrar)
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
+const QUEST_CHEGADA_CHECK_S = 0.5; // intervalo (s) em que os objetivos "chegar" são conferidos
 
 /** distância do ponto (px,py) ao segmento (x1,y1)-(x2,y2) */
 function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
@@ -275,6 +281,18 @@ export class ZoneRoom extends Room<ZoneState> {
       pl.qMode = p.mode;
       this.notifyOk(client.sessionId, p.mode === 1 ? "Q: Cura Focada (um aliado, mais forte)" : "Q: Cura em Área (todos em volta, mais fraca)");
     });
+    // quests (C1.1): o servidor decide tudo; o cliente só pede
+    this.onMessage(Msg.QuestAccept, (client, p: { id?: unknown }) => { if (this.allow(client)) this.questAceitar(client.sessionId, p?.id); });
+    this.onMessage(Msg.QuestDeliver, (client, p: { id?: unknown }) => { if (this.allow(client)) this.questEntregar(client.sessionId, p?.id); });
+    this.onMessage(Msg.QuestTalk, (client, p: { npc?: unknown }) => { if (this.allow(client)) this.questFalar(client.sessionId, p?.npc); });
+    this.onMessage(Msg.QuestSync, (client) => { const pl = this.state.players.get(client.sessionId); if (pl) this.sendQuests(client.sessionId, pl); });
+    if (process.env.QUEST_TEST === "1" && process.env.NODE_ENV !== "production") {
+      // só nos testes automatizados (QUEST_TEST=1, nunca em produção): simula abates de um tipo numa zona, para testar a progressão sem combate longo
+      this.onMessage("quest_teste_abate", (client, p: { kind?: unknown; zona?: unknown }) => {
+        const pl = this.state.players.get(client.sessionId);
+        if (pl && typeof p?.kind === "string" && typeof p?.zona === "number") this.questAbate(client.sessionId, pl, p.kind, p.zona);
+      });
+    }
     this.onMessage(Msg.InvSync, (client) => {
       if (!this.allow(client)) return;
       const p = this.state.players.get(client.sessionId);
@@ -545,6 +563,7 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private sendInv(id: string, p: Player) {
+    this.questsDaMochila(id, p); // objetivos "coletar" acompanham a mochila (também é o caminho de todo item novo)
     this.clients.getById(id)?.send(Evt.Inv, snapshot(p.inv));
   }
 
@@ -899,7 +918,8 @@ export class ZoneRoom extends Room<ZoneState> {
       const op = old.room.state.players.get(old.sid);
       if (!op?.traveling) old.room.clients.getById(old.sid)?.leave(4001);
     }
-    return { user, character, inventory };
+    const quests = await this.repo.loadQuests(character.id);
+    return { user, character, inventory, quests };
   }
 
   onJoin(client: Client, options: { load?: boolean } | undefined, auth: JoinAuth) {
@@ -920,6 +940,7 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.level = auth.character.level;
     pl.xp = auth.character.xp;
     pl.inv = auth.inventory;
+    pl.quests = auth.quests;
     if (econTest() && !auth.inventory.slots.some(Boolean) && auth.inventory.iron === 0) { // só nos testes (ECON_TEST=1): kit inicial para exercitar loja, fusão e troca sem jogar horas
       const i = auth.inventory;
       i.iron = 50000; i.obols = 2;
@@ -931,6 +952,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.refreshStats(pl, true);
     this.state.players.set(client.sessionId, pl);
     this.sendInv(client.sessionId, pl);
+    this.sendQuests(client.sessionId, pl);
     // grupo: registra a presença (o grupo atravessa as zonas: a identidade é o personagem)
     parties.attach({ charId: pl.charId, name: pl.name, sid: client.sessionId, zone: this.zone.id, player: pl, send: (t, m) => this.clients.getById(client.sessionId)?.send(t, m) });
   }
@@ -1000,10 +1022,14 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private async doSave(p: Player) {
-    if (!p.charId || (!p.dirty && !p.invDirty && !p.vaultDirty)) return;
+    if (!p.charId || (!p.dirty && !p.invDirty && !p.vaultDirty && !p.questDirty.size)) return;
     const progress = p.dirty, inv = p.invDirty, vault = p.vaultDirty && !!p.vault;
+    const qIds = [...p.questDirty];
+    const qRows = qIds.map((id) => p.quests.get(id)).filter((q): q is QuestRt => !!q); // fotografia copiada agora (antes de qualquer espera)
     p.dirty = p.invDirty = p.vaultDirty = false;
+    p.questDirty.clear();
     try {
+      if (qRows.length) await this.repo.saveQuests(p.charId, qRows);
       if (progress) await this.repo.saveProgress(p.charId, p.level, p.xp);
       if (vault) await this.repo.saveInventoryAndVault(p.charId, p.inv, p.vault!); // bolsa e baú na MESMA transação
       else if (inv) await this.repo.saveInventory(p.charId, p.inv);
@@ -1011,12 +1037,131 @@ export class ZoneRoom extends Room<ZoneState> {
       p.dirty ||= progress; // tenta de novo no próximo ciclo
       p.invDirty ||= inv;
       p.vaultDirty ||= vault;
+      qIds.forEach((id) => p.questDirty.add(id));
       console.error("[db] falha ao salvar personagem:", (e as Error).message);
     }
   }
 
   private async saveAll() {
     await Promise.all([...this.state.players.values()].map((p) => this.save(p)));
+  }
+
+  // ------------------------------------------------------------------ quests (C1.1)
+  /** Fotografia completa das quests para o dono. */
+  private sendQuests(sid: string, p: Player) {
+    this.clients.getById(sid)?.send(Evt.Quests, { quests: estadoParaCliente(p.quests) } satisfies QuestEvent);
+  }
+
+  /** Marca as quests alteradas (grava no próximo salvamento), avisa o dono e, se alguma ficou pronta, diz para entregar. */
+  private questsMudaram(sid: string, p: Player, ids: string[]) {
+    if (!ids.length) return;
+    ids.forEach((id) => p.questDirty.add(id));
+    this.sendQuests(sid, p);
+    for (const id of ids) {
+      const rt = p.quests.get(id);
+      if (rt?.estado === "pronta") this.notifyOk(sid, `Missão pronta para entregar: ${DEFS.get(id)?.nome ?? id}.`);
+    }
+  }
+
+  /** Mochila mudou: recalcula os objetivos "coletar" (o que o personagem tem agora). */
+  private questsDaMochila(sid: string, p: Player) {
+    const ids: string[] = [];
+    for (const rt of p.quests.values()) {
+      const def = DEFS.get(rt.id);
+      if (def && atualizarColetas(rt, def, p.inv)) ids.push(rt.id);
+    }
+    this.questsMudaram(sid, p, ids);
+  }
+
+  /** NPC da quest ao alcance (distância do SERVIDOR). */
+  private npcPerto(p: Player, npc: string): boolean {
+    const n = zoneNpcs(this.zone.id).find((q) => q.id === npc);
+    return !!n && dist(p.x, p.y, n.x, n.y) <= NPC_REACH;
+  }
+
+  /** Um abate contou para as quests deste jogador (mesmo caminho do XP: só quem é elegível). */
+  private questAbate(sid: string, p: Player, kind: string, zona: number) {
+    this.questsMudaram(sid, p, progredirAbate(p.quests, DEFS, kind, zona).map((rt) => rt.id));
+  }
+
+  /** Conferência dos objetivos "chegar" (a cada 0,5 s, só para quem tem quest ativa). */
+  private checarChegadas() {
+    this.state.players.forEach((p, sid) => {
+      if (p.dead || p.traveling || p.quests.size === 0) return;
+      this.questsMudaram(sid, p, progredirChegada(p.quests, DEFS, this.zone.id, p.x, p.y).map((rt) => rt.id));
+    });
+  }
+
+  private questFalar(sid: string, npc: unknown) {
+    const p = this.state.players.get(sid);
+    if (!p || p.dead || typeof npc !== "string") return;
+    if (!this.npcPerto(p, npc)) return this.notify(sid, "Chegue mais perto do NPC.");
+    this.questsMudaram(sid, p, progredirFala(p.quests, DEFS, npc).map((rt) => rt.id));
+  }
+
+  private questAceitar(sid: string, id: unknown) {
+    const p = this.state.players.get(sid);
+    if (!p || p.dead) return;
+    if (typeof id !== "string") return this.notify(sid, "Missão inválida.");
+    const def = DEFS.get(id);
+    if (def?.npc && !this.npcPerto(p, def.npc)) return this.notify(sid, "Chegue mais perto de quem dá essa missão.");
+    const r = aceitar(p.quests, DEFS, id, p.level, p.inv);
+    if (!r.ok) return this.notify(sid, r.error);
+    p.questDirty.add(id);
+    void registrarEvento(this.repo.db, "quest_aceita", { contaId: this.userIds.get(sid), personagemId: p.charId, dados: { quest: id } });
+    this.sendQuests(sid, p);
+    this.notifyOk(sid, `Missão aceita: ${r.def.nome}.`);
+    void this.save(p); // aceitar grava na hora (não espera o salvamento periódico)
+  }
+
+  /**
+   * Entrega: a recompensa e a mudança de estado são gravadas NUMA transação, na fila de salvamento do jogador.
+   * Enquanto isso o jogador fica travado (marketBusy), então nada mexe na mochila por outro caminho.
+   * Mochila cheia = recusa antes de gravar: nada se perde.
+   */
+  private questEntregar(sid: string, id: unknown) {
+    const p = this.state.players.get(sid);
+    if (!p || p.dead) return;
+    if (typeof id !== "string") return this.notify(sid, "Missão inválida.");
+    const def = DEFS.get(id);
+    const rt = p.quests.get(id);
+    if (!def || !rt) return this.notify(sid, "Você não aceitou essa missão.");
+    if (rt.estado === "entregue") return this.notify(sid, "Você já entregou essa missão.");
+    if (p.trading || p.marketBusy) return this.notify(sid, "Espere a operação em andamento terminar.");
+    if (def.npc && !this.npcPerto(p, def.npc)) return this.notify(sid, "Chegue mais perto de quem dá essa missão.");
+    this.questsDaMochila(sid, p); // confere o estado com a mochila de agora
+    if (rt.estado !== "pronta") return this.notify(sid, "Essa missão ainda não está pronta.");
+    p.marketBusy = true;
+    p.saveChain = p.saveChain.then(() => this.gravarEntrega(sid, p, def, rt));
+  }
+
+  private async gravarEntrega(sid: string, p: Player, def: QuestDef, rt: QuestRt) {
+    try {
+      if (!p.charId || rt.estado !== "pronta") return;
+      const r = aplicarRecompensa(p.inv, def);
+      if (!r.ok) return this.notify(sid, r.error);
+      const lv = xpAposGanho(p.level, p.xp, def.recompensa.xp);
+      await this.repo.entregarQuest(p.charId, { id: rt.id, estado: "entregue", progresso: [...rt.progresso] }, lv.level, lv.xp, r.inv);
+      // gravado: só agora a memória recebe o resultado
+      p.inv.slots = r.inv.slots;
+      p.inv.iron = r.inv.iron;
+      p.inv.obols = r.inv.obols;
+      rt.estado = "entregue";
+      p.questDirty.delete(rt.id);
+      const subiu = lv.level > p.level;
+      p.level = lv.level;
+      p.xp = lv.xp;
+      if (subiu) { this.refreshStats(p, true); this.broadcast(Evt.LevelUp, { id: sid, level: p.level }); }
+      this.sendInv(sid, p);
+      this.sendQuests(sid, p);
+      void registrarEvento(this.repo.db, "quest_entregue", { contaId: this.userIds.get(sid), personagemId: p.charId, dados: { quest: rt.id } });
+      this.notifyOk(sid, `Missão concluída: ${def.nome}! Recompensa recebida.`);
+    } catch (e) {
+      console.error("[quests] falha ao entregar:", (e as Error).message);
+      this.notify(sid, "Não foi possível entregar agora. Tente de novo.");
+    } finally {
+      p.marketBusy = false;
+    }
   }
 
   private addXp(id: string, p: Player, amount: number) {
@@ -1045,9 +1190,11 @@ export class ZoneRoom extends Room<ZoneState> {
   private traps: Trap[] = [];
   private pending: { at: number; run: () => void }[] = [];
   private seq = 0;
+  private questChegadaAt = 0; // próxima conferência dos objetivos "chegar" (relógio da simulação)
 
   private tick(dt: number) {
     this.t += dt;
+    if (this.t >= this.questChegadaAt) { this.questChegadaAt = this.t + QUEST_CHEGADA_CHECK_S; this.checarChegadas(); } // quests "chegar": conferido 2 vezes por segundo, não a cada tick
     this.state.players.forEach((p, id) => {
       this.updatePlayer(id, p, dt);
       this.updatePvp(id, p);
@@ -1491,6 +1638,7 @@ export class ZoneRoom extends Room<ZoneState> {
           this.abatesRegistrados.add(pl.charId);
           void registrarEvento(this.repo.db, "primeiro_abate", { contaId: this.userIds.get(pid), personagemId: pl.charId, dados: { nivel: pl.level, zona: this.zone.id } });
         }
+        this.questAbate(pid, pl, e.kind, this.zone.id); // quests: conta o abate (só para quem é elegível, como o XP)
         this.clients.getById(pid)?.send(Evt.Xp, { amount: xpEach, x: e.x, y: e.y });
         const iron = addCoins(pl.inv, "iron", ironEach);
         if (iron > 0) { pl.invDirty = true; this.sendInv(pid, pl); this.clients.getById(pid)?.send(Evt.Coins, { iron, obols: 0, x: e.x, y: e.y }); }

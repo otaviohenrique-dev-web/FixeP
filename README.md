@@ -375,6 +375,20 @@ O servidor grava eventos de jogo na tabela `eventos` (migração `010_telemetria
 - **Persistência:** sanções na tabela `sancoes` e denúncias na tabela `denuncias` (migração `011_moderacao.sql`). Os eventos `denuncia`, `silenciado` e `banido` vão para a telemetria.
 - **Teste:** `npx tsx test/moderacao.unit.ts` (sem servidor) e `test/moderacao.mjs` (com servidor de teste `ADMIN_TEST_FIRST_GUEST=1`, incluído no `run-all.sh`).
 
+## Quests (C1.1)
+
+- **Definições:** um arquivo JSON por quest em `packages/server/data/quests/` (o nome do arquivo é o `id`). O servidor valida tudo na carga e não sobe se algo estiver errado; a mensagem diz o arquivo e o campo.
+- **Campos:** `id` (minúsculas, números e `_`), `nome`, `texto` (até 200 caracteres), `nivelMin`, `npc` (id do NPC que dá e recebe, ou `null`), `preRequisitos` (ids de quests que precisam estar entregues; opcional), `objetivos` (1 a 5) e `recompensa` (`xp`, `ferro` em tostões, `itens: [{ id, qtd }]`).
+- **Objetivos:**
+  - `{ "tipo": "abater", "kind": "skeleton", "qtd": 3, "zona": 1 }`: abates do tipo; `zona` é opcional.
+  - `{ "tipo": "coletar", "itemId": "pocao_de_vida", "qtd": 2 }`: o que está na mochila conta; ao entregar, esses itens saem.
+  - `{ "tipo": "falar", "npc": "merchant" }`: conversar com o NPC (mensagem `quest_falar`, com distância conferida no servidor).
+  - `{ "tipo": "chegar", "zona": 1, "x": 10, "y": 12, "raio": 2 }`: estar dentro do raio.
+- **Estados:** `ativa` → `pronta` (todos os objetivos cumpridos) → `entregue` (recompensa paga, uma vez só).
+- **Regras no servidor:** aceitar e entregar exigem estar perto do NPC (quando a quest tem um). Entrega grava recompensa e estado numa transação: se a mochila não couber a recompensa, recusa e nada se perde.
+- **Banco:** tabela `quest_estado` (migração `012_quests.sql`). O estado vai ao cliente (`quest_estado`) ao entrar e a cada mudança.
+- **Testes:** `npx tsx test/quests.unit.ts` (sem servidor) e `test/quests.mjs` (servidor com `QUEST_TEST=1`, incluído no `run-all.sh`). `QUEST_TEST=1` libera o atalho `quest_teste_abate`, que só existe nos testes.
+
 ## Deploy
 
 `render.yaml` descreve os serviços do Render. Veja `docs/DEPLOY_SUPABASE_RENDER.md` (Parte 5).
