@@ -33,6 +33,8 @@ import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
 import { mountDiario, type DiarioUi } from "./diario";
 import { mountTutorial, type TutorialUi } from "./tutorial";
+import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
+import type { DicasVistasEvent } from "@frixep/shared";
 import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
@@ -134,6 +136,7 @@ class WorldScene extends Phaser.Scene {
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
   private zoneId = 1;
   private tutorial!: TutorialUi; // faixa e bandeira do tutorial (C1.4)
+  private dicas!: Dicas; // balão de dicas contextuais, uma vez por personagem (C1.6)
   private gates: GateLayer | null = null; // portões da zona (estruturas de pedra no lugar dos antigos anéis)
   private lowHp!: LowHp; // moldura vermelha de vida baixa
   private shieldEnd = 0; // fim da bolha de chegada (relógio do navegador); 0 = sem contagem (carregando ou sem bolha)
@@ -276,6 +279,7 @@ class WorldScene extends Phaser.Scene {
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
     this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId }); // faixa do tutorial e bandeira (C1.4)
+    this.dicas = mountDicas({ enviar: (id) => this.room?.send(Msg.DicaVista, { id }), tutorialAberto: tutorialFaixaAberta }); // dicas contextuais (C1.6)
     this.selG = this.add.graphics().setDepth(0.35);
     this.aimG = this.add.graphics().setDepth(0.36);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
@@ -479,6 +483,7 @@ class WorldScene extends Phaser.Scene {
       this.levelTags.set(`e:${id}`, this.add.text(0, 0, String(lv), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: col, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
     });
     st.enemies.onRemove((_: any, id: string) => this.dropSprite(`e:${id}`));
+    st.items.onAdd((g: any) => { const me = this.me(); if (me && Math.hypot(Number(g.x) - me.x, Number(g.y) - me.y) <= 8) this.dicas.gatilho("item_no_chao"); }); // dica de item no chão (C1.6)
     st.items.onAdd((g: any, id: string) => this.ground.add(id, { itemId: String(g.itemId), qty: Number(g.qty) || 1, x: g.x, y: g.y, owner: String(g.owner), party: String(g.party), lockS: Number(g.lockS) || 0 }));
     st.items.onRemove((_: any, id: string) => this.ground.remove(id));
     if (this.cls === "cleric" && this.savedQMode() === 1) room.send(Msg.QMode, { mode: 1 }); // lembra a escolha entre sessões
@@ -557,11 +562,13 @@ class WorldScene extends Phaser.Scene {
       if (m.s === "cancel") this.hud.alert({ move: "Canalização cancelada: você se moveu", act: "Canalização cancelada: você agiu", damage: "Canalização interrompida: dano recebido" }[m.why ?? "damage"] ?? t[0]);
       else this.inv.toast(t[0], t[1]);
     });
-    room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); });
+    room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); if (!m.ok) this.dicaDoAviso(String(m.text)); });
     room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); });
     room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); });
+    room.onMessage(Evt.DicasVistas, (m: DicasVistasEvent) => this.dicas.carregar(m)); // dicas já vistas por este personagem (C1.6)
     this.room.send(Msg.InvSync, {});
     this.room.send(Msg.QuestSync, {}); // pede o estado e as definições das quests (depois de registrar os receptores)
+    this.room.send(Msg.DicasSync, {}); // pede as dicas já vistas (C1.6)
     room.onMessage(Evt.Chat, (m: ChatEvent) => {
       this.chatUi.add(String(m.name), String(m.text), m.id === this.room.sessionId);
       this.say(String(m.id), String(m.text)); // balão sobre a cabeça de quem falou
@@ -664,11 +671,17 @@ class WorldScene extends Phaser.Scene {
     this.inv.toast(on ? "Auto-poção ligada" : "Auto-poção desligada", on ? "#7dff9a" : "#9fb3c8");
   }
 
+  /** Avisos recusados do servidor que viram dica (C1.6): mochila cheia e falta de recurso (Fúria, Foco, Mana). */
+  private dicaDoAviso(text: string) {
+    if (/^Mochila cheia/.test(text)) this.dicas.gatilho("mochila_cheia");
+    else if (/insuficiente.$/.test(text)) this.dicas.gatilho("recurso_insuficiente");
+  }
+
   private drinkPotion() {
     if (this.busy) return;
     if (!this.hud.potionReady()) return; // em recarga: o slot da HUD já mostra a contagem
     const slot = this.inv.firstPotionSlot();
-    if (slot >= 0) this.room.send(Msg.InvUse, { slot });
+    if (slot >= 0) { this.room.send(Msg.InvUse, { slot }); this.dicas.gatilho("primeira_pocao"); }
     else this.inv.toast("Você não tem poções.", "#ffb3a6");
   }
 
@@ -1539,6 +1552,8 @@ class WorldScene extends Phaser.Scene {
       if (t && reach > 0 && Math.hypot(t.x - me.x, t.y - me.y) > reach) { this.chase = { key: this.lockKey }; this.chaseMoveAt = 0; return; }
     }
     if (a !== "attack") { this.chase = null; if (this.touchMode) navigator.vibrate?.(10); }
+    if (a === "attack") this.dicas.gatilho("primeiro_ataque");
+    else if (["skill1", "skill2", "skill3", "ultimate"].includes(a)) this.dicas.gatilho("primeira_skill");
     if (a === "attack") this.nextBasicAt = performance.now() + classAction(this.cls, "attack", Number(me.qMode) || 0).cd * 1000;
     const { x, y } = this.aimA === a && this.aimScreen ? this.aimGrid() : this.aim(a);
     const payload: ActPayload = { a, ax: x, ay: y };
@@ -1716,6 +1731,7 @@ class WorldScene extends Phaser.Scene {
       if (H.hp !== hpk) { H.hp = hpk; this.hud.setHp(me.hp, me.maxHp); }
       this.hud.setShield(me.shield && !me.dead ? (this.shieldEnd ? Math.max(0, (this.shieldEnd - performance.now()) / 1000) : -1) : null);
       this.lowHp.set(!me.dead && !this.busy && !this.loader.visible && me.maxHp > 0 && me.hp / me.maxHp <= LOW_HP_RATIO); // vida baixa: moldura vermelha leve
+    if (!me.dead && me.maxHp > 0 && me.hp / me.maxHp < 0.3) this.dicas.gatilho("vida_baixa"); // dica de vida baixa, uma vez por personagem (C1.6)
       const pg = `${me.level}|${me.xp}`;
       if (H.prog !== pg) { H.prog = pg; this.hud.setProgress(me.level, me.xp, xpToNext(me.level)); }
       this.updateBubbles(time);

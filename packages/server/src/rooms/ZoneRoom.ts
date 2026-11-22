@@ -26,7 +26,8 @@ import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
 import { carregarQuests, questsDoServidor, aceitar, progredirAbate, progredirFala, progredirChegada, progredirUso, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
-import type { QuestEvent, QuestDefsEvent, QuestDef, AcaoUsar } from "@frixep/shared";
+import type { QuestEvent, QuestDefsEvent, QuestDef, AcaoUsar, DicasVistasEvent } from "@frixep/shared";
+import { dicaValida, dicasValidas } from "@frixep/shared";
 
 /** Quests carregadas dos JSON em packages/server/data/quests. Se algum estiver errado, o servidor nem sobe (mensagem diz o arquivo). */
 const DEFS = carregarQuests(questsDoServidor());
@@ -285,6 +286,9 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.QuestAccept, (client, p: { id?: unknown }) => { if (this.allow(client)) this.questAceitar(client.sessionId, p?.id); });
     this.onMessage(Msg.QuestDeliver, (client, p: { id?: unknown }) => { if (this.allow(client)) this.questEntregar(client.sessionId, p?.id); });
     this.onMessage(Msg.QuestTalk, (client, p: { npc?: unknown }) => { if (this.allow(client)) this.questFalar(client.sessionId, p?.npc); });
+    // dicas contextuais (C1.6): o servidor só grava ids da lista fixa do shared; cada dica fica uma vez por personagem
+    this.onMessage(Msg.DicaVista, (client, p: { id?: unknown }) => { if (this.allow(client)) this.dicaVista(client.sessionId, p?.id); });
+    this.onMessage(Msg.DicasSync, (client) => { void this.sendDicas(client.sessionId); });
     this.onMessage(Msg.QuestSync, (client) => {
       const pl = this.state.players.get(client.sessionId);
       if (!pl) return;
@@ -959,6 +963,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.state.players.set(client.sessionId, pl);
     this.sendInv(client.sessionId, pl);
     this.sendQuests(client.sessionId, pl);
+    void this.sendDicas(client.sessionId);
     // grupo: registra a presença (o grupo atravessa as zonas: a identidade é o personagem)
     parties.attach({ charId: pl.charId, name: pl.name, sid: client.sessionId, zone: this.zone.id, player: pl, send: (t, m) => this.clients.getById(client.sessionId)?.send(t, m) });
   }
@@ -1102,6 +1107,23 @@ export class ZoneRoom extends Room<ZoneState> {
       if (p.dead || p.traveling || p.quests.size === 0) return;
       this.questsMudaram(sid, p, progredirChegada(p.quests, DEFS, this.zone.id, p.x, p.y).map((rt) => rt.id));
     });
+  }
+
+  /** Dicas já vistas pelo personagem (C1.6), enviadas ao dono. */
+  private async sendDicas(sid: string) {
+    const pl = this.state.players.get(sid);
+    if (!pl?.charId) return;
+    try {
+      const ids = dicasValidas(await this.repo.loadDicas(pl.charId));
+      this.clients.getById(sid)?.send(Evt.DicasVistas, { ids } satisfies DicasVistasEvent);
+    } catch (e) { console.error("[dicas] falha ao ler:", (e as Error).message); }
+  }
+
+  /** Grava que o personagem viu a dica (C1.6). Id desconhecido é ignorado. */
+  private async dicaVista(sid: string, id: unknown) {
+    const pl = this.state.players.get(sid);
+    if (!pl?.charId || !dicaValida(id)) return;
+    try { await this.repo.marcarDica(pl.charId, id); } catch (e) { console.error("[dicas] falha ao gravar:", (e as Error).message); }
   }
 
   private questFalar(sid: string, npc: unknown) {

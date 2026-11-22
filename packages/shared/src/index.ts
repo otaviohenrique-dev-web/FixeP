@@ -2,6 +2,7 @@ import { ZONES, type EnemyKind } from "./zones";
 import type { Rarity } from "./items";
 export * from "./quests";
 export * from "./diario";
+export * from "./dicas";
 // Simulação em grade ortogonal (servidor). Isométrico é só projeção no cliente.
 // MAP_W/MAP_H/SPAWN são os da zona 1; cada zona tem os seus em ZONES (zones.ts).
 export const MAP_W = 40;
@@ -63,6 +64,8 @@ export const Msg = {
   QuestDeliver: "quest_entregar", // { id }: entrega uma quest pronta (perto do NPC dela, se houver); a recompensa sai na mesma transação
   QuestTalk: "quest_falar", // { npc }: conversa com um NPC da zona (conta para objetivos "falar"; o servidor confere a distância)
   QuestSync: "quest_sync", // {}: pede o estado das quests (o cliente pede depois de registrar os receptores)
+  DicaVista: "dica_vista", // { id }: o personagem viu esta dica (C1.6); o servidor valida o id e grava (uma vez por personagem)
+  DicasSync: "dicas_sync", // {}: pede a lista de dicas já vistas (o cliente pede depois de registrar os receptores)
 } as const;
 
 /** Eventos enviados pelo servidor. */
@@ -104,6 +107,7 @@ export const Evt = {
   MarketDone: "market_done", // MarketDoneEvent: resultado de listar, comprar, cancelar ou recolher
   Quests: "quest_estado", // QuestEvent: estado completo das quests do personagem (ao entrar e a cada mudança)
   QuestDefs: "quest_defs", // QuestDefsEvent: definições das quests (nome, texto, objetivos, recompensa); vai ao pedir quest_sync
+  DicasVistas: "dicas_vistas", // DicasVistasEvent: ids de dicas já vistas pelo personagem (ao entrar e a cada dicas_sync)
 } as const;
 
 // ------------------------------------------------------------ troca entre jogadores

@@ -78,7 +78,7 @@ run_case() {
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
 for file in test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
-            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts; do
+            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"
   if npx tsx "$file"; then echo "OK  $file"; else echo "FALHA  $file"; FAILS+=("$file"); fi
@@ -112,6 +112,8 @@ run_case 2997 "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" tes
 run_case 2998 "QUEST_TEST=1 QUEST_FIXTURE=1 API_RATE_MULT=100" test/quests.mjs ""
 # Tutorial (C1.4): 5 quests encadeadas na cidade, para as 4 classes; reconecta no meio e no fim.
 run_case 2994 "QUEST_TEST=1 API_RATE_MULT=100" test/tutorial.mjs ""
+# Dicas contextuais (C1.6): grava a dica vista, reenvia ao reentrar e ignora id inválido.
+run_case 2990 "API_RATE_MULT=100" test/dicas.mjs ""
 
 echo
 echo "Suítes executadas: $RAN"
