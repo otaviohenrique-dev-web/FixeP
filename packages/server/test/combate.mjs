@@ -19,7 +19,7 @@ async function until(cond, ms = 15000, step = 100) {
 
 async function spawn(cls) {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = "Cb" + Math.random().toString(36).slice(2, 8);
+  const name = "Cb" + Math.random().toString(10).slice(2, 8);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error(`criar ${cls}: ${cr.status}`);
   const room = await new Client(WS).joinOrCreate("zone", { token });

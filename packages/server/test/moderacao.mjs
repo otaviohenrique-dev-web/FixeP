@@ -16,7 +16,7 @@ const check = (name, ok, detail = "") => {
   if (!ok) fails++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  -> " + detail : ""}`);
 };
-const rnd = () => Math.random().toString(36).slice(2, 7);
+const rnd = () => Math.random().toString(10).slice(2, 7);
 
 // conta + personagem + sala da zona; ev guarda o que chegou
 async function jogador(prefix) {

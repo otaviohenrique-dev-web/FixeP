@@ -10,7 +10,7 @@ const check = (name, ok, detail = "") => {
   results.push({ name, ok });
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  -> " + detail : ""}`);
 };
-const rnd = () => Math.random().toString(36).slice(2, 8);
+const rnd = () => Math.random().toString(10).slice(2, 8);
 const guest = async () => (await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json()).token;
 const api = (token, path, body) =>
   fetch(`${HTTP}/api${path}`, {

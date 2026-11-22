@@ -15,7 +15,7 @@ const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ?
 
 async function conta() {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
-  const name = "Qs" + Math.random().toString(36).slice(2, 8);
+  const name = "Qs" + Math.random().toString(10).slice(2, 8);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
   if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
   return { token };
