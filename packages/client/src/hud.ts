@@ -204,9 +204,10 @@ const CSS = `
 .hd-tm{display:none;position:absolute;width:30px;height:30px;padding:0;border-radius:50%;place-items:center;cursor:pointer;font:700 15px/1 "Cinzel",Georgia,serif;color:#f0dfb8;background:rgba(12,18,28,.85);border:2px solid #7a5f2e;opacity:.55;touch-action:manipulation;-webkit-tap-highlight-color:transparent;z-index:3}
 .hd.touch .hd-tm{display:grid}
 .hd-tm.on{opacity:1;border-color:#f0cf86;box-shadow:0 0 0 2px rgba(255,225,160,.35)}
-.hd.touch .hd-tm-low{right:90px;bottom:24px}
-.hd.touch .hd-tm-near{right:30px;bottom:92px}
-.hd.touch .hd-tm-next{right:172px;bottom:14px;width:34px;height:34px;opacity:.85}
+.hd.touch .hd-tm-low{right:200px;bottom:10px}
+.hd.touch .hd-tm-near{right:200px;bottom:52px}
+.hd.touch .hd-tm-next{right:200px;bottom:94px}
+.hd-tm svg{width:17px;height:17px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .hd.touch .hd-a-skill1{right:109px;bottom:13px}
 .hd.touch .hd-a-skill2{right:81px;bottom:81px}
 .hd.touch .hd-a-skill3{right:13px;bottom:109px}
@@ -417,14 +418,19 @@ export function mountHud(opts: HudOptions): Hud {
     els.set(a, { btn: b, cd: b.querySelector(".hd-cd")!, n: b.querySelector(".hd-cdn")! });
   }
 
+  const TM_ICON = {
+    low: '<svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/><path d="M12 11v5M9.8 14l2.2 2.2 2.2-2.2"/></svg>',
+    near: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.6"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg>',
+    next: '<svg viewBox="0 0 24 24"><path d="M19.5 8A8 8 0 0 0 5 7.5M4.5 16a8 8 0 0 0 14.5.5"/><path d="M19.5 3.5V8H15M4.5 20.5V16H9"/></svg>',
+  };
   // prioridade do alvo sem foco: "<" menos vida em % (padrão) e ">" mais próximo; ficam ao lado do ataque básico (só no celular)
   let tMode: "low" | "near" = opts.targetMode ?? "low";
   const tmBtns: [HTMLButtonElement, "low" | "near", string][] = [];
-  for (const [m, label, title] of [["low", "<", "Prioridade: menos vida (%)"], ["near", ">", "Prioridade: mais próximo"]] as const) {
+  for (const [m, label, title] of [["low", TM_ICON.low, "Prioridade: alvo com menos vida"], ["near", TM_ICON.near, "Prioridade: alvo mais próximo"]] as const) {
     const t = document.createElement("button");
     t.type = "button";
     t.className = `hd-tm hd-tm-${m}`;
-    t.textContent = label;
+    t.innerHTML = label;
     t.title = title;
     t.setAttribute("aria-label", title);
     t.addEventListener("pointerdown", (e) => {
@@ -440,7 +446,7 @@ export function mountHud(opts: HudOptions): Hud {
     const n = document.createElement("button");
     n.type = "button";
     n.className = "hd-tm hd-tm-next";
-    n.textContent = "⟳";
+    n.innerHTML = TM_ICON.next;
     n.title = "Próximo alvo";
     n.setAttribute("aria-label", "Próximo alvo");
     n.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); opts.onNextTarget?.(); });
