@@ -62,8 +62,12 @@ function linhaObjetivo(o: Objetivo, valor: number): string {
   }
   if (o.tipo === "coletar") return `Ter ${ITEMS[o.itemId]?.name ?? o.itemId}: ${formatarProgresso(o, valor)}`;
   if (o.tipo === "falar") return `Conversar com ${nomeNpc(o.npc)}: ${formatarProgresso(o, valor)}`;
+  if (o.tipo === "usar") return `Usar a habilidade ${TECLA_HABILIDADE[o.acao]}: ${formatarProgresso(o, valor)}`;
+  if (o.tipo === "equipar") return `Equipar ${o.slot === "armor" ? "uma armadura" : o.slot}: ${formatarProgresso(o, valor)}`;
   return `Chegar ao ponto (zona ${o.zona}): ${formatarProgresso(o, valor)}`;
 }
+
+const TECLA_HABILIDADE: Record<string, string> = { skill1: "1 (Q)", skill2: "2 (W)", skill3: "3 (E)", ultimate: "final (R)" };
 
 /** uma quest no diário: nome, estado, texto, objetivos com progresso e recompensa */
 function blocoQuest(e: EntradaDiario): HTMLElement {

@@ -32,6 +32,7 @@ import { GroundLayer } from "./ground";
 import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
 import { mountDiario, type DiarioUi } from "./diario";
+import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
@@ -125,6 +126,7 @@ class WorldScene extends Phaser.Scene {
   private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; blast?: number; obj: Phaser.GameObjects.Shape }>();
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
   private zoneId = 1;
+  private tutorial!: TutorialUi; // faixa e bandeira do tutorial (C1.4)
   private gates: GateLayer | null = null; // portões da zona (estruturas de pedra no lugar dos antigos anéis)
   private lowHp!: LowHp; // moldura vermelha de vida baixa
   private shieldEnd = 0; // fim da bolha de chegada (relógio do navegador); 0 = sem contagem (carregando ou sem bolha)
@@ -258,6 +260,7 @@ class WorldScene extends Phaser.Scene {
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
+    this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId }); // faixa do tutorial e bandeira (C1.4)
     this.selG = this.add.graphics().setDepth(0.35);
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
@@ -528,8 +531,8 @@ class WorldScene extends Phaser.Scene {
       else this.inv.toast(t[0], t[1]);
     });
     room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); });
-    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); });
-    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); });
+    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); });
+    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); });
     this.room.send(Msg.InvSync, {});
     this.room.send(Msg.QuestSync, {}); // pede o estado e as definições das quests (depois de registrar os receptores)
     room.onMessage(Evt.Chat, (m: ChatEvent) => {

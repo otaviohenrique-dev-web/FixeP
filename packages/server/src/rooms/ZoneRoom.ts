@@ -25,8 +25,8 @@ import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuse
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
-import { carregarQuests, aceitar, progredirAbate, progredirFala, progredirChegada, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
-import type { QuestEvent, QuestDefsEvent, QuestDef } from "@frixep/shared";
+import { carregarQuests, aceitar, progredirAbate, progredirFala, progredirChegada, progredirUso, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
+import type { QuestEvent, QuestDefsEvent, QuestDef, AcaoUsar } from "@frixep/shared";
 
 /** Quests carregadas dos JSON em packages/server/data/quests. Se algum estiver errado, o servidor nem sobe (mensagem diz o arquivo). */
 const DEFS = carregarQuests();
@@ -814,6 +814,7 @@ export class ZoneRoom extends Room<ZoneState> {
     p.invDirty = true;
     this.refreshStats(p);
     this.sendInv(client.sessionId, p);
+    this.questsDaMochila(client.sessionId, p); // equipar e coletar acompanham o que o personagem tem agora
   }
 
   private usePotion(p: Player, slot: unknown): { ok: true } | { ok: false; error: string } {
@@ -1089,6 +1090,12 @@ export class ZoneRoom extends Room<ZoneState> {
     this.questsMudaram(sid, p, progredirAbate(p.quests, DEFS, kind, zona).map((rt) => rt.id));
   }
 
+  /** Uma habilidade (skill1..3, ultimate) disparou: conta nas quests "usar" (C1.4). */
+  private questUso(sid: string, p: Player, a: ActionId) {
+    if (p.quests.size === 0 || !["skill1", "skill2", "skill3", "ultimate"].includes(a)) return;
+    this.questsMudaram(sid, p, progredirUso(p.quests, DEFS, a as AcaoUsar).map((rt) => rt.id));
+  }
+
   /** Conferência dos objetivos "chegar" (a cada 0,5 s, só para quem tem quest ativa). */
   private checarChegadas() {
     this.state.players.forEach((p, sid) => {
@@ -1143,7 +1150,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private async gravarEntrega(sid: string, p: Player, def: QuestDef, rt: QuestRt) {
     try {
       if (!p.charId || rt.estado !== "pronta") return;
-      const r = aplicarRecompensa(p.inv, def);
+      const r = aplicarRecompensa(p.inv, def, p.cls as CharClass);
       if (!r.ok) return this.notify(sid, r.error);
       const lv = xpAposGanho(p.level, p.xp, def.recompensa.xp);
       await this.repo.entregarQuest(p.charId, { id: rt.id, estado: "entregue", progresso: [...rt.progresso] }, lv.level, lv.xp, r.inv);
@@ -1320,6 +1327,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (aimDist < 0.01) { dx = Math.cos(p.face); dy = Math.sin(p.face); } else { dx /= aimDist; dy /= aimDist; }
     p.face = Math.atan2(dy, dx);
     p.cdUntil[a] = this.t + def.cd;
+    if (a !== "attack" && a !== "dodge") this.questUso(id, p, a); // a habilidade disparou (quests "usar")
     p.tx = p.x; // ação interrompe o movimento
     p.ty = p.y;
 

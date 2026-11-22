@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import {
-  ITEMS, ENEMY_KINDS, ZONES, zoneNpcs, LEVEL_CAP, xpToNext, validarFormatoQuest,
-  type QuestDef, type Objetivo, type EstadoQuest, type QuestEstado,
+  ITEMS, ENEMY_KINDS, ZONES, zoneNpcs, LEVEL_CAP, xpToNext, validarFormatoQuest, objetivoContavel, CLASSE_PLACEHOLDER,
+  type QuestDef, type Objetivo, type EstadoQuest, type QuestEstado, type CharClass, type AcaoUsar,
 } from "@frixep/shared";
 import { addItem, type Inventory } from "./inventory.js";
 import { addCoins } from "./economy.js";
@@ -63,11 +63,20 @@ function conferirContraJogo(def: QuestDef, arq: string): void {
       if (!ZONES[o.zona]) throw new Error(`quest "${arq}": ${onde}.zona ${o.zona} não existe`);
     }
   });
-  for (const r of def.recompensa.itens) if (!ITEMS[r.id]) throw new Error(`quest "${arq}": recompensa.itens com id "${r.id}" inexistente`);
+  // recompensa: id de item existente; "{classe}" vale para cada classe (o item de cada uma tem de existir)
+  for (const r of def.recompensa.itens) {
+    const ids = r.id.includes(CLASSE_PLACEHOLDER) ? CLASSES.map((c) => resolverItem(r.id, c)) : [r.id];
+    for (const id of ids) if (!ITEMS[id]) throw new Error(`quest "${arq}": recompensa.itens com id "${id}" inexistente`);
+  }
 }
 
+const CLASSES: readonly CharClass[] = ["warrior", "archer", "cleric", "mage"];
+
+/** Item de recompensa para uma classe: troca "{classe}" pela classe ("{classe}_armor_common" -> "mage_armor_common"). */
+export const resolverItem = (id: string, cls: CharClass | string): string => id.split(CLASSE_PLACEHOLDER).join(cls);
+
 // ------------------------------------------------------------------ regras
-const cumprido = (o: Objetivo, valor: number) => (o.tipo === "abater" || o.tipo === "coletar" ? valor >= o.qtd : valor >= 1);
+const cumprido = (o: Objetivo, valor: number) => (objetivoContavel(o) && "qtd" in o ? valor >= o.qtd : valor >= 1);
 
 /** Quantidade de um item na mochila (só a bolsa; equipamento não conta). */
 export function contarItem(inv: Inventory, id: string): number {
@@ -86,13 +95,34 @@ export function recomputar(rt: QuestRt, def: QuestDef): boolean {
   return true;
 }
 
-/** Coletar é consultado na mochila: a quantidade é o que o personagem tem agora (solta um item, perde o objetivo). */
+/**
+ * Coletar e equipar são consultados no estado atual do personagem: a quantidade na bolsa (coletar) ou o slot ocupado (equipar).
+ * Solta um item ou tira o equipamento, perde o objetivo.
+ */
 export function atualizarColetas(rt: QuestRt, def: QuestDef, inv: Inventory): boolean {
   if (rt.estado === "entregue") return false;
   def.objetivos.forEach((o, i) => {
     if (o.tipo === "coletar") rt.progresso[i] = Math.min(o.qtd, contarItem(inv, o.itemId));
+    if (o.tipo === "equipar") rt.progresso[i] = inv.equip[o.slot] ? 1 : 0;
   });
   return recomputar(rt, def);
+}
+
+/** Uma habilidade disparou (só conta quando ela de fato acontece: recurso gasto e fora de recarga). Conta +1 nos objetivos "usar" dessa ação. */
+export function progredirUso(qs: QuestMap, defs: Defs, acao: AcaoUsar): QuestRt[] {
+  const mudou: QuestRt[] = [];
+  for (const rt of qs.values()) {
+    const def = defs.get(rt.id);
+    if (!def || rt.estado !== "ativa") continue;
+    let tocou = false;
+    def.objetivos.forEach((o, i) => {
+      if (o.tipo !== "usar" || o.acao !== acao || (rt.progresso[i] ?? 0) >= o.qtd) return;
+      rt.progresso[i] = (rt.progresso[i] ?? 0) + 1;
+      tocou = true;
+    });
+    if (tocou) { recomputar(rt, def); mudou.push(rt); }
+  }
+  return mudou;
 }
 
 /** Tenta aceitar a quest. Confere: existe, ainda não foi aceita/entregue, nível, pré-requisitos. */
@@ -165,11 +195,11 @@ export function progredirChegada(qs: QuestMap, defs: Defs, zona: number, x: numb
  * Entrega: calcula o inventário DEPOIS da entrega (itens de coletar saem, recompensa entra) numa cópia.
  * Se a recompensa não couber, recusa e o inventário original não muda. Quem chama grava a cópia e só então a aplica.
  */
-export function aplicarRecompensa(inv: Inventory, def: QuestDef): { ok: true; inv: Inventory } | { ok: false; error: string } {
+export function aplicarRecompensa(inv: Inventory, def: QuestDef, cls: CharClass): { ok: true; inv: Inventory } | { ok: false; error: string } {
   const c: Inventory = { ...inv, equip: { ...inv.equip }, slots: inv.slots.map((s) => (s ? { ...s } : null)) };
   for (const o of def.objetivos) if (o.tipo === "coletar") removerItem(c, o.itemId, o.qtd);
   let sobra = 0;
-  for (const r of def.recompensa.itens) sobra += addItem(c, r.id, r.qtd);
+  for (const r of def.recompensa.itens) sobra += addItem(c, resolverItem(r.id, cls), r.qtd);
   if (sobra > 0) return { ok: false, error: "Mochila cheia: libere espaço para receber a recompensa." };
   addCoins(c, "iron", def.recompensa.ferro);
   return { ok: true, inv: c };

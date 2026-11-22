@@ -1,0 +1,13 @@
+{
+  "id": "tutorial_4_pocao",
+  "nome": "Provisões",
+  "texto": "Você tem uma Poção de Vida. Guarde-a na mochila e entregue para Garrick. Ele tem uma armadura para você.",
+  "nivelMin": 1,
+  "npc": "merchant",
+  "preRequisitos": ["tutorial_3_habilidade"],
+  "objetivos": [
+    { "tipo": "coletar", "itemId": "pocao_de_vida", "qtd": 1 }
+  ],
+  "recompensa": { "xp": 40, "ferro": 20, "itens": [{ "id": "{classe}_armor_common", "qtd": 1 }] },
+  "dica": { "toque": "Abra a mochila e veja a Poção de Vida que você ganhou.", "teclado": "Abra a mochila (tecla I) e veja a Poção de Vida que você ganhou." }
+}

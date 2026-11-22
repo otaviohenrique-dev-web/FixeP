@@ -8,7 +8,22 @@ export interface ObjetivoAbater { tipo: "abater"; kind: string; qtd: number; zon
 export interface ObjetivoColetar { tipo: "coletar"; itemId: string; qtd: number }
 export interface ObjetivoFalar { tipo: "falar"; npc: string }
 export interface ObjetivoChegar { tipo: "chegar"; zona: number; x: number; y: number; raio: number }
-export type Objetivo = ObjetivoAbater | ObjetivoColetar | ObjetivoFalar | ObjetivoChegar;
+/** Usar uma habilidade (C1.4): conta cada uso bem-sucedido (o servidor só conta quando a habilidade dispara). */
+export interface ObjetivoUsar { tipo: "usar"; acao: AcaoUsar; qtd: number }
+/** Equipar (C1.4): cumprido enquanto o slot tem um item equipado (acompanha a mochila e o equipamento). */
+export interface ObjetivoEquipar { tipo: "equipar"; slot: SlotEquipar }
+export type AcaoUsar = "skill1" | "skill2" | "skill3" | "ultimate";
+export type SlotEquipar = "weapon" | "armor" | "helmet" | "boots" | "cape";
+export type Objetivo = ObjetivoAbater | ObjetivoColetar | ObjetivoFalar | ObjetivoChegar | ObjetivoUsar | ObjetivoEquipar;
+
+/** Quantidade por objetivo (abater, coletar, usar) ou sim/não (falar, chegar, equipar). */
+export const objetivoContavel = (o: Objetivo): boolean => o.tipo === "abater" || o.tipo === "coletar" || o.tipo === "usar";
+
+/** Marcador do id de classe em uma recompensa de item: "{classe}_armor_common" vira, p.ex., "mage_armor_common" para um mago. */
+export const CLASSE_PLACEHOLDER = "{classe}";
+
+/** Dica do tutorial: a instrução do passo atual, um texto para toque (celular) e outro para teclado/mouse (PC). */
+export interface DicaQuest { toque: string; teclado: string }
 
 export interface RecompensaQuest { xp: number; ferro: number; itens: { id: string; qtd: number }[] }
 
@@ -21,6 +36,7 @@ export interface QuestDef {
   preRequisitos: string[]; // ids de quests que precisam estar entregues antes
   objetivos: Objetivo[];
   recompensa: RecompensaQuest;
+  dica?: DicaQuest; // só as quests do tutorial (faixa no topo da tela)
 }
 
 /** Estado de uma quest de um personagem, como o servidor envia ao cliente. */
@@ -66,6 +82,13 @@ export function validarFormatoQuest(raw: unknown, origem: string): QuestDef {
   if (!Array.isArray(q.objetivos) || q.objetivos.length < 1 || q.objetivos.length > QUEST_OBJETIVOS_MAX) erro(origem, `"objetivos" deve ser uma lista de 1 a ${QUEST_OBJETIVOS_MAX} itens`);
   const objetivos = (q.objetivos as unknown[]).map((o, i): Objetivo => validarObjetivo(o, origem, i));
 
+  const dica = q.dica as DicaQuest | undefined;
+  if (dica !== undefined) {
+    if (!isObj(dica) || !isStr(dica.toque) || !isStr(dica.teclado) || dica.toque.length > 120 || dica.teclado.length > 120) {
+      erro(origem, `"dica" deve ter "toque" e "teclado" (textos de até 120 caracteres)`);
+    }
+  }
+
   const r = q.recompensa;
   if (!isObj(r)) erro(origem, `"recompensa" é obrigatória (objeto com xp, ferro e itens)`);
   const rec = r as Record<string, unknown>;
@@ -88,6 +111,7 @@ export function validarFormatoQuest(raw: unknown, origem: string): QuestDef {
     preRequisitos: pre as string[],
     objetivos,
     recompensa: { xp: rec.xp as number, ferro: rec.ferro as number, itens },
+    ...(dica !== undefined ? { dica: { toque: dica.toque, teclado: dica.teclado } } : {}),
   };
 }
 
@@ -114,7 +138,14 @@ function validarObjetivo(o: unknown, origem: string, i: number): Objetivo {
       if (typeof b.y !== "number" || !Number.isFinite(b.y)) erro(origem, `${where}: "y" deve ser número (tile)`);
       if (typeof b.raio !== "number" || !(b.raio > 0 && b.raio <= 50)) erro(origem, `${where}: "raio" deve ser número maior que 0 (até 50 tiles)`);
       return { tipo: "chegar", zona: b.zona as number, x: b.x as number, y: b.y as number, raio: b.raio as number };
+    case "usar":
+      if (!["skill1", "skill2", "skill3", "ultimate"].includes(b.acao as string)) erro(origem, `${where}: "acao" deve ser skill1, skill2, skill3 ou ultimate`);
+      if (!isInt(b.qtd, 1, QUEST_QTD_MAX)) erro(origem, `${where}: "qtd" deve ser inteiro de 1 a ${QUEST_QTD_MAX}`);
+      return { tipo: "usar", acao: b.acao as AcaoUsar, qtd: b.qtd as number };
+    case "equipar":
+      if (!["weapon", "armor", "helmet", "boots", "cape"].includes(b.slot as string)) erro(origem, `${where}: "slot" deve ser weapon, armor, helmet, boots ou cape`);
+      return { tipo: "equipar", slot: b.slot as SlotEquipar };
     default:
-      return erro(origem, `${where}: "tipo" deve ser "abater", "coletar", "falar" ou "chegar" (recebido: ${JSON.stringify(b.tipo)})`);
+      return erro(origem, `${where}: "tipo" deve ser "abater", "coletar", "falar", "chegar", "usar" ou "equipar" (recebido: ${JSON.stringify(b.tipo)})`);
   }
 }

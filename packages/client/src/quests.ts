@@ -55,6 +55,9 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""):
   return e;
 };
 
+const SLOT_HABILIDADE: Record<string, string> = { skill1: "1 (Q)", skill2: "2 (W)", skill3: "3 (E)", ultimate: "final (R)" };
+const SLOT_NOME: Record<string, string> = { weapon: "uma arma", armor: "uma armadura", helmet: "um elmo", boots: "botas", cape: "uma capa" };
+
 /** texto de um objetivo com o progresso atual, ex.: "Esqueleto (zona 1): 1/3" */
 function linhaObjetivo(o: Objetivo, valor: number): string {
   if (o.tipo === "abater") {
@@ -62,6 +65,8 @@ function linhaObjetivo(o: Objetivo, valor: number): string {
     return `Derrotar ${nome}${o.zona !== undefined ? ` na zona ${o.zona}` : ""}: ${Math.min(valor, o.qtd)}/${o.qtd}`;
   }
   if (o.tipo === "coletar") return `Ter ${ITEMS[o.itemId]?.name ?? o.itemId}: ${Math.min(valor, o.qtd)}/${o.qtd}`;
+  if (o.tipo === "usar") return `Usar a habilidade ${SLOT_HABILIDADE[o.acao]}: ${Math.min(valor, o.qtd)}/${o.qtd}`;
+  if (o.tipo === "equipar") return `Equipar ${SLOT_NOME[o.slot]}: ${valor >= 1 ? "feito" : "falta"}`;
   if (o.tipo === "falar") return `Conversar com ${o.npc}: ${valor >= 1 ? "feito" : "falta"}`;
   return `Chegar ao ponto (zona ${o.zona}): ${valor >= 1 ? "feito" : "falta"}`;
 }
@@ -100,7 +105,14 @@ export function mountQuests(opts: {
   }, true);
 
   /** quests que este NPC dá ou recebe (na ordem das definições) */
-  const questsDoNpc = (id: string) => [...defs.values()].filter((d) => d.npc === id);
+  // Tutorial (C1.4): os passos aparecem em ordem, primeiro, e só quando o anterior foi entregue (o próximo some até lá).
+  const entregue = (qid: string) => estados.get(qid)?.estado === "entregue";
+  const questsDoNpc = (id: string) => {
+    const todas = [...defs.values()].filter((d) => d.npc === id);
+    const tutorial = todas.filter((d) => d.id.startsWith("tutorial_") && d.preRequisitos.every(entregue));
+    const outras = todas.filter((d) => !d.id.startsWith("tutorial_"));
+    return [...tutorial, ...outras];
+  };
 
   function render() {
     if (!npc || !back.classList.contains("open")) return;

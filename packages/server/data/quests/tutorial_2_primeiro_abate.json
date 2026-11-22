@@ -1,0 +1,13 @@
+{
+  "id": "tutorial_2_primeiro_abate",
+  "nome": "Primeiro Abate",
+  "texto": "Saia pela muralha e vá às Cinzas. Derrote 2 esqueletos e volte para Garrick.",
+  "nivelMin": 1,
+  "npc": "merchant",
+  "preRequisitos": ["tutorial_1_andar"],
+  "objetivos": [
+    { "tipo": "abater", "kind": "skeleton", "qtd": 2, "zona": 1 }
+  ],
+  "recompensa": { "xp": 40, "ferro": 20, "itens": [] },
+  "dica": { "toque": "Vá ao portão do norte, escolha Cinzas e ataque 2 esqueletos.", "teclado": "Vá ao portão do norte, escolha Cinzas e ataque 2 esqueletos (barra de espaço)." }
+}

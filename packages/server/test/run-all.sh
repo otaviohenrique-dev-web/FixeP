@@ -110,6 +110,8 @@ run_case 2996 "TEST_START_ZONE=1" test/chegada.mjs ""
 run_case 2997 "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/moderacao.mjs ""
 # Quests (C1.1): aceitar, progredir, entregar e persistir. QUEST_TEST=1 libera o atalho de abates de teste (nunca em produção).
 run_case 2998 "QUEST_TEST=1 API_RATE_MULT=100" test/quests.mjs ""
+# Tutorial (C1.4): 5 quests encadeadas na cidade, para as 4 classes; reconecta no meio e no fim.
+run_case 2994 "QUEST_TEST=1 API_RATE_MULT=100" test/tutorial.mjs ""
 
 echo
 echo "Suítes executadas: $RAN"
