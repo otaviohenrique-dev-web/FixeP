@@ -53,11 +53,13 @@ const W = CLASS_DEFS.warrior;
 check("segue sendo o tanque: mais vida que as outras classes de dano e Fúria 100", W.maxHp > CLASS_DEFS.mage.maxHp && W.maxHp > CLASS_DEFS.archer.maxHp && W.maxHp >= CLASS_DEFS.cleric.maxHp && W.resource.max === 100);
 check("Q Investida: avanço que ATORDOA", W.actions.skill1.kind === "dashHit" && (W.actions.skill1.stunS ?? 0) > 0);
 check("W Correntes: área que ENRAÍZA, com visual 'chains'", W.actions.skill2.kind === "rain" && (W.actions.skill2.rootS ?? 0) > 0 && W.actions.skill2.fx === "chains");
-check("E Escudo Refletor: PROVOCA, reduz dano e REFLETE", W.actions.skill3.kind === "reflectBuff" && (W.actions.skill3.reflect ?? 0) > 0 && (W.actions.skill3.reduction ?? 0) > 0 && (W.actions.skill3.tauntRadius ?? 0) > 0);
+// Escudo de Aço (antes "Escudo Refletor"): o reflexo saiu da classe (é o afixo Espinhos), fica provocar + redução de dano.
+check("E Escudo de Aço: PROVOCA e reduz dano, sem reflexo de classe", W.actions.skill3.kind === "reflectBuff" && (W.actions.skill3.reflect ?? 0) === 0 && (W.actions.skill3.reduction ?? 0) > 0 && (W.actions.skill3.tauntRadius ?? 0) > 0);
 check("R Queda do Colosso: do alto (fx colossus), grande e atordoa", W.actions.ultimate.fx === "colossus" && W.actions.ultimate.radius! >= 4 && (W.actions.ultimate.stunS ?? 0) > 0 && W.actions.ultimate.dmg! >= 3 * W.actions.attack.dmg! && W.actions.ultimate.dmg! <= 4 * W.actions.attack.dmg!); // R 120 → 40 (≈ 4x o golpe de 10): dano médio, controle é o papel
 check("a ultimate é a mais forte do Guerreiro e tem telégrafo (atraso ≥ 1 s)", W.actions.ultimate.dmg! > Math.max(W.actions.skill1.dmg!, W.actions.skill2.dmg!) && (W.actions.ultimate.delayS ?? 0) >= 1);
 check("os chefes resistem ao controle (duração × " + BOSS_CC_RESIST + ")", BOSS_CC_RESIST > 0 && BOSS_CC_RESIST < 1);
-check("Guerreiro sobrevive: a Investida cura um pouco (sem cura no golpe básico: isso é afixo de item); Correntes deixa lento além de enraizar", (W.actions.attack.hitHeal ?? 0) === 0 && (W.actions.skill1.selfHeal ?? 0) > 0 && (W.actions.skill2.slowPct ?? 0) >= 20 && (W.actions.skill2.rootS ?? 0) > 0);
+// Antes a Investida curava (selfHeal) e o E refletia: recuperação de vida e reflexo são afixos de item (Roubo/Colheita e Espinhos), então saíram das classes.
+check("Guerreiro não cura nas habilidades (recuperação de vida é afixo de item); Investida dá mais dano e atordoa; Correntes deixa lento além de enraizar", (W.actions.attack.hitHeal ?? 0) === 0 && (W.actions.skill1.selfHeal ?? 0) === 0 && (W.actions.skill1.dmg ?? 0) >= 14 && (W.actions.skill1.stunS ?? 0) > 0 && (W.actions.skill2.slowPct ?? 0) >= 20 && (W.actions.skill2.rootS ?? 0) > 0);
 check("Guerreiro: nenhuma habilidade passa de 40 de dano (tanque: a R é a maior e fica nesse teto)", Object.values(W.actions).every((a) => (a.dmg ?? 0) <= 40));
 
 console.log("\n== Clérigo: acúmulos, mana e apoio ==");
@@ -66,7 +68,8 @@ check("Cura em Área devolve mana, dá escudo leve e a Luz Divina purifica e dá
 
 console.log("\n== Mago: queimadura e controle ==");
 const M = CLASS_DEFS.mage.actions;
-check("Fogo (Q, E) e Meteoro (R) queimam: burnPct > 0 com duração; Relâmpago (W) atordoa por pouco", (M.skill1.burnPct ?? 0) > 0 && (M.skill3.burnPct ?? 0) > 0 && (M.ultimate.burnPct ?? 0) > 0 && (M.skill2.stunS ?? 0) > 0 && (M.skill2.stunS ?? 0) < 1.5);
+// Queimadura saiu do Mago (é afixo de item, "Queimadura ao Acertar"): o controle vira lentidão (Q), enraizamento (E, R) e o atordoamento curto do Relâmpago (W).
+check("Mago sem queimadura: Q lentifica, E e R enraízam; Relâmpago (W) atordoa por pouco", (M.skill1.burnPct ?? 0) === 0 && (M.skill3.burnPct ?? 0) === 0 && (M.ultimate.burnPct ?? 0) === 0 && (M.skill1.slowPct ?? 0) > 0 && (M.skill3.rootS ?? 0) > 0 && (M.ultimate.rootS ?? 0) > 0 && (M.skill2.stunS ?? 0) > 0 && (M.skill2.stunS ?? 0) < 1.5);
 check("Meteoro (R) passou a ter dano médio, abaixo de 60 (antes 140)", M.ultimate.dmg! <= 60 && M.ultimate.dmg! >= 40);
 
 console.log("\n== Clérigo: dois Q ==");

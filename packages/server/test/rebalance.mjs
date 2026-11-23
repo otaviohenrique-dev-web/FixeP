@@ -1,5 +1,5 @@
 // Teste curto do rebalance das classes (C-rebalance): (1) acúmulos da Cura Focada do Clérigo, (2) provocar do Guerreiro,
-// (3) queimadura do Mago. Os valores vêm do servidor real; nada aqui depende de número de dano exato.
+// (3) lentidão da Bola de Fogo do Mago. Os valores vêm do servidor real; nada aqui depende de número de dano exato.
 // Uso: SERVER=http://localhost:2993 node test/rebalance.mjs   (servidor de teste com LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1; veja run-all.sh)
 import { Client } from "colyseus.js";
 
@@ -77,18 +77,18 @@ console.log("\n== 2. Guerreiro: provocar (E) ==");
   await sleep(500);
 }
 
-// 3) Mago: Bola de Fogo queima o inimigo atingido (dano ao longo do tempo) e a queimadura acaba
-console.log("\n== 3. Mago: queimadura ==");
+// 3) Mago: a Bola de Fogo LENTIFICA o inimigo atingido (controle básico) e o lento acaba depois de 3 s.
+// A queimadura saiu da classe (é o afixo "Queimadura ao Acertar", de item): o Mago não queima mais.
+console.log("
+== 3. Mago: lentidão da Bola de Fogo ==");
 {
   const M = await spawn("mage");
   await arrive(M, 24, 16); // e1 (30,16) a 6 tiles: dentro do alcance da Bola (10)
   const e = M.room.state.enemies.get("e1");
-  const mine = () => M.ev.hits.filter((h) => h.k === "e" && h.id === "e1" && h.by === M.id);
   M.act("skill1", 30, 16);
-  check("a Bola de Fogo acende a queimadura no inimigo (flag burning na tela)", await until(() => e.burning === true, 3000, 50));
-  await until(() => mine().length >= 3, 6000, 100);
-  check("a queimadura dá dano além do impacto: impacto + ticks de 1 s do Mago", mine().length >= 3, `${mine().length} golpes do Mago em e1`);
-  check("a queimadura apaga quando a duração acaba (4 s)", await until(() => e.burning === false, 8000, 100));
+  check("a Bola de Fogo deixa o inimigo lento (flag slowed na tela)", await until(() => e.slowed === true, 3000, 50));
+  check("a Bola de Fogo não acende queimadura (a classe não tem mais queimadura)", e.burning !== true);
+  check("o lento acaba depois de 3 s", await until(() => e.slowed === false, 8000, 100));
   M.room.leave();
 }
 

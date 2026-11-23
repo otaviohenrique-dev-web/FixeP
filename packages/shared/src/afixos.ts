@@ -92,9 +92,15 @@ export const AFIXOS_POR_RARIDADE: Record<Rarity, [number, number]> = {
   junk: [0, 0], common: [0, 1], uncommon: [1, 1], rare: [1, 2], epic: [2, 2], legendary: [2, 3], mythic: [3, 3], ancestral: [3, 3],
 };
 
-/** O afixo é possível para este tipo de item e esta raridade? */
+/** Tipos de item que recebem afixos: toda arma, mão secundária e peça de defesa (todo equipamento). */
+export const KINDS_EQUIPAVEIS: readonly ItemKind[] = ["weapon", "offhand", "helmet", "armor", "boots", "cape"];
+
+/**
+ * O afixo é possível para este tipo de item e esta raridade? Afixos sem efeito no combate (efeito null) NÃO saem:
+ * um item não pode trazer uma linha que não faz nada (ficam no catálogo até ganharem efeito).
+ */
 export function afixoElegivel(a: Afixo, kind: ItemKind, rarity: Rarity): boolean {
-  return ALVO_KINDS[a.alvo].includes(kind) && rarityIndex(rarity) >= rarityIndex(a.minRaridade);
+  return a.efeito !== null && ALVO_KINDS[a.alvo].includes(kind) && rarityIndex(rarity) >= rarityIndex(a.minRaridade);
 }
 
 /** Valor do afixo para esta raridade (0 se ela não o libera). */
@@ -105,20 +111,55 @@ export function valorDoAfixo(id: string, rarity: Rarity): number {
   return a.valores[i] ?? 0;
 }
 
+/** Afixos de ARMA (arma e mão secundária) que são ofensivos: são os únicos que saem em arma de raridade rara ou acima. */
+export const AFIXOS_OFENSIVOS_ARMA: ReadonlySet<string> = new Set([
+  "afiado", "olho_certeiro", "punhos_rapidos", "essencia_drenada", "colheita_de_almas", "cacador_de_chefes",
+  "golpe_brutal", "barreira_de_brasa", "roubo_de_vida", "queimadura_ao_acertar", "execucao", "dano_de_mito",
+]);
+
 /**
  * Sorteia os afixos de um drop: quantidade pela raridade (AFIXOS_POR_RARIDADE), sem repetir e só entre os elegíveis.
+ * Arma (ou mão secundária) de raridade rara ou acima sorteia SÓ afixos ofensivos (AFIXOS_OFENSIVOS_ARMA).
  * Função pura: mesmo rng, mesmo resultado. Nunca passa de MAX_AFIXOS.
  */
 export function sortearAfixos(kind: ItemKind, rarity: Rarity, rng: () => number = Math.random): string[] {
   const [lo, hi] = AFIXOS_POR_RARIDADE[rarity] ?? [0, 0];
   const quantos = Math.min(MAX_AFIXOS, lo + Math.floor(rng() * (hi - lo + 1)));
-  const pool = AFIXOS.filter((a) => afixoElegivel(a, kind, rarity)).map((a) => a.id);
+  const armaAlta = (kind === "weapon" || kind === "offhand") && rarityIndex(rarity) >= rarityIndex("rare");
+  const pool = AFIXOS.filter((a) => afixoElegivel(a, kind, rarity) && (!armaAlta || AFIXOS_OFENSIVOS_ARMA.has(a.id))).map((a) => a.id);
   const out: string[] = [];
   while (out.length < quantos && pool.length > 0) {
     const i = Math.floor(rng() * pool.length);
     out.push(pool.splice(i, 1)[0]);
   }
   return out;
+}
+
+/** Semente de texto -> número (FNV-1a): mesmo texto, mesmo número, em qualquer máquina. */
+function hashSemente(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/** Gerador pseudoaleatório pequeno (mulberry32): a mesma semente dá sempre a mesma sequência. */
+function gerador(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Afixos DETERMINÍSTICOS para um item que já existia sem afixos (backfill): a semente é um texto fixo
+ * (ex.: personagem + espaço + id do item), então o mesmo item sempre recebe os mesmos afixos.
+ */
+export function afixosDaSemente(semente: string, kind: ItemKind, rarity: Rarity): string[] {
+  return sortearAfixos(kind, rarity, gerador(hashSemente(semente)));
 }
 
 /**

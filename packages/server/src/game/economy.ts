@@ -2,7 +2,7 @@ import {
   ITEMS, MAX_COINS, TRADE_MAX_ITEMS, MERGE_COUNT, BREAK_CONFIRM_FROM, rarityIndex, buyPrice, sellPrice, breakValue, canBreak, shopStock, checkMerge, coinName,
   type CharClass, type CoinKind,
 } from "@frixep/shared";
-import { addItem, canFit, validSlot, type Inventory, type Result } from "./inventory.js";
+import { addItem, addItemNovo, canFit, validSlot, type Inventory, type Result } from "./inventory.js";
 
 /**
  * Regras da economia, em funções puras sobre o inventário (o ZoneRoom só valida distância e chama aqui).
@@ -30,7 +30,7 @@ export function buyItem(inv: Inventory, cls: CharClass, id: unknown, qty: unknow
   if (inv.iron < cost) return { ok: false, error: `Tostões insuficientes (precisa de ${cost}).` };
   if (!canFit(inv, id, q)) return { ok: false, error: "Mochila cheia." };
   inv.iron -= cost;
-  addItem(inv, id, q);
+  addItemNovo(inv, id, q);
   return { ok: true, cost };
 }
 
@@ -79,16 +79,17 @@ export function mergeItems(inv: Inventory, slots: unknown, zoneId: number, rng: 
   if (!chk.ok) return chk;
   if (inv.iron < chk.fee) return { ok: false, error: `Tostões insuficientes (a fusão custa ${chk.fee}).` };
   // os itens saem e o resultado entra: sempre cabe (saem 3 espaços, entra no máximo 1)
+  const originais = (slots as number[]).map((i) => inv.slots[i]); // os itens que entram na fusão: os sobreviventes levam os seus afixos
   for (const i of slots as number[]) inv.slots[i] = null;
   inv.iron -= chk.fee;
   if (rng() < chk.chance) {
     const fam = chk.families[Math.floor(rng() * chk.families.length)];
     const id = `${fam}_${chk.to}`;
-    addItem(inv, id, 1);
+    addItemNovo(inv, id, 1); // o resultado da fusão é item novo: sorteia os seus afixos
     return { ok: true, success: true, id, fee: chk.fee, chance: chk.chance };
   }
   const lostIdx = Math.floor(rng() * MERGE_COUNT);
-  ids.forEach((id, k) => { if (k !== lostIdx) addItem(inv, id, 1); });
+  ids.forEach((id, k) => { if (k !== lostIdx) addItem(inv, id, 1, originais[k]?.af); });
   return { ok: true, success: false, id: ids[lostIdx], lost: ids[lostIdx], fee: chk.fee, chance: chk.chance };
 }
 

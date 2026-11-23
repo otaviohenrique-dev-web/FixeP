@@ -2,6 +2,8 @@
 // para toda ação de toda classe, e que um modificador de teste altera só o campo esperado.
 // SNAPSHOT abaixo = CLASS_DEFS (actions e skill1Alt) do código ANTES da refatoração (commit 18fb8ca).
 // Não edite para fazer passar: se algum valor mudar, é balanceamento, e isso não é deste card.
+// ATUALIZAÇÃO (afixos, fix do dono): Guerreiro (Investida: sem cura, +4 de dano; E sem reflexo, agora Escudo de Aço),
+// Mago (sem queimadura: Q +6 de dano e lentidão; E +6 e enraizamento; R +6) foram regerados. Queimadura e roubo de vida são afixos de item.
 // REBALANCE DO GUERREIRO, CLÉRIGO E MAGO (design do dono): os blocos "warrior", "cleric" e "mage" foram REGERADOS
 // com resolveAction depois desse rebalance (novos efeitos: cura, acúmulos, queimadura, escudo, mana). O Arqueiro
 // segue exatamente como estava na C2.1, e é ele que continua provando que a refatoração não mudou nada.
@@ -36,9 +38,8 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "dashTime": 0.25,
     "radius": 1.2,
     "icon": "charge",
-    "dmg": 10,
-    "stunS": 1.2,
-    "selfHeal": 8
+    "dmg": 14,
+    "stunS": 1.2
    },
    "skill2": {
     "kind": "rain",
@@ -58,13 +59,12 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
    },
    "skill3": {
     "kind": "reflectBuff",
-    "name": "Escudo Refletor",
+    "name": "Escudo de Aço",
     "key": "E",
     "cd": 14,
     "cost": 35,
     "buffS": 5,
     "reduction": 0.5,
-    "reflect": 0.75,
     "tauntRadius": 7,
     "tauntS": 4,
     "icon": "shield"
@@ -283,9 +283,9 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "range": 10,
     "radius": 0.45,
     "blast": 2.3,
-    "dmg": 18,
-    "burnPct": 25,
-    "burnS": 4
+    "dmg": 24,
+    "slowPct": 30,
+    "slowS": 3
    },
    "skill2": {
     "kind": "rain",
@@ -310,9 +310,8 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "placeRange": 8,
     "delayS": 0.9,
     "fx": "firerain",
-    "dmg": 30,
-    "burnPct": 30,
-    "burnS": 4
+    "dmg": 36,
+    "rootS": 1.5
    },
    "ultimate": {
     "kind": "rain",
@@ -324,10 +323,8 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "placeRange": 9,
     "delayS": 1.5,
     "fx": "meteor",
-    "dmg": 50,
-    "rootS": 2,
-    "burnPct": 30,
-    "burnS": 5
+    "dmg": 56,
+    "rootS": 2
    },
    "dodge": {
     "kind": "dodge",
