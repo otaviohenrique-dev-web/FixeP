@@ -221,8 +221,7 @@ console.log("\n== Baús de chefe ==");
   const z3 = gearOf(3);
   check("zona 3: o baú sempre tem épico ou melhor", z3.every((c) => idx(c[0].id) >= 3));
   const flat = z3.flat();
-  // o dev pediu os míticos mais acessíveis: baú do Soberano passou de 2% para ~6% de mítico (lendário ~24%); continua raro (< 10%)
-  check("zona 3: lendário aparece (~24%) e mítico é raro (~6%)", flat.filter((d) => idx(d.id) === 4).length > 0 && flat.filter((d) => idx(d.id) === 5).length / flat.length < 0.10 && flat.filter((d) => idx(d.id) === 5).length > 0, `${flat.filter((d) => idx(d.id) === 4).length} lendários, ${flat.filter((d) => idx(d.id) === 5).length} míticos em ${flat.length}`);
+  check("zona 3: lendário aparece (~18%) e mítico é raríssimo (~2%)", flat.filter((d) => idx(d.id) === 4).length > 0 && flat.filter((d) => idx(d.id) === 5).length / flat.length < 0.05 && flat.filter((d) => idx(d.id) === 5).length > 0, `${flat.filter((d) => idx(d.id) === 4).length} lendários, ${flat.filter((d) => idx(d.id) === 5).length} míticos em ${flat.length}`);
   check("só os baús dão lendário/mítico: o teto dos inimigos comuns é menor que o dos baús", Object.keys(ZONES[3].drops.weights).every((r) => rarityIndex(r as Rarity) <= 3) && COMBAT_ZONES.every((z) => ZONES[z].boss!.level > Math.max(...ZONES[z].enemies.map((e) => e.level)) - 1));
   check("cada zona tem um chefe", COMBAT_ZONES.every((z) => ZONES[z].boss!.kind && ZONES[z].boss!.respawnS >= 120));
 }

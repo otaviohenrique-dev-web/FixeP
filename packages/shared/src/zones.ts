@@ -121,7 +121,7 @@ export const ZONES: Record<number, ZoneDef> = {
     ],
     lootMult: 2.4,
     drops: { gear: 0.11, potion: 0.12, weights: { common: 50, uncommon: 35, rare: 13, epic: 2 } },
-    boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "epic", weights: { rare: 20, epic: 50, legendary: 24, mythic: 6 } } },
+    boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "epic", weights: { rare: 25, epic: 55, legendary: 18, mythic: 2 } } },
   },
   4: {
     id: 4, name: "Cidade de Brasalume", theme: "town", w: 48, h: 48,
