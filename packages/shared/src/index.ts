@@ -305,22 +305,59 @@ export interface ResourceDef {
   perLevel: number; // máximo extra por nível
 }
 
-const dodge = (dash: number, cd: number): ActionDef => ({ kind: "dodge", name: "Esquiva", key: "SHIFT", cd, dash, dashTime: 0.25, invulnS: 0.3 });
+/** Efeito: o que a habilidade FAZ. Cada efeito vira os campos planos da ActionDef (dano, cura, controle, quebra, lentidão, aceleração). */
+export type ActionEffect =
+  | { t: "damage"; amount: number } // dano base
+  | { t: "heal"; amount: number } // cura
+  | { t: "stun"; s: number } // atordoa (depois da puxada)
+  | { t: "root"; s: number } // enraíza
+  | { t: "pull"; s: number } // tempo da puxada (Compressor de Ar)
+  | { t: "shred"; pct: number; s: number } // quebra armadura: +pct% de dano recebido por s
+  | { t: "slow"; pct: number; s: number } // lentidão: -pct% de velocidade por s
+  | { t: "hasteAttack"; pct: number; s: number }; // ataque básico do dono +pct% mais rápido por s
+/** Campos da ActionDef que vêm dos efeitos (nunca são escritos direto na spec). */
+type EffectField = "dmg" | "heal" | "stunS" | "rootS" | "pullS" | "shredPct" | "shredS" | "slowPct" | "slowS" | "hasteAtkPct" | "hasteS";
+/** Forma declarativa de uma habilidade: os dados fixos da ação (tecla, recarga, custo, visual...) + a lista de efeitos. */
+export type ActionSpec = Omit<ActionDef, EffectField> & { effects?: ActionEffect[] };
+type NumericActionKey = { [K in keyof ActionDef]-?: NonNullable<ActionDef[K]> extends number ? K : never }[keyof ActionDef];
+/** Slot de habilidade: os 6 slots fixos e o Q alternativo do Clérigo. */
+export type ActionSlot = ActionId | "skill1Alt";
+/** Modificador de habilidade (lista vazia hoje; a C2.2 traz as variações por nível e a C2.3 os talentos).
+ * `slot` limita a um slot; `set` troca campos; `add` soma em campos numéricos. Aplicados em ordem. */
+export interface ActionModifier { id: string; slot?: ActionSlot; set?: Partial<ActionDef>; add?: Partial<Record<NumericActionKey, number>> }
 
-export const CLASS_DEFS: Record<CharClass, ClassDef> = {
+const applyEffect = (out: ActionDef, e: ActionEffect) => {
+  switch (e.t) {
+    case "damage": out.dmg = e.amount; break;
+    case "heal": out.heal = e.amount; break;
+    case "stun": out.stunS = e.s; break;
+    case "root": out.rootS = e.s; break;
+    case "pull": out.pullS = e.s; break;
+    case "shred": out.shredPct = e.pct; out.shredS = e.s; break;
+    case "slow": out.slowPct = e.pct; out.slowS = e.s; break;
+    case "hasteAttack": out.hasteAtkPct = e.pct; out.hasteS = e.s; break;
+  }
+};
+
+const dodge = (dash: number, cd: number): ActionSpec => ({ kind: "dodge", name: "Esquiva", key: "SHIFT", cd, dash, dashTime: 0.25, invulnS: 0.3 });
+
+interface ClassSpec extends Omit<ClassDef, "actions" | "skill1Alt"> { actions: Record<ActionId, ActionSpec>; skill1Alt?: ActionSpec }
+
+/** Dados de todas as classes, em forma de efeitos. CLASS_DEFS é derivado daqui por resolveAction (sem modificadores). */
+const CLASS_SPECS: Record<CharClass, ClassSpec> = {
   warrior: {
     id: "warrior", name: "Guerreiro", role: "Tanque", maxHp: 120, color: 0xff8a3d,
     resource: { name: "Fúria", icon: "flame", color: 0xe0742a, max: 100, regen: 5, perLevel: 3 },
     actions: {
-      attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, dmg: 12, offset: 1.0, radius: 1.25 },
+      attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, offset: 1.0, radius: 1.25, effects: [{ t: "damage", amount: 12 }] },
       // Q: avanço com o escudo à frente; quem estiver no caminho leva dano e fica ATORDOADO
-      skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dmg: 18, dash: 4.5, dashTime: 0.25, radius: 1.2, stunS: 1.5, icon: "charge" },
+      skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dash: 4.5, dashTime: 0.25, radius: 1.2, icon: "charge", effects: [{ t: "damage", amount: 18 }, { t: "stun", s: 1.5 }] },
       // W: correntes brotam do chão e ENRAIZAM os inimigos da área
-      skill2: { kind: "rain", name: "Correntes", key: "W", cd: 10, cost: 30, dmg: 14, radius: 2.8, placeRange: 6, delayS: 0.45, rootS: 3.5, fx: "chains", icon: "chains" },
+      skill2: { kind: "rain", name: "Correntes", key: "W", cd: 10, cost: 30, radius: 2.8, placeRange: 6, delayS: 0.45, fx: "chains", icon: "chains", effects: [{ t: "damage", amount: 14 }, { t: "root", s: 3.5 }] },
       // E: PROVOCA e ergue o Escudo Refletor: menos dano recebido e parte do que os inimigos causam volta a eles
       skill3: { kind: "reflectBuff", name: "Escudo Refletor", key: "E", cd: 14, cost: 35, buffS: 5, reduction: 0.5, reflect: 0.75, tauntRadius: 6, tauntS: 3, icon: "shield" },
       // R: um colosso de aço desaba do céu (telegrafado): dano enorme em área e atordoamento
-      ultimate: { kind: "rain", name: "Queda do Colosso", key: "R", cd: 40, cost: 80, dmg: 120, radius: 4.2, placeRange: 6, delayS: 1.5, stunS: 2.2, fx: "colossus", icon: "hammer" },
+      ultimate: { kind: "rain", name: "Queda do Colosso", key: "R", cd: 40, cost: 80, radius: 4.2, placeRange: 6, delayS: 1.5, fx: "colossus", icon: "hammer", effects: [{ t: "damage", amount: 120 }, { t: "stun", s: 2.2 }] },
       dodge: dodge(3, 1.4),
     },
   },
@@ -328,11 +365,11 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     id: "archer", name: "Arqueiro", role: "Dano à distância", maxHp: 90, color: 0x6fcf6f,
     resource: { name: "Foco", icon: "eye", color: 0x6fcf6f, max: 100, regen: 6, perLevel: 3 },
     actions: {
-      attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, dmg: 9, speed: 15, range: 9, radius: 0.35 },
-      skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, dmg: 15, speed: 20, range: 12, radius: 0.5, pierce: true, shredPct: 20, shredS: 6 },
-      skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, dmg: 10, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3, slowPct: 50, slowS: 5 },
-      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, dmg: 17, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows", hasteAtkPct: 60, hasteS: 5 },
-      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, dmg: 26, radius: 3.6, placeRange: 9, delayS: 1.0, fx: "arrows" },
+      attack: { kind: "projectile", name: "Flecha", key: "ESPAÇO", cd: 0.5, speed: 15, range: 9, radius: 0.35, effects: [{ t: "damage", amount: 9 }] },
+      skill1: { kind: "projectile", name: "Perfurar", key: "Q", cd: 4, cost: 20, speed: 20, range: 12, radius: 0.5, pierce: true, effects: [{ t: "damage", amount: 15 }, { t: "shred", pct: 20, s: 6 }] },
+      skill2: { kind: "trap", name: "Cilada", key: "W", cd: 8, cost: 25, radius: 1.6, placeRange: 6, armS: 0.6, lifeS: 20, maxActive: 3, effects: [{ t: "damage", amount: 10 }, { t: "slow", pct: 50, s: 5 }] },
+      skill3: { kind: "rain", name: "Chuva", key: "E", cd: 10, cost: 35, radius: 2.4, placeRange: 8, delayS: 0.8, fx: "arrows", effects: [{ t: "damage", amount: 17 }, { t: "hasteAttack", pct: 60, s: 5 }] },
+      ultimate: { kind: "rain", name: "Salva Final", key: "R", cd: 40, cost: 80, radius: 3.6, placeRange: 9, delayS: 1.0, fx: "arrows", effects: [{ t: "damage", amount: 26 }] },
       dodge: dodge(5, 1.6), // rolamento longo
     },
   },
@@ -340,28 +377,63 @@ export const CLASS_DEFS: Record<CharClass, ClassDef> = {
     id: "cleric", name: "Clérigo", role: "Suporte", maxHp: 100, color: 0xf2e6a0,
     resource: { name: "Mana", icon: "drop", color: 0x4aa8ff, max: 120, regen: 6, perLevel: 4 },
     actions: {
-      attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, dmg: 8, speed: 12, range: 8, radius: 0.4 },
-      skill1: { kind: "healAoe", name: "Cura em Área", key: "Q", cd: 5, cost: 26, heal: 16, radius: 4, icon: "healAoe" }, // Q (A): cura todos em volta, mas pouco
-      skill2: { kind: "pull", name: "Compressor de Ar", key: "W", cd: 12, cost: 30, radius: 4.5, placeRange: 6, pullS: 0.45, stunS: 1.2 },
-      skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, dmg: 26, radius: 3, placeRange: 7, delayS: 0.6, fx: "holy" },
-      ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, heal: 80, radius: 6 },
+      attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, speed: 12, range: 8, radius: 0.4, effects: [{ t: "damage", amount: 8 }] },
+      skill1: { kind: "healAoe", name: "Cura em Área", key: "Q", cd: 5, cost: 26, radius: 4, icon: "healAoe", effects: [{ t: "heal", amount: 16 }] }, // Q (A): cura todos em volta, mas pouco
+      skill2: { kind: "pull", name: "Compressor de Ar", key: "W", cd: 12, cost: 30, radius: 4.5, placeRange: 6, effects: [{ t: "pull", s: 0.45 }, { t: "stun", s: 1.2 }] },
+      skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, radius: 3, placeRange: 7, delayS: 0.6, fx: "holy", effects: [{ t: "damage", amount: 26 }] },
+      ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, radius: 6, effects: [{ t: "heal", amount: 80 }] },
       dodge: dodge(3, 1.4),
     },
     // Q (B): cura focada em UM jogador (o selecionado, o mais próximo da mira ou o próprio): bem mais forte
-    skill1Alt: { kind: "healFocus", name: "Cura Focada", key: "Q", cd: 4, cost: 30, heal: 65, range: 9, icon: "healFocus" },
+    skill1Alt: { kind: "healFocus", name: "Cura Focada", key: "Q", cd: 4, cost: 30, range: 9, icon: "healFocus", effects: [{ t: "heal", amount: 65 }] },
   },
   mage: {
     id: "mage", name: "Mago", role: "Dano explosivo", maxHp: 75, color: 0xa070ff,
     resource: { name: "Mana", icon: "drop", color: 0xa070ff, max: 140, regen: 7, perLevel: 5 },
     actions: {
-      attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, dmg: 13, speed: 13, range: 9, radius: 0.4 },
-      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, dmg: 28, speed: 11, range: 10, radius: 0.45, blast: 2.3 },
-      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, dmg: 26, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning" },
-      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, dmg: 38, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain" },
-      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, dmg: 140, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor" },
+      attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, speed: 13, range: 9, radius: 0.4, effects: [{ t: "damage", amount: 13 }] },
+      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, speed: 11, range: 10, radius: 0.45, blast: 2.3, effects: [{ t: "damage", amount: 28 }] },
+      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning", effects: [{ t: "damage", amount: 26 }] },
+      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain", effects: [{ t: "damage", amount: 38 }] },
+      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor", effects: [{ t: "damage", amount: 140 }] },
       dodge: dodge(4, 1.5), // passo arcano curto: o Mago tem pouco sustain, depende de manter distância
     },
   },
+};
+
+/**
+ * Função pura: a ação EFETIVA de uma classe num slot. Aplica os efeitos da spec sobre os campos planos e depois
+ * os modificadores (em ordem). Sem modificadores devolve exatamente os valores de sempre.
+ */
+export function resolveAction(cls: CharClass, slot: ActionSlot, mods: readonly ActionModifier[] = []): ActionDef {
+  const spec = CLASS_SPECS[cls] ?? CLASS_SPECS.warrior;
+  const s = (slot === "skill1Alt" ? spec.skill1Alt : undefined) ?? spec.actions[slot as ActionId];
+  const { effects, ...fixed } = s;
+  const out = { ...fixed } as ActionDef;
+  for (const e of effects ?? []) applyEffect(out, e);
+  for (const m of mods) {
+    if (m.slot && m.slot !== slot) continue;
+    if (m.set) Object.assign(out, m.set);
+    if (m.add) {
+      const bag = out as unknown as Record<string, number | undefined>;
+      for (const k of Object.keys(m.add) as NumericActionKey[]) bag[k] = (bag[k] ?? 0) + (m.add[k] as number);
+    }
+  }
+  return out;
+}
+
+const deriveClass = (c: ClassSpec): ClassDef => {
+  const { actions, skill1Alt, ...rest } = c;
+  const out = {} as Record<ActionId, ActionDef>;
+  for (const a of Object.keys(actions) as ActionId[]) out[a] = resolveAction(c.id, a);
+  return { ...rest, actions: out, ...(skill1Alt ? { skill1Alt: resolveAction(c.id, "skill1Alt") } : {}) };
+};
+
+export const CLASS_DEFS: Record<CharClass, ClassDef> = {
+  warrior: deriveClass(CLASS_SPECS.warrior),
+  archer: deriveClass(CLASS_SPECS.archer),
+  cleric: deriveClass(CLASS_SPECS.cleric),
+  mage: deriveClass(CLASS_SPECS.mage),
 };
 
 /** Chefes resistem a atordoar e enraizar: a duração cai para esta fração. */
@@ -465,8 +537,9 @@ export interface TravelEvent { zone: number }
 
 /** A ação como a classe a tem agora: o Clérigo troca o Q conforme a escolha (0 = cura em área, 1 = cura focada). */
 export function classAction(cls: CharClass, a: ActionId, qMode = 0): ActionDef {
-  const d = CLASS_DEFS[cls] ?? CLASS_DEFS.warrior;
-  return a === "skill1" && qMode === 1 && d.skill1Alt ? d.skill1Alt : d.actions[a];
+  // a ação efetiva vem de resolveAction (servidor e cliente usam esta função; sem modificadores = valores de CLASS_DEFS)
+  const alt = a === "skill1" && qMode === 1 && CLASS_SPECS[cls]?.skill1Alt;
+  return resolveAction(cls, alt ? "skill1Alt" : a);
 }
 
 export * from "./items";
