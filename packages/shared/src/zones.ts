@@ -96,7 +96,7 @@ export const ZONES: Record<number, ZoneDef> = {
     ],
     lootMult: 1.6,
     drops: { gear: 0.09, potion: 0.1, weights: { common: 62, uncommon: 30, rare: 8 } },
-    boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 30, rare: 52, epic: 18 } } },
+    boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 28, rare: 50, epic: 18, legendary: 4 } } },
   },
   3: {
     id: 3, name: "Catacumbas", theme: "crypt", w: 44, h: 44,
@@ -121,7 +121,7 @@ export const ZONES: Record<number, ZoneDef> = {
     ],
     lootMult: 2.4,
     drops: { gear: 0.11, potion: 0.12, weights: { common: 50, uncommon: 35, rare: 13, epic: 2 } },
-    boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "epic", weights: { rare: 25, epic: 55, legendary: 18, mythic: 2 } } },
+    boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "epic", weights: { rare: 20, epic: 50, legendary: 24, mythic: 6 } } },
   },
   4: {
     id: 4, name: "Cidade de Brasalume", theme: "town", w: 48, h: 48,
