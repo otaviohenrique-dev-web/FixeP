@@ -1530,7 +1530,7 @@ export class ZoneRoom extends Room<ZoneState> {
         let healed = 0;
         this.state.players.forEach((o, oid) => {
           if (o.dead || this.hostile(id, p, oid, o) || dist(o.x, o.y, p.x, p.y) > (def.radius ?? 0)) return;
-          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o)), id);
+          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o))); // área: sem "from" (só a cura focada desenha o raio do curandeiro)
           if (def.guardPct) this.grantGuard(o, def.guardPct, def.guardS ?? 0);
           if (def.cleanse) { o.stunUntil = 0; o.rootUntil = 0; } // purifica: aliado curado sai do atordoamento e das raízes
           healed++;

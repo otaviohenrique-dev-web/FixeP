@@ -74,8 +74,9 @@ console.log("\n== B. Cura Focada: um aliado só, bem mais forte ==");
   const h = C.ev.heal.find((x) => x.id === W.id && x.from === C.id);
   // REBALANCE: cura focada caiu para 30 no primeiro uso (sem acúmulos ainda); o acúmulo do 2º uso aumenta as seguintes
   check("cura focada no 1º uso: 30 (sem acúmulos), de UM alvo", !!h && h.amount >= 25 && h.amount <= 30, `+${h?.amount}`);
-  check("custa 30 de Mana e só UMA pessoa é curada", C.me().mana <= m0 - 25 && C.ev.heal.filter((x) => x.from === C.id).length === 1, `mana ${m0}->${C.me().mana}`);
-  check("a vida do aliado sobe de verdade", W.me().hp > hp0 || W.me().hp === W.me().maxHp, `${hp0} -> ${W.me().hp}`);
+  // o estado chega por sincronização: espera a mudança em vez de ler na hora (a cura focada agora é menor, 30)
+  check("custa 30 de Mana e só UMA pessoa é curada", await until(() => C.me().mana <= m0 - 25, 1500, 50) && C.ev.heal.filter((x) => x.from === C.id).length === 1, `mana ${m0}->${C.me().mana}`);
+  check("a vida do aliado sobe de verdade", await until(() => W.me().hp > hp0 || W.me().hp === W.me().maxHp, 1500, 50), `${hp0} -> ${W.me().hp}`);
   // mira longe do aliado (a mais de 2,2 tiles dele): o alvo vira o próprio Clérigo (cheio de vida: nada a curar) e o aliado NÃO é curado
   await sleep(4300);
   const n = C.ev.heal.length;
