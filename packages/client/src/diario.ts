@@ -22,7 +22,7 @@ export interface DiarioUi {
 }
 
 const CSS = `
-.qd-dock{position:fixed;z-index:19;top:66px;right:14px;display:flex;align-items:center;gap:6px;max-width:calc(100vw - 28px);font-family:"Cinzel",Georgia,serif;pointer-events:none}
+.qd-dock{position:fixed;z-index:19;top:136px;right:14px;display:flex;align-items:center;gap:6px;max-width:calc(100vw - 28px);font-family:"Cinzel",Georgia,serif;pointer-events:none}
 .qd-track{pointer-events:auto;min-width:0;max-width:min(240px,44vw);height:30px;padding:0 10px;border-radius:8px;cursor:pointer;color:#f0dfb8;text-align:left;
   font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px #000;
   background:rgba(8,14,24,.82);border:1px solid rgba(255,150,70,.45);box-shadow:0 2px 8px rgba(0,0,0,.6);touch-action:manipulation}
@@ -37,7 +37,9 @@ const CSS = `
 .qd-none{margin:0;font:400 12px/1.4 Georgia,serif;color:#7d93ad}
 .qd-go{margin:0 0 6px;font:700 12px/1.35 Georgia,serif;color:#ffd08a}
 .qd-hint{font:400 12px/1.4 Georgia,serif;color:#9fc0e0}
-body.mob .qd-dock{top:calc(max(8px,env(safe-area-inset-top)) + 72px);right:max(8px,env(safe-area-inset-right))}
+/* abaixo das métricas (que ficam no canto direito, logo abaixo da carteira) */
+@media (max-width:620px){.qd-dock{top:174px}}
+body.mob .qd-dock{top:calc(max(8px,env(safe-area-inset-top)) + 128px);right:max(8px,env(safe-area-inset-right))}
 body.mob .qd-track{height:28px;font-size:10px;max-width:min(210px,40vw)}
 body.mob .qd-open{height:28px;min-width:44px;padding:0 8px;font-size:9px}
 body.mob .qd-open kbd{display:none}
