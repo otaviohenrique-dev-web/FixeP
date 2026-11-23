@@ -14,6 +14,7 @@ import {
 import { ensureLogin, logout, wsUrl } from "./auth";
 import { ensureCharacter } from "./character";
 import { mountGameMenu } from "./menu";
+import { mountHudCamadas } from "./hudcamadas";
 import { attachPerf, startPerf, timed, count } from "./perf-probe";
 import { modoQualidade } from "./quality";
 import { mountHud, type Hud } from "./hud";
@@ -345,7 +346,13 @@ class WorldScene extends Phaser.Scene {
         logout();
       },
       onPerf: () => startPerf(),
+      // painéis que saíram da tela principal: abrem pelo menu (as teclas J e V continuam valendo)
+      acoes: [
+        { label: "Diário", run: () => this.diario.toggle() },
+        { label: "Variações", run: () => this.variacoes.toggle() },
+      ],
     });
+    mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
     this.diario = mountDiario(); // rastreador e diário de quests (C1.3); depois do econ, que injeta o CSS de quests

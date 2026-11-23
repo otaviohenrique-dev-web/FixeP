@@ -3,7 +3,8 @@
  * quando a zona nova está pronta. Bloqueia o ponteiro (o cena também ignora o teclado enquanto `visible`).
  * Tudo em CSS (opacity/transform), sem trabalho de JavaScript por quadro.
  */
-const TIPS = [
+/** dicas para o computador (teclado e mouse) */
+const TIPS_PC = [
   "Poções recuperam vida: aperte F para beber a primeira da mochila.",
   "A Cidade de Brasalume é segura: sem combate, sem dano e sem PvP.",
   "Esquivar (Shift) tira você das áreas vermelhas antes do golpe cair.",
@@ -14,7 +15,32 @@ const TIPS = [
   "Guarde o que não vai usar no baú da cidade e venda o resto ao comerciante.",
   "Morrer leva você de volta à cidade; os itens equipados ficam com você.",
   "O ferreiro funde itens iguais em um de raridade maior.",
+  "Troque as variações de habilidade só na cidade: aperte V para abrir o painel.",
 ];
+
+/** dicas para celular e tablet (toque): só botões na tela, joystick e toques no jogo */
+const TIPS_TOQUE = [
+  "Poções recuperam vida: toque no botão de poção do HUD para beber a primeira da mochila.",
+  "Ligue o AUTO para beber poção sozinho quando a vida cair abaixo do limite que você escolher.",
+  "Arraste o dedo na área de baixo à esquerda para andar com o joystick.",
+  "Toque num inimigo para travar a mira nele; toque no vazio para soltar.",
+  "Segure uma habilidade para mirar e solte para lançar; arraste até o ✕ para cancelar.",
+  "Esquivar tira você das áreas vermelhas antes do golpe cair: toque no botão de esquiva.",
+  "Toque num NPC para conversar: se ele estiver longe, seu personagem anda até lá.",
+  "Toque no botão de três linhas, no canto superior direito, para abrir o menu: Diário, Variações e mais.",
+  "A mochila fica no botão da bolsa, no canto superior direito da tela.",
+  "Toque no baú da cidade, quando estiver perto, para abrir.",
+  "Convide aliados com /pt nome no chat: o grupo atravessa as zonas junto.",
+  "A Cidade de Brasalume é segura: sem combate, sem dano e sem PvP.",
+  "Zonas mais fundas são muito mais perigosas, mas soltam mais e melhores itens.",
+  "Morrer leva você de volta à cidade; os itens equipados ficam com você.",
+  "Guarde o que não vai usar no baú da cidade e venda o resto ao comerciante.",
+  "Troque as variações de habilidade só na cidade: pelo menu (três linhas), em Variações.",
+];
+
+/** mesmo critério do jogo (src/main.ts): ponteiro grosso = toque */
+const TOQUE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+const TIPS = TOQUE ? TIPS_TOQUE : TIPS_PC;
 
 const THEME_ACCENT: Record<string, string> = { ash: "#c9a86a", frost: "#7fd0ff", crypt: "#b07aff", town: "#ffc873" };
 

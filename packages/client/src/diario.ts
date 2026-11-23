@@ -29,10 +29,6 @@ const CSS = `
 .qd-track[hidden]{display:none}
 .qd-track.pronta{color:#ffe1a0;border-color:#ffd27a}
 .qd-track:hover,.qd-track:focus-visible{border-color:#ffb072;outline:none}
-.qd-open{pointer-events:auto;flex:none;height:30px;padding:0 10px;border-radius:8px;cursor:pointer;color:#e9c98a;
-  font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;text-transform:uppercase;background:rgba(8,14,24,.82);border:1px solid rgba(160,200,240,.3);touch-action:manipulation}
-.qd-open:hover,.qd-open:focus-visible{border-color:#ffb072;outline:none}
-.qd-open kbd{margin-left:5px;font:700 9px/1 "Cinzel",Georgia,serif;color:#9fc0e0;opacity:.8}
 .qd-sec{margin:4px 0 0;font:700 11px/1.2 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#ffb072;border-bottom:1px solid rgba(255,150,70,.25);padding-bottom:4px}
 .qd-none{margin:0;font:400 12px/1.4 Georgia,serif;color:#7d93ad}
 .qd-go{margin:0 0 6px;font:700 12px/1.35 Georgia,serif;color:#ffd08a}
@@ -41,8 +37,6 @@ const CSS = `
 @media (max-width:620px){.qd-dock{top:174px}}
 body.mob .qd-dock{top:calc(max(8px,env(safe-area-inset-top)) + 128px);right:max(8px,env(safe-area-inset-right))}
 body.mob .qd-track{height:28px;font-size:10px;max-width:min(210px,40vw)}
-body.mob .qd-open{height:28px;min-width:44px;padding:0 8px;font-size:9px}
-body.mob .qd-open kbd{display:none}
 `;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] => {
@@ -99,17 +93,12 @@ export function mountDiario(): DiarioUi {
   style.textContent = CSS;
   document.head.append(style);
 
-  // rastreador e botão do diário (sempre visível quando há quests)
+  // rastreador de quest (some quando não há quest); o diário abre pelo menu ou pela tecla J
   const dock = el("div", "qd-dock");
   const track = el("button", "qd-track");
   track.type = "button";
   track.hidden = true;
-  const abrirBtn = el("button", "qd-open", "Diário");
-  abrirBtn.type = "button";
-  abrirBtn.title = "Diário de quests (J)";
-  abrirBtn.setAttribute("aria-label", "Abrir diário de quests");
-  abrirBtn.append(el("kbd", "", "J"));
-  dock.append(track, abrirBtn);
+  dock.append(track);
   document.body.append(dock);
 
   // painel do diário
@@ -182,7 +171,6 @@ export function mountDiario(): DiarioUi {
   }
 
   track.onclick = () => (isOpenFlag ? fechar() : abrir());
-  abrirBtn.onclick = () => (isOpenFlag ? fechar() : abrir());
   back.onclick = (e) => { if (e.target === back) fechar(); };
 
   // J abre e fecha; Esc fecha o diário antes de outras janelas (captura, como na caixa do NPC)
