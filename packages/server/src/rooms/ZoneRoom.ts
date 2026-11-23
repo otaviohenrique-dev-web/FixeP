@@ -417,6 +417,7 @@ export class ZoneRoom extends Room<ZoneState> {
   /** liga/desliga o modo. Já estar no estado pedido não faz nada; pedir o contrário no meio da canalização a cancela. */
   private requestPvp(id: string, p: Player, on: boolean) {
     // o PvP agora vale SÓ na Arena Sangrenta (zona com `pvp`), e lá ele já está ligado o tempo todo: o pedido manual não existe mais
+    if (this.zone.safe) return this.notify(id, "A cidade é um lugar de paz: o PvP não existe aqui.");
     if (!p.pvp || !this.zone.pvp) return this.notify(id, "O PvP só existe na Arena Sangrenta.");
     if (!on) this.notify(id, "Na arena o PvP vale o tempo todo: não há como sair dele.");
   }

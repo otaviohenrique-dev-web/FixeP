@@ -141,7 +141,7 @@ export const ZONES: Record<number, ZoneDef> = {
     // Acesso: pelo mapa-mundo do portão de Brasalume (a arena entra na lista como qualquer zona de combate).
     id: 5, name: "Arena Sangrenta", theme: "ash", w: 36, h: 36,
     spawn: { x: 30, y: 18 }, // renascer depois de morrer (dentro da arena, sem perda)
-    arrive: { 4: { x: 6, y: 18 } }, // chegando de Brasalume: lado oeste da arena
+    arrive: { 4: { x: 18, y: 27.5 } }, // chegando de Brasalume: junto do portão sul que leva de volta (a 5,5 tiles, como nas outras zonas)
     portals: [{ x: 18, y: 33, r: PORTAL_RADIUS, to: 4 }],
     enemies: [],
     lootMult: 0,
