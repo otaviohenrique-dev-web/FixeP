@@ -29,6 +29,7 @@ export interface ZoneDef {
   drops: ZoneDrops; // o que os inimigos comuns soltam
   boss?: ZoneBoss; // o chefe da zona (um por zona) e o baú que ele solta; a cidade não tem
   safe?: boolean; // zona segura (cidade): sem inimigos, sem dano e sem PvP, nem por habilidade de área ou armadilha
+  pvp?: boolean; // arena: o PvP vale SÓ aqui (jogadores ferem uns aos outros, sem fogo amigo de grupo); morrer renasce na arena, sem perda
   vault?: { x: number; y: number }; // baú de armazenamento fixo (só na cidade)
 }
 
@@ -127,13 +128,25 @@ export const ZONES: Record<number, ZoneDef> = {
     spawn: { x: 24, y: 30 },
     // a cidade tem UM só portão (norte, na muralha) e ele leva ao mapa-mundo: cada zona nova entra na lista do mapa, sem abrir portais novos na cidade.
     // chegando de qualquer zona de combate o jogador aparece logo dentro do portão (fora do raio dele)
-    arrive: { 1: { x: 24, y: 7.5 }, 2: { x: 24, y: 7.5 }, 3: { x: 24, y: 7.5 } },
+    arrive: { 1: { x: 24, y: 7.5 }, 2: { x: 24, y: 7.5 }, 3: { x: 24, y: 7.5 }, 5: { x: 24, y: 7.5 } },
     portals: [{ x: 24, y: 2, r: PORTAL_RADIUS, to: WORLD_GATE }],
     enemies: [],
     lootMult: 0,
     drops: { gear: 0, potion: 0, weights: {} },
     safe: true,
     vault: { x: 31, y: 30 },
+  },
+  5: {
+    // Arena Sangrenta: o único lugar com PvP. Sem monstros comuns nem chefe; sai-se pelo portal sul, de volta à cidade.
+    // Acesso: pelo mapa-mundo do portão de Brasalume (a arena entra na lista como qualquer zona de combate).
+    id: 5, name: "Arena Sangrenta", theme: "ash", w: 36, h: 36,
+    spawn: { x: 30, y: 18 }, // renascer depois de morrer (dentro da arena, sem perda)
+    arrive: { 4: { x: 6, y: 18 } }, // chegando de Brasalume: lado oeste da arena
+    portals: [{ x: 18, y: 33, r: PORTAL_RADIUS, to: 4 }],
+    enemies: [],
+    lootMult: 0,
+    drops: { gear: 0, potion: 0, weights: {} },
+    pvp: true,
   },
 };
 
