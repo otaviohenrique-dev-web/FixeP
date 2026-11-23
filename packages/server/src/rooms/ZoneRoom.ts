@@ -416,19 +416,10 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** liga/desliga o modo. Já estar no estado pedido não faz nada; pedir o contrário no meio da canalização a cancela. */
   private requestPvp(id: string, p: Player, on: boolean) {
+    // o PvP agora vale SÓ na Arena Sangrenta (zona com `pvp`), e lá ele já está ligado o tempo todo: o pedido manual não existe mais
     if (this.zone.safe) return this.notify(id, "A cidade é um lugar de paz: o PvP não existe aqui.");
-    if (p.pvpChan !== 0) {
-      if ((p.pvpChan === 1) !== on) { p.pvpChan = 0; this.pvpEvt(id, "stop"); } // mudou de ideia: cancela sem aviso de dano
-      return;
-    }
-    if (p.pvp === on) return;
-    // entrar OU sair só começa parado e sem dano recente (anti "sair do PvP correndo da luta")
-    if (!this.standingStill(p)) return this.notify(id, "Fique parado para canalizar o PvP.");
-    const wait = PVP_NO_DAMAGE_S - (this.t - p.hurtAt);
-    if (wait > 0) return this.notify(id, `Você tomou dano há pouco: aguarde ${Math.ceil(wait)}s sem apanhar para canalizar o PvP.`);
-    p.pvpChan = on ? 1 : 2;
-    p.pvpChanUntil = this.t + PVP_CHANNEL_S;
-    this.pvpEvt(id, "start");
+    if (!p.pvp || !this.zone.pvp) return this.notify(id, "O PvP só existe na Arena Sangrenta.");
+    if (!on) this.notify(id, "Na arena o PvP vale o tempo todo: não há como sair dele.");
   }
 
   /** dano, movimento ou ação interrompem a canalização na hora (`why` diz o motivo ao jogador) */
@@ -448,7 +439,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** dano de jogador em jogador: só se AMBOS estão em PvP (quem não está nunca é alvo) */
   private canPvpHit(by: string, o: Player, oid: string): boolean {
-    if (this.zone.safe || oid === by || o.dead || !o.pvp || o.shield || this.t < o.invulnUntil) return false;
+    if (!this.zone.pvp || oid === by || o.dead || !o.pvp || o.shield || this.t < o.invulnUntil) return false; // PvP só na arena
     const a = this.state.players.get(by);
     if (!a || a.dead || !a.pvp) return false;
     return !(a.party && a.party === o.party); // membros do mesmo grupo nunca se ferem
@@ -970,6 +961,7 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.charId = auth.character.id;
     pl.cls = auth.character.class;
     pl.level = auth.character.level;
+    pl.pvp = this.zone.pvp === true; // arena: PvP ligado desde a entrada (o servidor decide; o cliente não liga nem desliga)
     pl.xp = auth.character.xp;
     pl.inv = auth.inventory;
     pl.quests = auth.quests;
@@ -1279,17 +1271,18 @@ export class ZoneRoom extends Room<ZoneState> {
   private updatePlayer(id: string, p: Player, dt: number) {
     if (p.dead) {
       if (p.traveling || this.t < p.deadUntil) return;
-      if (!this.zone.safe && !(process.env.TEST_START_ZONE && process.env.NODE_ENV !== "production")) {
+      // arena (PvP): renasce lá dentro, no ponto da arena, sem perda; nunca volta à cidade
+      if (!this.zone.safe && !this.zone.pvp && !(process.env.TEST_START_ZONE && process.env.NODE_ENV !== "production")) {
         // morreu numa zona de combate: vai direto à cidade (o checkpoint). O corpo fica onde caiu (não volta ao ponto de nascimento da zona);
         // a tela de load cobre a viagem e quem chega na cidade já nasce inteiro no ponto de nascimento dela.
         void this.travel(id, p, { to: HUB_ZONE }, true);
         return;
       }
-      p.dead = false; // cidade (ou testes antigos): renasce aqui mesmo, no ponto de nascimento
+      p.dead = false; // cidade, arena ou testes antigos: renasce aqui mesmo, no ponto de nascimento (na arena, o da arena)
       p.hp = p.maxHp;
       p.manaF = p.maxMana;
       p.mana = p.maxMana;
-      const sp = this.spawnPoint(true);
+      const sp = this.zone.pvp ? this.zone.spawn : this.spawnPoint(true);
       p.x = p.tx = sp.x;
       p.y = p.ty = sp.y;
       p.combatAt = -1e9;

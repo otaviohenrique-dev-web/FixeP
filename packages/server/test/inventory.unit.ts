@@ -15,7 +15,8 @@ const rollMobLoot: typeof rollMobLootAll = (...a) => rollMobLootAll(...a).filter
 const rollChestLoot: typeof rollChestLootAll = (...a) => rollChestLootAll(...a).filter((d) => ITEMS[d.id]);
 import { openDb } from "../src/db/index.js";
 import { Repo } from "../src/db/repo.js";
-const COMBAT_ZONES = ZONE_IDS.filter((z) => !ZONES[z].safe);
+// zonas de combate com inimigos comuns e chefe: fica de fora a cidade (segura) e a Arena Sangrenta (sem monstros, sem drops de abate)
+const COMBAT_ZONES = ZONE_IDS.filter((z) => !ZONES[z].safe && !ZONES[z].pvp);
 
 const results: boolean[] = [];
 const check = (name: string, ok: boolean, detail = "") => {

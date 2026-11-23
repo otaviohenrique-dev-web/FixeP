@@ -1,5 +1,6 @@
-// Teste de ponta a ponta do modo PvP: canalização (só parado e sem dano recente), cancelamento por mover/agir/dano, regras de quem pode ser alvo e saída do modo.
-// Uso: SERVER=http://localhost:2999 node test/pvp.mjs   (servidor de teste sem carregar o .env)
+// Teste de ponta a ponta do PvP (só na Arena Sangrenta, zona 5): dano entre jogadores só na arena, sem fogo amigo de grupo,
+// morte na arena renasce na arena sem perda de nada, e fora da arena não há dano entre jogadores.
+// Uso: SERVER=http://localhost:2999 node test/pvp.mjs   (servidor de teste sem carregar o .env; começa na cidade, zona 4)
 import { Client } from "colyseus.js";
 
 const HTTP = process.env.SERVER ?? "http://localhost:2999";
@@ -10,175 +11,110 @@ const check = (name, ok, detail = "") => {
   results.push(ok);
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  -> " + detail : ""}`);
 };
+const until = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(100); } return false; };
 
-async function spawn(cls) {
+// Cria um personagem na cidade (zona 4) e devolve token e nome.
+async function newChar(cls) {
   const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).json();
   const name = "Pv" + Math.random().toString(10).slice(2, 8);
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: cls }) });
   if (!cr.ok) throw new Error(`criar ${cls}: ${cr.status}`);
-  const room = await new Client(WS).joinOrCreate("zone", { token });
-  await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
-  const ev = { swing: [], notice: [], pvp: [], why: [], hits: [], left: null };
-  room.onMessage("pvp", (m) => { ev.pvp.push(m.s); if (m.why) ev.why.push(m.why); });
-  room.onMessage("hit", (m) => ev.hits.push(m));
-  room.onMessage("swing", (m) => ev.swing.push(m));
-  room.onMessage("notice", (m) => ev.notice.push(String(m.text)));
-  room.onLeave((c) => (ev.left = c));
-  const me = () => room.state.players.get(room.sessionId);
-  const act = (a, ax = 25, ay = 20) => room.send("act", { a, ax, ay });
-  const mine = (a) => ev.swing.filter((s) => s.id === room.sessionId && s.a === a).length;
-  return { room, ev, me, act, mine };
+  return { token, name };
 }
 
-const until = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(100); } return false; };
-const aimAt = (att, tgt) => att.act("attack", tgt.me().x, tgt.me().y);
-const CH = 5300; // canalização de 5 s + folga
-
-console.log("\n== Entrar no modo: canalização sem dano conclui ==");
-{
-  const A = await spawn("warrior");
-  check("começa fora do PvP e sem canalizar", A.me().pvp === false && A.me().pvpChan === 0);
-  A.room.send("pvp", { on: "sim" }); A.room.send("pvp", { on: 1 }); A.room.send("pvp", {}); A.room.send("pvp", null);
+// Como o cliente: na cidade, anda até o portão, abre o mapa-mundo e escolhe a zona `to`; sai da cidade já na zona nova.
+async function travelFromCity(token, to) {
+  const city = new Client(WS);
+  const r = await city.joinOrCreate("zone4", { token });
+  await new Promise((ok) => (r.state?.players ? ok() : r.onStateChange.once(ok)));
+  let gate = false, travel = null;
+  r.onMessage("world_map", () => (gate = true));
+  r.onMessage("travel", (m) => (travel = m));
+  r.send("move_to", { x: 24, y: 2 });
+  await until(() => gate, 14000);
+  r.send("travel", { to });
+  await until(() => travel, 5000);
+  await r.leave(true);
   await sleep(300);
-  check("payload inválido é ignorado", A.me().pvpChan === 0 && !A.me().pvp);
-  A.room.send("pvp", { on: true });
-  await sleep(500);
-  check("pedir PvP inicia a canalização (pvpChan=1) e ainda não está em PvP", A.me().pvpChan === 1 && !A.me().pvp && A.ev.pvp.includes("start"));
-  await sleep(3500);
-  check("aos ~4 s ainda canalizando (não entra antes do tempo)", A.me().pvpChan === 1 && !A.me().pvp);
-  check("conclui em ~5 s: pvp=true e canalização zerada", await until(() => A.me().pvp && A.me().pvpChan === 0, 2500) && A.ev.pvp.includes("on"));
-
-  console.log("\n== Sair do modo: também canaliza 5 s ==");
-  A.room.send("pvp", { on: false });
-  await sleep(1000);
-  check("saindo: pvpChan=2 e ainda em PvP", A.me().pvpChan === 2 && A.me().pvp);
-  check("conclui: pvp=false", await until(() => !A.me().pvp && A.me().pvpChan === 0, CH) && A.ev.pvp.includes("off"));
-  A.room.send("pvp", { on: false }); await sleep(300);
-  check("pedir sair estando fora não faz nada", A.me().pvpChan === 0);
-
-  console.log("\n== Pedir o contrário no meio da canalização cancela (sem aviso de dano) ==");
-  A.room.send("pvp", { on: true }); await sleep(600);
-  A.room.send("pvp", { on: false }); await sleep(400);
-  check("cancelado pelo próprio jogador", A.me().pvpChan === 0 && !A.me().pvp && A.ev.pvp.includes("stop"));
-  A.room.leave();
 }
 
-console.log("\n== Só canaliza PARADO: mover-se ou agir cancela; pedir andando é recusado ==");
-{
-  const A = await spawn("warrior");
-  A.room.send("move_to", { x: 26, y: 26 });
-  await sleep(300);
-  A.ev.notice.length = 0;
-  A.room.send("pvp", { on: true });
-  await sleep(300);
-  check("pedir PvP andando é recusado, com o motivo (parado)", A.me().pvpChan === 0 && A.ev.notice.some((t) => /parado/i.test(t)), JSON.stringify(A.ev.notice));
-  A.room.send("move_to", { x: A.me().x, y: A.me().y }); // para
-  await sleep(500);
-  A.room.send("pvp", { on: true });
-  await sleep(500);
-  check("parado, a canalização começa", A.me().pvpChan === 1);
-  A.room.send("move_to", { x: A.me().x + 2, y: A.me().y });
-  check("mover-se cancela (evento cancel, motivo 'move')", await until(() => A.ev.pvp.includes("cancel") && A.ev.why.includes("move"), 1500));
-  await until(() => A.me().pvpChan === 0, 800);
-  check("sem entrar no PvP e sem canalização", A.me().pvpChan === 0 && !A.me().pvp);
-  await sleep(1500); // chega ao destino
-  A.room.send("pvp", { on: true }); await sleep(600);
-  check("parado de novo: canaliza", A.me().pvpChan === 1);
-  A.ev.why.length = 0;
-  A.act("attack", A.me().x + 3, A.me().y);
-  check("agir (atacar) cancela (motivo 'act')", await until(() => A.ev.why.includes("act"), 1500));
-  await until(() => A.me().pvpChan === 0, 800);
-  await sleep(CH);
-  check("continua fora do PvP depois de passar o tempo", !A.me().pvp && A.me().pvpChan === 0);
-  A.room.leave();
+// Entra numa zona de combate (já na zona `to` do personagem) e devolve o cliente com o estado de eventos.
+async function join(token, room) {
+  const r = await new Client(WS).joinOrCreate(room, { token });
+  await new Promise((ok) => (r.state?.players ? ok() : r.onStateChange.once(ok)));
+  const ev = { hits: [], died: [], notice: [], left: null };
+  r.onMessage("hit", (m) => ev.hits.push(m));
+  r.onMessage("died", (m) => ev.died.push(m));
+  r.onMessage("notice", (m) => ev.notice.push(String(m.text)));
+  r.onLeave((c) => (ev.left = c));
+  const me = () => r.state.players.get(r.sessionId);
+  const hit = (t) => r.send("act", { a: "attack", ax: t.x, ay: t.y }); // t: o jogador alvo (entidade sincronizada)
+  return { r, ev, me, hit };
 }
 
-console.log("\n== Dano de inimigo: cancela e bloqueia um novo pedido por alguns segundos ==");
-{
-  const A = await spawn("warrior");
-  A.room.send("move_to", { x: 27, y: 16 }); // perto do esqueleto de (30,16): ele ataca em poucos segundos
-  const hurt = await until(() => A.ev.hits.some((h) => h.k === "p" && h.id === A.room.sessionId), 9000);
-  check("o esqueleto acerta o jogador", hurt);
-  A.room.send("move_to", { x: A.me().x, y: A.me().y }); // fica parado
-  await sleep(300);
-  A.ev.notice.length = 0;
-  A.room.send("pvp", { on: true });
-  await sleep(400);
-  check("logo depois de tomar dano o pedido é recusado, com o motivo (dano recente)", A.me().pvpChan === 0 && A.ev.notice.some((t) => /dano/i.test(t)), JSON.stringify(A.ev.notice));
-  check("e não entra no PvP", !A.me().pvp);
-  A.room.leave();
+// Personagem já na arena (zona 5): cria, leva pela cidade e entra.
+async function arenaChar(cls) {
+  const c = await newChar(cls);
+  await travelFromCity(c.token, 5);
+  const P = await join(c.token, "zone5");
+  return { ...c, P };
 }
 
-console.log("\n== Depois de 5 s sem dano o pedido é aceito (parado) ==");
-{
-  const A = await spawn("warrior");
-  A.room.send("pvp", { on: true }); await sleep(500);
-  check("sem dano recente e parado: canaliza", A.me().pvpChan === 1);
-  A.room.leave();
-}
+console.log("\n== Arena: a zona 5 existe, sem monstros, e o PvP já está ligado para quem entra ==");
+const A = await arenaChar("warrior");
+const B = await arenaChar("warrior");
+const C = await arenaChar("cleric");
+check("entrou na arena (zona 5)", A.P.r.state.zoneId === 5);
+check("sem monstros na arena", A.P.r.state.enemies.size === 0);
+check("PvP ligado para quem entra na arena", A.P.me().pvp === true && B.P.me().pvp === true && C.P.me().pvp === true);
 
-console.log("\n== Dois em PvP se machucam; habilidade de outro jogador cancela a canalização ==");
-{
-  const [A, B, C] = await Promise.all([spawn("warrior"), spawn("warrior"), spawn("cleric")]);
-  A.room.send("pvp", { on: true }); B.room.send("pvp", { on: true });
-  check("A e B entram no PvP", await until(() => A.me().pvp && B.me().pvp, CH + 500));
-  check("C (nunca pediu) está fora", !C.me().pvp);
+console.log("\n== Arena: jogadores de grupos diferentes ferem uns aos outros ==");
+const cHp0 = C.P.me().hp;
+A.P.hit(C.P.me()); await sleep(900);
+check("A (fora do grupo de C) fere C na arena", C.P.me().hp < cHp0, `hp ${cHp0} -> ${C.P.me().hp}`);
+check("o evento de dano traz quem causou", C.P.ev.hits.some((h) => h.k === "p" && h.id === C.P.r.sessionId && h.by === A.P.r.sessionId));
 
-  // C canaliza para entrar; A e B (em PvP) o atacam: C não é alvo, nada cancela
-  C.room.send("pvp", { on: true }); await sleep(400);
-  const cHp = C.me().hp;
-  A.act("skill2", C.me().x, C.me().y); await sleep(800); // Correntes (área)
-  aimAt(A, C); await sleep(700);
-  check("jogador fora do PvP não recebe dano de quem está em PvP (Correntes e Golpe)", C.me().hp === cHp, `hp ${cHp} -> ${C.me().hp}`);
-  check("e a canalização dele NÃO é cancelada por isso", C.me().pvpChan === 1 && !C.ev.pvp.includes("cancel"));
-  check("nenhum evento de dano com alvo C", !C.ev.hits.some((h) => h.k === "p" && h.id === C.room.sessionId));
+console.log("\n== Party: membros do mesmo grupo nunca se ferem (sem fogo amigo) ==");
+A.P.r.send("party_invite", { name: B.name });
+await sleep(300);
+B.P.r.send("party_accept", {});
+await until(() => A.P.r.state.players.get(A.P.r.sessionId)?.party && B.P.me().party && A.P.me().party === B.P.me().party, 4000);
+check("A e B estão no mesmo grupo", !!A.P.me().party && A.P.me().party === B.P.me().party);
+const bHp0 = B.P.me().hp;
+const nHitsBefore = A.P.ev.hits.length; // (o golpe no C acima pode ter varrido B, que ainda não estava no grupo: só conta o que vier depois)
+A.P.hit(B.P.me()); await sleep(900);
+check("A não fere B (mesmo grupo)", B.P.me().hp === bHp0, `hp ${bHp0} -> ${B.P.me().hp}`);
+const bHits = A.P.ev.hits.slice(nHitsBefore).filter((h) => h.k === "p" && h.id === B.P.r.sessionId);
+check("sem evento de dano para B", bHits.length === 0, JSON.stringify(bHits));
 
-  // A (guerreiro) acerta B: ambos em PvP
-  const bHp = B.me().hp;
-  aimAt(A, B); await sleep(500);
-  check("A em PvP fere B em PvP", B.me().hp < bHp, `hp ${bHp} -> ${B.me().hp}`);
-  const aHp = A.me().hp;
-  aimAt(B, A); await sleep(500);
-  check("B fere A de volta", A.me().hp < aHp, `hp ${aHp} -> ${A.me().hp}`);
-  check("o evento de dano traz quem causou", A.ev.hits.some((h) => h.k === "p" && h.id === B.room.sessionId && h.by === A.room.sessionId));
+console.log("\n== Morte na arena: renasce na arena (no ponto da arena), sem perda ==");
+const xp0 = C.P.me().xp, lvl0 = C.P.me().level, items0 = C.P.r.state.items.size;
+let guard = 0;
+while (!C.P.me().dead && guard++ < 40) { A.P.hit(C.P.me()); await sleep(600); } // A bate em C (fora do grupo) até cair
+check("C cai em combate na arena", C.P.me().dead === true);
+check("C continua na arena depois de cair (não vai à cidade)", C.P.r.state.zoneId === 5 && C.P.ev.left === null);
+check("C renasce depois de alguns segundos (com a vida cheia)", await until(() => !C.P.me().dead, 12000) && C.P.me().hp === C.P.me().maxHp);
+check("renascer no ponto da arena", Math.hypot(C.P.me().x - 30, C.P.me().y - 18) < 1.5, `(${C.P.me().x}, ${C.P.me().y})`);
+check("morrer não tira XP nem nível de quem morreu", C.P.me().xp === xp0 && C.P.me().level === lvl0, `xp ${xp0} -> ${C.P.me().xp}`);
+check("morrer não deixa item no chão (nenhum drop)", C.P.r.state.items.size === items0, `itens ${items0} -> ${C.P.r.state.items.size}`);
+check("C continua no PvP depois de renascer", C.P.me().pvp === true);
 
-  // B começa a sair; A o atinge: cancela
-  B.room.send("pvp", { on: false }); await sleep(600);
-  check("B tomou dano há pouco: o pedido de saída é recusado (aguarde sem apanhar)", B.me().pvpChan === 0 && B.me().pvp && B.ev.notice.some((t) => /dano/i.test(t)), JSON.stringify(B.ev.notice));
-  await sleep(5300); // 5 s sem dano e parado
-  B.room.send("pvp", { on: false }); await sleep(600);
-  check("B saindo: canalizando", B.me().pvpChan === 2);
-  aimAt(A, B);
-  check("habilidade de outro jogador em PvP cancela a canalização de saída (motivo 'damage')", await until(() => B.ev.pvp.includes("cancel") && B.ev.why.includes("damage"), 1500) && B.me().pvpChan === 0);
-  await sleep(CH);
-  check("B continua em PvP (a saída foi interrompida)", B.me().pvp);
+console.log("\n== Fora da arena não há dano entre jogadores ==");
+const D = await newChar("warrior");
+const E = await newChar("warrior");
+await travelFromCity(D.token, 1);
+await travelFromCity(E.token, 1);
+const DP = await join(D.token, "zone");
+const EP = await join(E.token, "zone");
+await until(() => DP.me() && EP.me(), 5000);
+const eHp0 = EP.me().hp;
+DP.hit(EP.me()); await sleep(900);
+check("na zona 1 (Cinzas) um jogador não fere o outro", EP.me().hp === eHp0, `hp ${eHp0} -> ${EP.me().hp}`);
+check("o PvP da zona 1 não liga (nem pelo pedido antigo)", (DP.r.send("pvp", { on: true }), await sleep(400), DP.me().pvp === false));
+check("o servidor avisa que o PvP só existe na arena", DP.ev.notice.some((t) => /arena/i.test(t)));
 
-  // C conclui a entrada e agora também é alvo
-  check("C conclui a entrada sem dano", await until(() => C.me().pvp, 3000));
-  const cHp2 = C.me().hp;
-  aimAt(A, C); await sleep(500);
-  check("depois de entrar, C também recebe dano de A", C.me().hp < cHp2, `hp ${cHp2} -> ${C.me().hp}`);
-
-  // morte em PvP: respawn normal e sem perda
-  let died = false; C.room.onMessage("died", (m) => { if (m.id === C.room.sessionId) died = true; });
-  for (let i = 0; i < 30 && !C.me().dead; i++) { A.act("ultimate", C.me().x, C.me().y); A.act("attack", C.me().x, C.me().y); await sleep(700); }
-  check("alvo derrubado em PvP aparece como morto", C.me().dead && died);
-  check("renasce (respawn normal) com a vida cheia", await until(() => !C.me().dead, 10_000) && C.me().hp === C.me().maxHp);
-  [A, B, C].forEach((x) => x.room.leave());
-}
-
-console.log("\n== Projétil: só acerta quem está em PvP ==");
-{
-  const [R, P, N] = await Promise.all([spawn("archer"), spawn("warrior"), spawn("warrior")]);
-  R.room.send("pvp", { on: true }); P.room.send("pvp", { on: true });
-  await until(() => R.me().pvp && P.me().pvp, CH + 500);
-  await sleep(300);
-  const pHp = P.me().hp, nHp = N.me().hp;
-  R.act("attack", P.me().x + 3, P.me().y); await sleep(600); // mira para a frente (todos nascem no mesmo ponto)
-  check("flecha acerta quem está em PvP", P.me().hp < pHp, `hp ${pHp} -> ${P.me().hp}`);
-  check("quem está fora do PvP, no mesmo ponto, não é ferido", N.me().hp === nHp);
-  [R, P, N].forEach((x) => x.room.leave());
-}
+for (const x of [A, B, C]) x.P.r.leave(true);
+DP.r.leave(true); EP.r.leave(true);
 
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} verificações passaram`);

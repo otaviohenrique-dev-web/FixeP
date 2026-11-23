@@ -87,7 +87,7 @@ done
 
 echo "== Suítes com servidor de teste (um servidor novo por suíte)"
 # Padrão: sem variáveis extras.
-for file in test/anticheat.mjs test/chat.mjs test/mana.mjs test/pvp.mjs test/morte.mjs \
+for file in test/anticheat.mjs test/chat.mjs test/mana.mjs test/morte.mjs \
             test/zones.mjs test/persistence.mjs test/fila.mjs; do
   if [ "$file" = test/morte.mjs ] || [ "$file" = test/zones.mjs ]; then run_case 2991 "" "$file" ""; elif [ "$file" = test/persistence.mjs ]; then run_case 2991 "TEST_START_ZONE=1 API_RATE_MULT=100" "$file" ""; else run_case 2991 "TEST_START_ZONE=1 API_RATE_MULT=100" "$file" ""; fi
 done
@@ -114,6 +114,8 @@ run_case 2998 "QUEST_TEST=1 QUEST_FIXTURE=1 API_RATE_MULT=100" test/quests.mjs "
 run_case 2994 "QUEST_TEST=1 API_RATE_MULT=100" test/tutorial.mjs ""
 # Dicas contextuais (C1.6): grava a dica vista, reenvia ao reentrar e ignora id inválido.
 run_case 2990 "API_RATE_MULT=100" test/dicas.mjs ""
+# PvP só na Arena Sangrenta (zona 5): dano entre jogadores só lá, sem fogo amigo de grupo, morte renasce na arena sem perda.
+run_case 2989 "API_RATE_MULT=100" test/pvp.mjs ""
 
 echo
 echo "Suítes executadas: $RAN"
