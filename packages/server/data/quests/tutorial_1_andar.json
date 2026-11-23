@@ -7,6 +7,6 @@
   "objetivos": [
     { "tipo": "chegar", "zona": 4, "x": 24, "y": 22, "raio": 2.5 }
   ],
-  "recompensa": { "xp": 20, "ferro": 10, "itens": [] },
+  "recompensa": { "xp": 160, "ferro": 10, "itens": [{ "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Toque no chão para andar até a bandeira.", "teclado": "Clique no chão para andar até a bandeira." }
 }

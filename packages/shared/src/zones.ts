@@ -2,7 +2,7 @@
 // Não há faixa de nível: qualquer jogador pode atravessar quando quiser; as zonas mais fundas são MUITO mais punitivas
 // (inimigos de nível alto) e, em troca, concentram mais recursos (`lootMult` maior = mais itens e raridades melhores).
 
-import type { Rarity } from "./items";
+import type { MaterialId, Rarity } from "./items";
 
 export type EnemyKind = "skeleton" | "wolf" | "wraith" | "bone_king" | "frost_alpha" | "crypt_lord";
 export type ZoneTheme = "ash" | "frost" | "crypt" | "town";
@@ -33,8 +33,24 @@ export interface ZoneDef {
   vault?: { x: number; y: number }; // baú de armazenamento fixo (só na cidade)
 }
 
-/** Drops de inimigos comuns: chance de equipamento/poção por abate e pesos das raridades. Raridade que não está na tabela NUNCA cai aqui (teto da zona). */
-export interface ZoneDrops { gear: number; potion: number; weights: Partial<Record<Rarity, number>> }
+/** Drops de inimigos comuns: chance de equipamento/poção/material por abate e pesos das raridades e dos materiais.
+ *  Raridade que não está na tabela NUNCA cai aqui (teto da zona). `material` é a chance de sair UM material de craft (escolhido por `materials`). */
+export interface ZoneDrops {
+  gear: number; potion: number; weights: Partial<Record<Rarity, number>>;
+  material: number; materials: Partial<Record<MaterialId, number>>;
+}
+
+/** o dev mudou a regra (design definitivo): épico, lendário e mítico NÃO caem em zona nenhuma hoje (nem inimigos, nem baús).
+ *  Eles ficam reservados para chefes de nível alto (futuros, a partir deste nível): o sorteio (`rarityLiberada`, em loot.ts) consulta isto.
+ *  Hoje nenhum chefe chega a este nível, então nada épico+ sai de drop. */
+export const EPIC_PLUS_MIN_BOSS_LEVEL = 45;
+const EPIC_PLUS: readonly Rarity[] = ["epic", "legendary", "mythic", "ancestral"];
+/** Pode sair esta raridade? Verde e abaixo: sempre. Épico+: só de baú de chefe com nível >= EPIC_PLUS_MIN_BOSS_LEVEL (`origem.chefe` = nível do chefe). Inimigo comum nunca. */
+export function rarityLiberada(r: Rarity, origem: { chefe?: number } = {}): boolean {
+  if (!EPIC_PLUS.includes(r)) return true;
+  return origem.chefe !== undefined && origem.chefe >= EPIC_PLUS_MIN_BOSS_LEVEL;
+}
+
 /** Chefe: aparece sempre; ao cair, volta depois de `respawnS`. O baú dá `count` itens (o primeiro, no mínimo `min`) e a tabela é o teto da zona. */
 export interface ZoneBoss {
   kind: EnemyKind; x: number; y: number; level: number; respawnS: number; name: string;
@@ -67,8 +83,9 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "skeleton", x: 22, y: 6, level: 4, levelMax: 5, count: 6, spread: 4 },
     ],
     lootMult: 1,
-    drops: { gear: 0.07, potion: 0.08, weights: { common: 85, uncommon: 15 } },
-    boss: { kind: "bone_king", name: "Rei Ossudo", x: 33, y: 7, level: 6, respawnS: 300, chest: { count: 2, min: "uncommon", weights: { common: 45, uncommon: 55 } } },
+    // o dev mudou a regra: verde (incomum) domina e sai com frequência; raro é ocasional; nada épico+ (ver EPIC_PLUS_MIN_BOSS_LEVEL)
+    drops: { gear: 0.12, potion: 0.08, weights: { common: 30, uncommon: 60, rare: 10 }, material: 0.7, materials: { mat_ferro_bruto: 70, mat_couro_curtido: 20, mat_essencia_arcana: 10 } },
+    boss: { kind: "bone_king", name: "Rei Ossudo", x: 33, y: 7, level: 6, respawnS: 300, chest: { count: 2, min: "rare", weights: { uncommon: 40, rare: 60 } } },
   },
   2: {
     id: 2, name: "Floresta Gélida", theme: "frost", w: 44, h: 44,
@@ -95,8 +112,9 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "wolf", x: 30, y: 4, level: 10, levelMax: 11, count: 4, spread: 3 },
     ],
     lootMult: 1.6,
-    drops: { gear: 0.09, potion: 0.1, weights: { common: 62, uncommon: 30, rare: 8 } },
-    boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 30, rare: 52, epic: 18 } } },
+    // o dev mudou a regra: verde domina; raro ocasional; sem épico (o baú de chefe também para no raro)
+    drops: { gear: 0.14, potion: 0.1, weights: { common: 20, uncommon: 65, rare: 15 }, material: 0.7, materials: { mat_couro_curtido: 60, mat_ferro_bruto: 25, mat_essencia_arcana: 15 } },
+    boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 30, rare: 70 } } },
   },
   3: {
     id: 3, name: "Catacumbas", theme: "crypt", w: 44, h: 44,
@@ -120,8 +138,9 @@ export const ZONES: Record<number, ZoneDef> = {
       { kind: "skeleton", x: 40, y: 38, level: 18, levelMax: 19, count: 5, spread: 3 },
     ],
     lootMult: 2.4,
-    drops: { gear: 0.11, potion: 0.12, weights: { common: 50, uncommon: 35, rare: 13, epic: 2 } },
-    boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "epic", weights: { rare: 25, epic: 55, legendary: 18, mythic: 2 } } },
+    // o dev mudou a regra: verde domina; raro ocasional; sem épico nem acima (o baú do Soberano para no raro até o nível 45 de chefe)
+    drops: { gear: 0.16, potion: 0.12, weights: { common: 20, uncommon: 65, rare: 15 }, material: 0.7, materials: { mat_essencia_arcana: 60, mat_ferro_bruto: 20, mat_couro_curtido: 20 } },
+    boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "rare", weights: { uncommon: 25, rare: 75 } } },
   },
   4: {
     id: 4, name: "Cidade de Brasalume", theme: "town", w: 48, h: 48,
@@ -132,7 +151,7 @@ export const ZONES: Record<number, ZoneDef> = {
     portals: [{ x: 24, y: 2, r: PORTAL_RADIUS, to: WORLD_GATE }],
     enemies: [],
     lootMult: 0,
-    drops: { gear: 0, potion: 0, weights: {} },
+    drops: { gear: 0, potion: 0, weights: {}, material: 0, materials: {} },
     safe: true,
     vault: { x: 31, y: 30 },
   },
@@ -145,7 +164,7 @@ export const ZONES: Record<number, ZoneDef> = {
     portals: [{ x: 18, y: 33, r: PORTAL_RADIUS, to: 4 }],
     enemies: [],
     lootMult: 0,
-    drops: { gear: 0, potion: 0, weights: {} },
+    drops: { gear: 0, potion: 0, weights: {}, material: 0, materials: {} },
     pvp: true,
   },
 };

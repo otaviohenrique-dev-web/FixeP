@@ -19,11 +19,13 @@ export const coinName = (id: string, qty: number) => (id === COIN_OBOL.id ? `${q
 const VALUE_BASE = [12, 45, 170, 650, 2800, 13000]; // por raridade (tostões)
 const VALUE_KIND: Partial<Record<ItemKind, number>> = { weapon: 1.4, offhand: 0.8, helmet: 0.8, armor: 1.2, boots: 0.7, cape: 0.7 };
 export const POTION_VALUE = 10;
+export const MATERIAL_VALUE = 6; // material de craft: vende-se barato (vale mais para o craft do que para o comerciante)
 /** Preço médio de mercado de um item: raridade x tipo x nível exigido. */
 export function itemValue(def: ItemDef | string | undefined): number {
   const d = typeof def === "string" ? ITEMS[def] : def;
   if (!d) return 0;
   if (d.kind === "potion") return POTION_VALUE;
+  if (d.kind === "material") return MATERIAL_VALUE;
   return Math.max(1, Math.round(VALUE_BASE[rarityIndex(d.rarity)] * (VALUE_KIND[d.kind] ?? 1) * (1 + d.minLevel * 0.015)));
 }
 export const BUY_MULT = 1.4; // o comerciante vende acima do preço médio
@@ -32,8 +34,8 @@ export const BREAK_MULT = 0.12; // quebrar rende pouco (menos que vender)
 export const buyPrice = (id: string) => Math.max(1, Math.ceil(itemValue(id) * BUY_MULT));
 export const sellPrice = (id: string) => Math.max(1, Math.floor(itemValue(id) * SELL_MULT));
 export const breakValue = (id: string) => Math.max(1, Math.floor(itemValue(id) * BREAK_MULT));
-/** Itens que se pode quebrar: só equipamento (poção se vende). */
-export const canBreak = (id: string) => !!ITEMS[id] && ITEMS[id].kind !== "potion";
+/** Itens que se pode quebrar: só equipamento (poção e material se vendem). */
+export const canBreak = (id: string) => !!ITEMS[id] && ITEMS[id].kind !== "potion" && ITEMS[id].kind !== "material";
 /** Raridade a partir da qual o jogo exige confirmação ao quebrar (1 = incomum... 2 = rara em diante) e a "forte" (épico em diante). */
 export const BREAK_CONFIRM_FROM = 2;
 export const BREAK_STRONG_FROM = 3;
@@ -67,8 +69,9 @@ export const ZONE_NPCS: Record<number, NpcDef[]> = {
 export const zoneNpcs = (zoneId: number): NpcDef[] => ZONE_NPCS[zoneId] ?? [];
 
 // ------------------------------------------------------------ comerciante
-/** O que o comerciante vende a uma classe: poção e o equipamento dela só COMUM e INCOMUM (raro para cima vem de drops, chefes, forja e mercado de jogadores: isso valoriza o drop). */
-export const SHOP_MAX_RARITY: Rarity = "uncommon";
+/** O que o comerciante vende a uma classe: poção e o equipamento dela só COMUM.
+ *  o dev mudou a regra (design definitivo): o comerciante NÃO vende mais verdes (incomum); verdes saem de drops, quests e craft, e raros para cima de drops/chefes/craft. */
+export const SHOP_MAX_RARITY: Rarity = "common";
 export function shopStock(cls: CharClass): string[] {
   const out = ["pocao_de_vida"];
   const cap = rarityIndex(SHOP_MAX_RARITY);
@@ -103,7 +106,7 @@ export type MergeCheck = { ok: true; kind: ItemKind; cls: CharClass; from: Rarit
 export function checkMerge(ids: string[], zoneId: number): MergeCheck {
   if (ids.length !== MERGE_COUNT) return { ok: false, error: `Escolha ${MERGE_COUNT} itens.` };
   const defs = ids.map((i) => ITEMS[i]);
-  if (defs.some((d) => !d || d.kind === "potion")) return { ok: false, error: "Só equipamentos podem ser fundidos." };
+  if (defs.some((d) => !d || d.kind === "potion" || d.kind === "material")) return { ok: false, error: "Só equipamentos podem ser fundidos." };
   const a = defs[0];
   if (defs.some((d) => d.kind !== a.kind || d.rarity !== a.rarity || d.cls !== a.cls)) return { ok: false, error: "Os itens precisam ser do mesmo tipo, raridade e classe." };
   const to = nextRarity(a.rarity);

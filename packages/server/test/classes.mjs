@@ -88,7 +88,7 @@ async function collect(P, ms = 9000) {
 }
 await collect(A);
 await sleep(300);
-check("o Arqueiro recebe XP e loot (o item do chão é dele; qualquer classe pode cair, aqui o teste solta o arco)", A.me().xp >= 20 && A.ev.loot.some((l) => l.id === "arco_curto_common"), `xp ${A.me().xp}, loot ${A.ev.loot.map((l) => l.id)}`);
+check("o Arqueiro recebe XP e loot (o item do chão é dele; qualquer classe pode cair, aqui o teste solta o arco)", A.me().xp >= 1 && A.ev.loot.some((l) => l.id === "arco_curto_common"), `xp ${A.me().xp}, loot ${A.ev.loot.map((l) => l.id)}`);
 
 console.log("\n== 3. Clérigo: Compressor de Ar, Julgamento e ataque ==");
 // ambos vão para perto do esqueleto e2 (31,24): A fica no alcance de aggro, C um pouco atrás (dentro do raio de cura 4)

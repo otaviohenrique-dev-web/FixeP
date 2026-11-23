@@ -1,4 +1,4 @@
-import { ITEMS, RARITIES, GEAR_CLASSES, COIN_IRON, COIN_OBOL, coinZone, mobIron, bossIron, sortearAfixos, type CharClass, type Rarity, type ZoneDef, type ItemKind } from "@frixep/shared";
+import { ITEMS, RARITIES, GEAR_CLASSES, COIN_IRON, COIN_OBOL, coinZone, mobIron, bossIron, sortearAfixos, rarityLiberada, type CharClass, type Rarity, type ZoneDef, type ItemKind, type MaterialId } from "@frixep/shared";
 
 export interface Drop { id: string; qty: number; af?: string[] } // af: afixos sorteados no drop (só equipamento)
 export type Rng = () => number;
@@ -19,9 +19,15 @@ const pickWeighted = <T,>(entries: [T, number][], rng: Rng): T | null => {
   return entries[entries.length - 1][0];
 };
 
-/** Sorteia a raridade pela tabela da zona (raridade fora da tabela nunca sai: é o teto da zona). */
-export function pickRarity(weights: Partial<Record<Rarity, number>>, rng: Rng): Rarity {
-  return pickWeighted(RARITIES.flatMap((r) => (weights[r] ? [[r, weights[r]!] as [Rarity, number]] : [])), rng) ?? "common";
+/** Sorteia a raridade pela tabela da zona (raridade fora da tabela nunca sai: é o teto da zona).
+ *  `origem` (`{ chefe: nível }` quando vem de baú de chefe): épico+ só é sorteado se `rarityLiberada` deixar (o dev mudou a regra: ver EPIC_PLUS_MIN_BOSS_LEVEL). */
+export function pickRarity(weights: Partial<Record<Rarity, number>>, rng: Rng, origem: { chefe?: number } = {}): Rarity {
+  return pickWeighted(RARITIES.flatMap((r) => (weights[r] && rarityLiberada(r, origem) ? [[r, weights[r]!] as [Rarity, number]] : [])), rng) ?? "common";
+}
+
+/** Sorteia um material de craft pela tabela da zona (pesos por material). */
+export function pickMaterial(weights: Partial<Record<MaterialId, number>>, rng: Rng): MaterialId | null {
+  return pickWeighted(Object.entries(weights).filter(([, w]) => (w ?? 0) > 0) as [MaterialId, number][], rng);
 }
 
 /** Sorteia um equipamento da raridade dada. Qualquer classe pode cair (a do jogador é só 1 entre 4): valoriza os drops da própria classe. */
@@ -56,6 +62,7 @@ export function rollMobLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharClas
   if (rng() < c.obol) out.push({ id: COIN_OBOL.id, qty: 1 }); // Óbolo de Sangue: raríssimo
   if (rng() < zone.drops.gear) out.push(gearDrop(pickRarity(zone.drops.weights, rng), rng));
   if (rng() < zone.drops.potion) out.push({ id: "pocao_de_vida", qty: 1 });
+  if (rng() < zone.drops.material) { const m = pickMaterial(zone.drops.materials, rng); if (m) out.push({ id: m, qty: 1 }); } // material de craft: frequente
   return out;
 }
 
@@ -67,7 +74,7 @@ export function rollChestLoot(zone: ZoneDef, rng: Rng = Math.random, cls: CharCl
   const out: Drop[] = [{ id: COIN_IRON.id, qty: Math.round(bossIron(zone.boss.level, rng) * (1.5 + rng())) }]; // sacola grande do chefe
   if (rng() < coinZone(zone.id).bossObol) out.push({ id: COIN_OBOL.id, qty: 1 });
   for (let i = 0; i < c.count; i++) {
-    let rar = pickRarity(c.weights, rng);
+    let rar = pickRarity(c.weights, rng, { chefe: zone.boss.level });
     if (i === 0 && RARITIES.indexOf(rar) < RARITIES.indexOf(c.min)) rar = c.min;
     out.push(gearDrop(rar, rng));
   }

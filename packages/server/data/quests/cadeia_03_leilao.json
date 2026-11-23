@@ -6,6 +6,6 @@
   "npc": "auctioneer",
   "preRequisitos": ["cadeia_02_pocoes"],
   "objetivos": [{ "tipo": "falar", "npc": "auctioneer" }],
-  "recompensa": { "xp": 19, "ferro": 15, "itens": [] },
+  "recompensa": { "xp": 152, "ferro": 15, "itens": [{ "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Ossian fica ao norte da praça, perto da fonte. Toque nele.", "teclado": "Ossian fica ao norte da praça, perto da fonte. Clique nele." }
 }

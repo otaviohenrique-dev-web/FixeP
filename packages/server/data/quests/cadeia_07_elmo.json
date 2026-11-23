@@ -6,6 +6,6 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_06_ossos"],
   "objetivos": [{ "tipo": "equipar", "slot": "helmet" }],
-  "recompensa": { "xp": 23, "ferro": 20, "itens": [] },
+  "recompensa": { "xp": 184, "ferro": 20, "itens": [{ "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Abra a mochila, toque no elmo e equipe.", "teclado": "Abra a mochila (tecla I), clique no elmo e equipe." }
 }

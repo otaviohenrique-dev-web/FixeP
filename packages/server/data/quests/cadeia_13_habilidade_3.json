@@ -6,6 +6,6 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_12_habilidade_2"],
   "objetivos": [{ "tipo": "usar", "acao": "skill3", "qtd": 3 }],
-  "recompensa": { "xp": 57, "ferro": 35, "itens": [] },
+  "recompensa": { "xp": 456, "ferro": 35, "itens": [{ "id": "mat_couro_curtido", "qtd": 3 }] },
   "dica": { "toque": "Toque no botão de habilidade 3 (o terceiro da barra).", "teclado": "Aperte E para usar a habilidade 3." }
 }

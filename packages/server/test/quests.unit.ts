@@ -55,12 +55,21 @@ console.log("== Cadeia de quests 1 a 10 (C1.5) ==");
   check("cadeia: níveis de 3 a 10", cadeia.every((d) => d.nivelMin >= 3 && d.nivelMin <= 10));
   check("cadeia: abater na zona 1 até 4 e na zona 2 até 5; chefe da zona 1 só como quest opcional", cadeia.every((d) =>
     d.objetivos.every((o) => o.tipo !== "abater" || (o.zona === 1 && o.qtd <= 4) || (o.zona === 2 && o.qtd <= 5) || (o.kind === "bone_king" && o.zona === 1 && o.qtd === 1 && d.nivelMin >= 8))));
-  check("cadeia: recompensa de XP entre 8% e 15% do XP do nível da quest (sem passar do esperado)", cadeia.every((d) => {
+  // o dev mudou a regra: QUEST é a maior fonte de XP (XP das quests x8; mob e chefe caíram, ver XP_MOB_MULT). Antes: 8% a 15% do nível.
+  // Agora cada quest vale cerca de 1 nível do próprio nível (faixa 60% a 120%).
+  check("cadeia: recompensa de XP entre 60% e 120% do XP do nível da quest (quest é a principal fonte de XP)", cadeia.every((d) => {
     const base = xpToNext(d.nivelMin);
-    return d.recompensa.xp >= Math.floor(base * 0.08) && d.recompensa.xp <= Math.ceil(base * 0.15);
+    return d.recompensa.xp >= Math.floor(base * 0.6) && d.recompensa.xp <= Math.ceil(base * 1.2);
   }), cadeia.map((d) => `${d.id}:${d.recompensa.xp}`).join(" "));
+  // XP total das quests (tutorial + cadeia) basta para chegar ao nível 12 só com elas (o dev: nível 12-15 em um fluxo normal; nível 50 não).
+  const xpTotal = todas.reduce((n, d) => n + d.recompensa.xp, 0);
+  let nivelComQuests = 1, sobra = xpTotal;
+  while (nivelComQuests < 50 && sobra >= xpToNext(nivelComQuests)) { sobra -= xpToNext(nivelComQuests); nivelComQuests++; }
+  check("quests sozinhas levam a nível 12 ou mais (e não a 50)", nivelComQuests >= 12 && nivelComQuests < 30, `nível ${nivelComQuests} com ${xpTotal} XP`);
   check("cadeia: todas dão um pouco de ferro (10 a 60)", cadeia.every((d) => d.recompensa.ferro >= 10 && d.recompensa.ferro <= 60));
-  check("cadeia: itens de recompensa com {classe} só comuns ou incomuns", cadeia.every((d) => d.recompensa.itens.every((i) => !i.id.includes("{classe}") || /_(common|uncommon)$/.test(i.id))));
+  // o dev mudou a regra: quest dá equipamento verde ou raro (nunca épico+) e materiais de craft (mat_*)
+  check("cadeia: itens de recompensa com {classe} só comuns, verdes ou raros (nunca épico+)", cadeia.every((d) => d.recompensa.itens.every((i) => !i.id.includes("{classe}") || /_(common|uncommon|rare)$/.test(i.id))));
+  check("quests dão material de craft (mat_*) e nenhum item é épico ou acima", todas.every((d) => d.recompensa.itens.every((i) => !/_(epic|legendary|mythic|ancestral)$/.test(i.id))) && todas.some((d) => d.recompensa.itens.some((i) => i.id.startsWith("mat_"))));
   check("cadeia: textos com até 2 frases (até 200 caracteres)", cadeia.every((d) => d.texto.length <= 200 && (d.texto.match(/[.!?](\s|$)/g) ?? []).length <= 2));
   // progressão: quem entrega uma quest consegue aceitar a seguinte no nível em que chega (sem buracos até o nível 10)
   const feitas = new Set(["tutorial_5_equipar"]);

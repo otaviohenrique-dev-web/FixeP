@@ -7,7 +7,8 @@ import { afixoStats, afixosValidos, emptyAfixoStats, type AfixoStats } from "./a
  * Qualquer classe pode DROPAR item de qualquer classe, mas só a classe do item pode EQUIPAR (e só então valem os bônus).
  * Quase tudo é gerado por tabelas (famílias x raridades): o id de um item é `<familia>_<raridade>` (ex.: "montante_epic").
  */
-export type ItemKind = "weapon" | "offhand" | "helmet" | "armor" | "boots" | "cape" | "potion";
+/** "material": ingrediente de craft (mat_*): empilhável, não equipável, vendável. Não é equipamento nem poção. */
+export type ItemKind = "weapon" | "offhand" | "helmet" | "armor" | "boots" | "cape" | "potion" | "material";
 /**
  * Os 8 níveis de raridade (lista definitiva, 2026-11-21):
  * inferior/lixo (cinza), comum (branco), incomum (verde), raro (azul), épico (roxo), lendário (laranja/dourado),
@@ -139,6 +140,15 @@ for (const cls of GEAR_CLASSES) {
 }
 
 add({ id: "pocao_de_vida", name: "Poção de Vida", kind: "potion", rarity: "common", minLevel: 1, heal: 40, stack: 10, desc: "Recupera 40 de vida." });
+
+// ------------------------------------------------------------ materiais de craft (o craft é de outra frente; aqui ficam só os itens e as tabelas de drop)
+// Não são equipamento (nunca vão ao slot), empilham e se vendem. Raridade "common" só para o sistema de raridade não tratá-los como verdes/raros.
+export const MATERIAL_IDS = ["mat_ferro_bruto", "mat_couro_curtido", "mat_essencia_arcana"] as const;
+export type MaterialId = (typeof MATERIAL_IDS)[number];
+export const isMaterial = (id: string) => ITEMS[id]?.kind === "material";
+add({ id: "mat_ferro_bruto", name: "Ferro Bruto", kind: "material", rarity: "common", minLevel: 1, stack: 99, desc: "Ferro sem forja. Ingrediente de craft." });
+add({ id: "mat_couro_curtido", name: "Couro Curtido", kind: "material", rarity: "common", minLevel: 1, stack: 99, desc: "Couro tratado de lobo e bicho. Ingrediente de craft." });
+add({ id: "mat_essencia_arcana", name: "Essência Arcana", kind: "material", rarity: "common", minLevel: 1, stack: 99, desc: "Resíduo mágico de espectros e mortos-vivos. Ingrediente de craft." });
 
 // ------------------------------------------------------------ itens antigos (migração)
 // Os itens da primeira versão viram o equivalente nas novas tabelas (mesma raridade e classe) quando o inventário é carregado.
