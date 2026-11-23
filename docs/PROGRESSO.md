@@ -31,6 +31,12 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 |---|---|---|
 | C2.1 Habilidades como dados | ✅ concluído (2026-11-22) | Cada habilidade é uma lista de efeitos tipados (dano, cura, atordoar, enraizar, puxar, quebra de armadura, lentidão, aceleração do ataque) em `CLASS_SPECS` (`packages/shared/src/index.ts`). `resolveAction(classe, slot, modificadores)` devolve a ação efetiva; `CLASS_DEFS` e `classAction` (servidor e cliente) usam essa função. Lista de modificadores vazia hoje (C2.2 e C2.3 plugam aqui). Sem mudança de comportamento: `test/acoes.unit.ts` compara as 25 ações com os valores anteriores. Sem pendência nova. |
 
+## Arte
+
+| Card | Situação | Observação |
+|---|---|---|
+| ARTE Kit do Guerreiro (2 mãos e espada + escudo) | 🟡 kit e placeholder prontos (2026-11-22) | Referência em `assets/source/warrior_ref_2h.jpg`; guia `docs/ARTE_GUERREIRO_KIT.md` (auditoria, paleta, peças, 7 animações x SE/NE x 2 variações). Gerador `tools/gen_warrior_kit.py` produz `assets/characters/warrior_2h.*` e `warrior_1h.*` (placeholder por código). Cliente não carrega ainda: o jogo segue com `assets/placeholder/warrior.*`. Pendência **Média**: arte final desenhada à mão pelo dev de arte e integração da variação no cliente (PR próprio). |
+
 ## Pendências abertas
 
 | ID | Pendência | Criticidade | Detalhe e próximo passo |
