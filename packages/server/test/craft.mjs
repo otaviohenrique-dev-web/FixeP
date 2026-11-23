@@ -1,6 +1,6 @@
 // Teste de ponta a ponta do CRAFT na Ferreira (aba Craftar): longe do NPC recusa, perto craftar (gasta tudo ou nada),
 // Óbolos só do épico para cima, mochila cheia não consome nada, falta de ingrediente recusa, e o item craftado persiste.
-// Exige o servidor de teste com ECON_TEST=1 CRAFT_TEST=1 VARIACAO_TEST_LEVEL=30 (kit de ingredientes + nível 30).
+// Exige o servidor de teste com ECON_TEST=1 CRAFT_TEST=1 VARIACAO_TEST_LEVEL=40 (kit de ingredientes + nível 40: o mítico pede nível 40).
 // Uso: SERVER=http://localhost:2990 node test/craft.mjs
 import { Client } from "colyseus.js";
 
@@ -26,21 +26,22 @@ async function account(prefix) {
 async function enter(acc) {
   const room = await new Client(WS).joinOrCreate(ROOM, { token: acc.token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
-  const st = { snap: null, notices: [], oks: [] };
+  const st = { snap: null, msgs: [] }; // msgs: todos os avisos, na ordem em que chegaram (ok = sucesso)
   room.onMessage("inv", (s) => (st.snap = s));
-  room.onMessage("notice", (m) => (m.ok ? st.oks : st.notices).push(m.text));
+  room.onMessage("notice", (m) => st.msgs.push({ text: m.text, ok: !!m.ok }));
   room.send("inv_sync", {});
   await sleep(500);
   return { room, st, me: () => room.state.players.get(room.sessionId) };
 }
 const count = (snap, id) => snap.inv.filter((s) => s?.id === id).reduce((n, s) => n + s.qty, 0);
 const slotOf = (snap, id) => snap.inv.findIndex((s) => s?.id === id);
-const lastNotice = (c) => c.st.notices[c.st.notices.length - 1] ?? c.st.oks[c.st.oks.length - 1] ?? "";
+const lastNotice = (c) => c.st.msgs[c.st.msgs.length - 1]?.text ?? "";
 const freeSlots = (snap) => snap.inv.filter((s) => !s).length;
 async function goto(c, x, y, tol = 0.6) {
   c.room.send("move_to", { x, y });
   const t = Date.now();
-  while (Math.hypot(c.me().x - x, c.me().y - y) > tol && Date.now() - t < 8000) await sleep(100);
+  while (Math.hypot(c.me().x - x, c.me().y - y) > tol && Date.now() - t < 20000) await sleep(100);
+  if (Math.hypot(c.me().x - x, c.me().y - y) > 3) throw new Error(`não chegou a (${x}, ${y}): parou em (${c.me().x.toFixed(1)}, ${c.me().y.toFixed(1)})`);
 }
 /** espera a próxima atualização do inventário (o servidor manda o inv depois de cada operação) */
 async function after(c, fn) {

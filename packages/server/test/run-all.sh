@@ -122,8 +122,8 @@ run_case 2988 "VARIACAO_TEST_LEVEL=10 API_RATE_MULT=100" test/variacoes.mjs "VAR
 run_case 2987 "VARIACAO_TEST_LEVEL=10 API_RATE_MULT=100 TEST_START_ZONE=1" test/variacoes.mjs "VARIACAO_MODO=zona"
 # Afixos de item (atributos de drop): o drop de teste traz "afiado" (arma) e "vigor" (armadura); equipar aplica, e sobrevive a sair e voltar.
 run_case 2993 "LOOT_TEST=1 AFIXO_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/afixos.mjs ""
-# Craft na Ferreira (aba Craftar): ingredientes e Tostões gastos por inteiro, Óbolo só do épico+, mochila cheia e falta não consomem nada; nível 30 para o épico.
-run_case 2985 "ECON_TEST=1 CRAFT_TEST=1 VARIACAO_TEST_LEVEL=30 API_RATE_MULT=100" test/craft.mjs ""
+# Craft na Ferreira (aba Craftar): ingredientes e Tostões gastos por inteiro, Óbolo só do épico+, mochila cheia e falta não consomem nada; nível 40 para o mítico.
+run_case 2985 "ECON_TEST=1 CRAFT_TEST=1 VARIACAO_TEST_LEVEL=40 API_RATE_MULT=100" test/craft.mjs ""
 # PvP só na Arena Sangrenta (zona 5): dano entre jogadores só lá, sem fogo amigo de grupo, morte renasce na arena sem perda.
 run_case 2989 "API_RATE_MULT=100" test/pvp.mjs ""
 
