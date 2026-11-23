@@ -59,6 +59,7 @@ export const Msg = {
   MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
   Ready: "ready", // {}: o cliente terminou de carregar a zona e o jogador já pode agir: só então começa a contar a bolha de chegada
+  Variacao: "variacao", // { slot, id }: escolhe a variação de uma habilidade (id null = volta à base); só na cidade e a partir do nível do slot (C2.2)
   AutoPot: "auto_pot", // { at }: limiar da auto-poção em % de vida (0 = desligada); o servidor limita a 0..90, grava e sincroniza
   QMode: "q_mode",// { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
   QuestAccept: "quest_aceitar", // { id }: aceita uma quest (o servidor valida nível, pré-requisitos e se já aceitou)
@@ -572,10 +573,10 @@ export interface CharacterInfo { name: string; class: CharClass; level: number; 
 export interface TravelEvent { zone: number }
 
 /** A ação como a classe a tem agora: o Clérigo troca o Q conforme a escolha (0 = cura em área, 1 = cura focada). */
-export function classAction(cls: CharClass, a: ActionId, qMode = 0): ActionDef {
+export function classAction(cls: CharClass, a: ActionId, qMode = 0, mods: readonly ActionModifier[] = []): ActionDef {
   // a ação efetiva vem de resolveAction (servidor e cliente usam esta função; sem modificadores = valores de CLASS_DEFS)
   const alt = a === "skill1" && qMode === 1 && CLASS_SPECS[cls]?.skill1Alt;
-  return resolveAction(cls, alt ? "skill1Alt" : a);
+  return resolveAction(cls, alt ? "skill1Alt" : a, mods);
 }
 
 export * from "./items";
@@ -585,3 +586,4 @@ export * from "./market";
 export * from "./zones";
 export * from "./vault";
 export * from "./skilltips";
+export * from "./variacoes";

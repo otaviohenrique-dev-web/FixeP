@@ -32,6 +32,8 @@ import { GroundLayer } from "./ground";
 import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
 import { mountDiario, type DiarioUi } from "./diario";
+import { mountVariacoes, type VariacoesUi } from "./variacoes";
+import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
 import type { DicasVistasEvent } from "@frixep/shared";
@@ -144,6 +146,7 @@ class WorldScene extends Phaser.Scene {
   private pendingVault = false; // clicou no baú longe: abre quando chegar perto
   private econ!: EconomyUi;
   private diario!: DiarioUi;
+  private variacoes!: VariacoesUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -160,6 +163,8 @@ class WorldScene extends Phaser.Scene {
 
   private get state(): any { return this.room?.state; }
   private me(): any { return this.state?.players?.get(this.room.sessionId); }
+  /** modificadores das variações escolhidas (C2.2): o cliente usa os mesmos da ação do servidor, para recarga e alcance na tela */
+  private modsDe(me: any): ActionModifier[] { return me ? modificadoresDaEscolha(limparEscolhas(me.variacoes, this.cls, Number(me.level) || 1)) : []; }
 
   private artReady: Promise<void> | null = null;
   private uiMounted = false;
@@ -344,6 +349,12 @@ class WorldScene extends Phaser.Scene {
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
     this.diario = mountDiario(); // rastreador e diário de quests (C1.3); depois do econ, que injeta o CSS de quests
+    this.variacoes = mountVariacoes({ // variações de habilidade (C2.2): a escolha é do servidor; o painel só mostra e pede
+      cls: this.cls,
+      estado: () => { const me = this.me(); return me ? { variacoes: String(me.variacoes ?? "{}"), level: Number(me.level) || 1 } : null; },
+      cidade: () => !!ZONES[this.zoneId]?.safe,
+      escolher: (slot, id) => this.room?.send(Msg.Variacao, { slot, id }),
+    });
     this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.armTravelWatch(); this.room.send(Msg.Travel, { to }); });
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
@@ -1300,7 +1311,7 @@ class WorldScene extends Phaser.Scene {
 
   /** até onde a ação alcança um alvo (tiles); 0 = ação sem alvo (esquiva, buffs, curas em área) */
   private reach(a: ActionId): number {
-    const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0);
+    const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0, this.modsDe(this.me()));
     switch (d.kind) {
       case "melee": return (d.offset ?? 0) + (d.radius ?? 1) + 1;
       case "dashHit": return (d.dash ?? 0) + (d.radius ?? 1);
@@ -1389,7 +1400,7 @@ class WorldScene extends Phaser.Scene {
   /** habilidade de área (armadilha, chuva, puxada): a mira mostra a área */
   private isAreaSkill(a: ActionId): boolean {
     const me = this.me();
-    const k = me ? classAction(this.cls, a, Number(me.qMode) || 0).kind : "";
+    const k = me ? classAction(this.cls, a, Number(me.qMode) || 0, this.modsDe(me)).kind : "";
     return k === "trap" || k === "rain" || k === "pull";
   }
 
@@ -1442,7 +1453,7 @@ class WorldScene extends Phaser.Scene {
   private drawAimPreview(time: number) {
     const me = this.me();
     if (!me || !this.aimA) return;
-    const def = classAction(this.cls, this.aimA, Number(me.qMode) || 0);
+    const def = classAction(this.cls, this.aimA, Number(me.qMode) || 0, this.modsDe(me));
     if (!this.isAreaSkill(this.aimA)) { this.drawReachAim(me, this.aimA); return; }
     const range = def.placeRange ?? 8;
     const r = def.radius ?? (def.kind === "pull" ? 4 : def.kind === "rain" ? 2 : 1.5);
@@ -1473,7 +1484,7 @@ class WorldScene extends Phaser.Scene {
     if (a === "attack") return 0;
     if (this.isAreaSkill(a)) return this.reach(a);
     if (this.cls === "cleric") return classAction(this.cls, a, Number(this.me()?.qMode) || 0).kind === "healFocus" ? this.reach(a) : 0; // Cura Focada: mostra quem vai ser curado (sem mira manual)
-    const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0);
+    const d = classAction(this.cls, a, Number(this.me()?.qMode) || 0, this.modsDe(this.me()));
     return d.kind === "dodge" ? d.dash ?? 0 : this.reach(a);
   }
 
@@ -1548,7 +1559,7 @@ class WorldScene extends Phaser.Scene {
     if (a !== "attack") { this.chase = null; if (this.touchMode) navigator.vibrate?.(10); }
     if (a === "attack") this.dicas.gatilho("primeiro_ataque");
     else if (["skill1", "skill2", "skill3", "ultimate"].includes(a)) this.dicas.gatilho("primeira_skill");
-    if (a === "attack") this.nextBasicAt = performance.now() + classAction(this.cls, "attack", Number(me.qMode) || 0).cd * 1000;
+    if (a === "attack") this.nextBasicAt = performance.now() + classAction(this.cls, "attack", Number(me.qMode) || 0, this.modsDe(me)).cd * 1000;
     const { x, y } = this.aimA === a && this.aimScreen ? this.aimGrid() : this.aim(a);
     const payload: ActPayload = { a, ax: x, ay: y };
     this.room.send(Msg.Act, payload);
