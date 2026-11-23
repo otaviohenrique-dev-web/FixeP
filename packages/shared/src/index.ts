@@ -41,6 +41,7 @@ export const Msg = {
   ShopBuy: "shop_buy", // { npc, id, qty }: compra do comerciante (valida distância, estoque, saldo e espaço)
   ShopSell: "shop_sell", // { npc, slot, qty }: vende ao comerciante
   SmithMerge: "smith_merge", // { npc, slots: [a, b, c] }: funde 3 equipamentos iguais num de raridade superior (custa tostões; pode falhar)
+  Craft: "craft", // { npc, tipo: "arma"|"peca", familia?, peca?, raridade }: craft de arma ou peça (Ferreira, aba Craftar); consome ingredientes/moedas e gera o item (ver crafting.ts)
   TradeInvite: "trade_invite", // { name }: convida um jogador da zona, por perto, para uma troca
   TradeAccept: "trade_accept", // {}: aceita o convite de troca
   TradeDecline: "trade_decline", // {}: recusa o convite
@@ -599,3 +600,4 @@ export * from "./skilltips";
 export * from "./variacoes";
 export * from "./talentos";
 export * from "./buffs";
+export * from "./crafting";

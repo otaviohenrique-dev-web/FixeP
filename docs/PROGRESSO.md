@@ -39,6 +39,22 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | C2.3 Talentos | 🟡 concluído com pendência (2026-11-23) | Um ponto por nível a partir do nível 6 (`pontosTotais`). 3 ramos por classe, cada um com 4 talentos em lista (2 de nível 1, 1 de nível 2, 1 de nível 3; nível 2 exige 3 pontos no ramo, nível 3 exige 6 e custa 2 por rank). Só passivas numéricas: dano %, vida, recurso, recarga %, cura %, redução de dano %, crítico % (velocidade ficou de fora: não há stat de movimento). Lógica pura em `packages/shared/src/talentos.ts` (`limparTalentos`, `podeSubirTalento`, `aplicarTalentos` soma aos bônus de equipamento antes de poder e combate). Servidor: migração `017_talentos.sql` (`characters.talentos`, `talentos_resets`), mensagens `talento` e `talento_resetar` (reset só na cidade, 50 × (resets+1) tostões). Cliente: painel "Talentos" (tecla T ou menu). Testes: `test/talentos.unit.ts` (47) e `test/talentos.mjs` (18 na cidade, 2 fora dela), registrados em `run-all.sh`. Pendências: **Média** PD-17 (verificação visual só em 800x600; 1280x720, 700x340 e 375x812 não conferidos); **Baixa** PD-18 (o painel se redesenha a cada 700 ms, como o de variações: um clique que cai na troca de DOM pode se perder; trocar por atualização só quando o estado muda). |
 | C2.R Rebalance de Guerreiro, Clérigo e Mago (design do dono) | ✅ implementado (2026-11-22), aguardando CI | Dados em `CLASS_SPECS`; efeitos novos: `selfHeal`, `hitHeal`, `mana`, `guard` (aliados -% de dano), `stacks` (acúmulos da Cura Focada, até 3, +10% cada, 8 s), `burn` (queimadura: % do dano por s; renova, não acumula; chefes resistem) e `cleanse`. Campos no schema: `Player.healStacks/healStackS`, `Enemy.burning`. Provocar (Escudo Refletor) já existia e foi reforçado (raio 7, 4 s). Tabela antes/depois no PR. Testes: `test/rebalance.mjs` (novo), `balance.unit.ts` e `acoes.unit.ts` (números atualizados com motivo). |
 
+## Craft
+
+| Item | Situação | Observação |
+|---|---|---|
+| CRAFT na Ferreira (aba Craftar) | 🟡 implementado, verificação de servidor pendente (2026-11-23) | Receitas puras em `packages/shared/src/crafting.ts`. **Armas:** uma receita para todas (3 ingredientes = base × multiplicador da raridade, mais Tostões; Óbolos a partir do épico). **Peças de set e secundárias:** outra receita padrão, igual para todas (um set = 4 peças de set da classe na mesma raridade). Servidor: `Msg.Craft` em `game/craft.ts` (tudo ou nada, espaço e nível conferidos, afixos sorteados, `rng` injetável). Cliente: aba Craftar com progresso do set. Testes: `crafting.unit.ts` (37 asserts) e `craft.mjs` (ponta a ponta, em `run-all.sh`, com `CRAFT_TEST=1`). Ingredientes `mat_ferro_bruto`, `mat_couro_curtido`, `mat_essencia_arcana` (kind `material`) são declarados em `crafting.ts` e só entram em `ITEMS` se ainda não existirem. |
+
+**Tabela de receitas (fórmula única)**
+
+| Tipo | Ferro Bruto | Couro Curtido | Essência Arcana | Tostões | Óbolos de Sangue |
+|---|---|---|---|---|---|
+| Arma (comum → mítico) | 3 × M | 2 × M | 2 × M | 40 × M | 0, 0, 0, 2, 4, 8 |
+| Peça de set / secundária | 2 × M | 2 × M | 1 × M | 25 × M | 0, 0, 0, 1, 2, 4 |
+| Set (4 peças) | 8 × M | 8 × M | 4 × M | 100 × M | 0, 0, 0, 4, 8, 16 |
+
+M = multiplicador por raridade: comum 1, incomum 2, raro 4, épico 7, lendário 11, mítico 16. Os Óbolos não multiplicam (são uma tabela por raridade). Nível mínimo = o do item.
+
 ## Arte
 
 | Card | Situação | Observação |
