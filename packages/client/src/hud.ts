@@ -2,6 +2,7 @@ import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier, CLASS_DEFS, PVP_CHANNE
 
 import { skillImage, skillCategory } from "./skill-art";
 import { mountBuffs, type BuffStrip } from "./buffs";
+import { animatePoder } from "./poder";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -52,6 +53,7 @@ export interface Hud {
   setPvp(on: boolean, chan: number): void;
   /** quantidade de poções na bolsa (slot da poção); uma queda no estoque inicia a recarga local */
   setPotion(count: number): void;
+  setPoder(n: number): void;
   /** a poção não está em recarga? */
   potionReady(): boolean;
   /** mostra o limiar da auto-poção vindo do servidor (botão "Auto"; 0 = desligada) */
@@ -270,6 +272,8 @@ const CSS = `
 .hd-ic{top:50%;left:50%;margin-left:0;transform:translate(-50%,-50%)}
 .hd-ic svg{width:26px;height:26px}
 .hd-lv{display:none}
+.hd-pw{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:calc(env(safe-area-inset-bottom) + 24px);display:flex;align-items:baseline;gap:5px;font:700 9px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;color:rgba(220,205,170,.75);text-shadow:0 1px 3px #000;pointer-events:none;z-index:3}
+.hd-pw .pw-n{font:800 14px/1 Georgia,serif;letter-spacing:0;color:#f3d77a}
 .hd.touch .hd-ic svg{width:28px;height:28px}
 `;
 
@@ -336,6 +340,14 @@ export function mountHud(opts: HudOptions): Hud {
   const buffStrip = mountBuffs(q(".hd-buffs")); // buffs próprios (ícones com tempo), abaixo das barras
   const buff = q(".hd-buff");
   const lvTxt = q(".hd-lv");
+  // poder total: chip discreto logo acima do nível (o número anima ao equipar; o valor vem do servidor)
+  const pwHost = document.createElement("div");
+  pwHost.className = "hd-pw pw-host";
+  pwHost.setAttribute("aria-label", "Poder total");
+  pwHost.innerHTML = `<small>PODER</small><b class="pw-n">0</b>`;
+  lvTxt.insertAdjacentElement("beforebegin", pwHost);
+  const pwNum = pwHost.querySelector<HTMLElement>(".pw-n")!;
+  let pwLast: number | null = null;
   const xpFill = q(".hd-xp i");
   const bar = q(".hd-bar");
   const pvpBtn = q<HTMLButtonElement>(".hd-pvp");
@@ -678,6 +690,10 @@ export function mountHud(opts: HudOptions): Hud {
       pvpBtn.setAttribute("aria-pressed", String(on));
       chanBox.classList.toggle("on", chan !== 0);
       chanBox.classList.toggle("out", chan === 2);
+    },
+    setPoder(n) {
+      animatePoder(pwNum, pwLast, n, pwHost);
+      pwLast = n;
     },
     setPotion(count) {
       if (count < potCount && potCount > 0) potUntil = performance.now() + POTION_COOLDOWN_S * 1000; // gastou uma: recarga (o servidor também aplica)

@@ -78,7 +78,7 @@ run_case() {
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
 for file in test/acoes.unit.ts test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
-            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts; do
+            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"
   if npx tsx "$file"; then echo "OK  $file"; else echo "FALHA  $file"; FAILS+=("$file"); fi
@@ -97,7 +97,7 @@ run_case 2992 "ECON_TEST=1 LOOT_TEST=1 MARKET_TTL_S=4" test/market.mjs ""
 run_case 2992 "ECON_TEST=1" test/cidade.mjs ""
 run_case 2992 "ECON_TEST=1 TEST_START_ZONE=1 API_RATE_MULT=100" test/autopocao.mjs ""
 # Classes e inventário com loot garantido.
-for file in test/inventory.mjs test/classes.mjs test/mago.mjs test/guerreiro.mjs test/curandeiro.mjs test/rebalance.mjs; do
+for file in test/inventory.mjs test/classes.mjs test/mago.mjs test/guerreiro.mjs test/curandeiro.mjs test/rebalance.mjs test/poder.mjs; do
   run_case 2993 "LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" "$file" ""
 done
 # Itens no chão e chefe de 1 de vida.
