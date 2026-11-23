@@ -53,8 +53,10 @@ console.log("\n== Compra ==");
   const i = inv(1000);
   const id = shopStock("warrior").find((x) => x === "espada_1m_common")!;
   const p = buyPrice(id);
-  check("o comerciante vende poção e equipamento só comum e incomum, da classe do jogador", shopStock("mage")[0] === "pocao_de_vida" && shopStock("mage").slice(1).every((x) => ITEMS[x].cls === "mage" && rarityIndex(ITEMS[x].rarity) <= 1) && shopStock("mage").length > 10);
-  check("nenhum item raro (azul) ou acima aparece na loja de nenhuma classe", (["warrior", "archer", "cleric", "mage"] as const).every((c) => shopStock(c).every((x) => x === "pocao_de_vida" || rarityIndex(ITEMS[x].rarity) <= 1)));
+  // o dev mudou a regra: o comerciante NÃO vende mais verde (incomum); só comum e poção. Verdes saem de drop, quest e craft.
+  check("o comerciante vende poção e equipamento só COMUM, da classe do jogador", shopStock("mage")[0] === "pocao_de_vida" && shopStock("mage").slice(1).every((x) => ITEMS[x].cls === "mage" && rarityIndex(ITEMS[x].rarity) === 0) && shopStock("mage").length > 3);
+  check("nenhum item verde (incomum) ou acima aparece na loja de nenhuma classe", (["warrior", "archer", "cleric", "mage"] as const).every((c) => shopStock(c).every((x) => x === "pocao_de_vida" || rarityIndex(ITEMS[x].rarity) === 0)));
+  check("o verde do guerreiro (espada de uma mão incomum) não está à venda nem se compra", !shopStock("warrior").includes("espada_1m_uncommon") && !buyItem(i, "warrior", "espada_1m_uncommon", 1).ok);
   const r = buyItem(i, "warrior", id, 1);
   check("comprar cobra o preço e põe o item na mochila", r.ok && i.iron === 1000 - p && count(i, id) === 1, `iron ${i.iron}`);
   const before = JSON.stringify(snapshot(i));
@@ -107,16 +109,18 @@ console.log("\n== Fusão (ferreira) ==");
 {
   const mk = (ids: string[], iron = 100000) => { const i = inv(iron); ids.forEach((id) => addItem(i, id, 1)); return i; };
   const three = (id: string) => [id, id, id];
-  // zona 3 tem teto mítico; zona 1 só até incomum
-  check("teto de cada zona vem das tabelas de drop e do baú (1: incomum, 2: épico, 3: mítico)", zoneRarityCap(1) === "uncommon" && zoneRarityCap(2) === "epic" && zoneRarityCap(3) === "mythic");
+  // o dev mudou a regra: nenhuma zona atual tem épico; o teto de cada zona (e da forja) é RARO. Épico+ só por craft (ou chefe de nível 45, futuro).
+  check("teto de cada zona vem das tabelas de drop e do baú (1, 2 e 3: raro)", zoneRarityCap(1) === "rare" && zoneRarityCap(2) === "rare" && zoneRarityCap(3) === "rare");
   let i = mk(three("warrior_armor_common"));
   let r = mergeItems(i, [0, 1, 2], 1, seq(0.0, 0.0));
   check("3 comuns iguais viram 1 incomum (chance 100%) e cobram a taxa", r.ok && r.success && r.id === "warrior_armor_uncommon" && count(i, "warrior_armor_uncommon") === 1 && total(i) === 1 && i.iron < 100000, JSON.stringify(r));
   i = mk(three("warrior_armor_uncommon"));
-  const noCap = mergeItems(i, [0, 1, 2], 1, seq(0));
-  check("na zona 1 não se funde para raro (teto da zona): nada é consumido", !noCap.ok && total(i) === 3 && i.iron === 100000);
-  r = mergeItems(i, [0, 1, 2], 2, seq(0.1, 0.0));
-  check("na zona 2 o mesmo conjunto vira raro", r.ok && r.success && r.id === "warrior_armor_rare" && total(i) === 1);
+  // o dev mudou a regra: o teto de TODA zona atual é raro (épico é só craft ou chefe 45); então verde -> raro funciona na zona 1 também
+  r = mergeItems(i, [0, 1, 2], 1, seq(0.1, 0.0));
+  check("na zona 1 (teto raro) o verde funde para raro", r.ok && r.success && r.id === "warrior_armor_rare" && total(i) === 1);
+  i = mk(three("warrior_armor_rare"));
+  const noCap = mergeItems(i, [0, 1, 2], 2, seq(0));
+  check("raro -> épico é recusado na forja (nada é consumido)", !noCap.ok && total(i) === 3 && i.iron === 100000);
   i = mk(three("warrior_armor_uncommon"));
   r = mergeItems(i, [0, 1, 2], 2, seq(0.99, 0.0));
   check("falha: perde a taxa e 1 dos 3 itens (os outros 2 voltam)", r.ok && !r.success && count(i, "warrior_armor_uncommon") === 2 && total(i) === 2 && i.iron < 100000, JSON.stringify(r));
@@ -134,12 +138,14 @@ console.log("\n== Fusão (ferreira) ==");
   check("poções não se fundem", !mergeItems(i, [0, 1, 2], 3).ok);
   i = mk(three("warrior_armor_mythic"));
   check("o mítico é o fim da linha", !mergeItems(i, [0, 1, 2], 3).ok);
-  i = mk(["montante_rare", "espada_larga_rare", "lamina_runica_rare"]);
-  const ck = checkMerge(["montante_rare", "espada_larga_rare", "lamina_runica_rare"], 2);
+  // o dev mudou a regra: o teto da forja agora é RARO, então a fusão de verdes (incomum) é que sobe para raro
+  i = mk(["montante_uncommon", "espada_larga_uncommon", "lamina_runica_uncommon"]);
+  const ck = checkMerge(["montante_uncommon", "espada_larga_uncommon", "lamina_runica_uncommon"], 2);
   check("armas de famílias diferentes do mesmo tipo fundem e o resultado é de uma das famílias", ck.ok && ck.families.length === 3);
+  check("fundir raro -> épico é recusado (a forja para no raro: épico só por craft ou chefe de nível 45)", !checkMerge(["montante_rare", "espada_larga_rare", "lamina_runica_rare"], 2).ok);
   const ids = new Set<string>();
-  for (let k = 0; k < 30; k++) { const j = mk(["montante_rare", "espada_larga_rare", "lamina_runica_rare"]); const rr = mergeItems(j, [0, 1, 2], 2, seq(0, Math.random())); if (rr.ok && rr.success) ids.add(rr.id); }
-  check("o resultado sai na raridade superior e na classe certa", [...ids].every((x) => ITEMS[x].rarity === "epic" && ITEMS[x].cls === "warrior" && ITEMS[x].kind === "weapon") && ids.size >= 1);
+  for (let k = 0; k < 30; k++) { const j = mk(["montante_uncommon", "espada_larga_uncommon", "lamina_runica_uncommon"]); const rr = mergeItems(j, [0, 1, 2], 2, seq(0, Math.random())); if (rr.ok && rr.success) ids.add(rr.id); }
+  check("o resultado sai na raridade superior (raro) e na classe certa", [...ids].every((x) => ITEMS[x].rarity === "rare" && ITEMS[x].cls === "warrior" && ITEMS[x].kind === "weapon") && ids.size >= 1);
   check("a chance de sucesso cai com a raridade", [0, 1, 2, 3, 4].map((k) => mergeChance(RARITIES[k])).every((c, k, a) => k === 0 || c < a[k - 1]) && mergeChance("mythic") === 0);
   check("nunca sobram nem faltam itens: total conservado ou reduzido em 1", (() => { let ok = true; for (let k = 0; k < 40; k++) { const j = mk(three("warrior_armor_uncommon")); mergeItems(j, [0, 1, 2], 2); ok &&= total(j) === 1 || total(j) === 2; } return ok; })());
   check("MERGE_COUNT é 3", MERGE_COUNT === 3);

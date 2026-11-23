@@ -152,7 +152,8 @@ async function kill(P, e, maxMs = 40000) {
   const ok = await kill(S, e1);
   await sleep(500);
   check("o solo abate o esqueleto sozinho", ok);
-  check("o solo ganha o XP cheio (20) do que ele mesmo matou", S.ev.xp.at(-1) === 20, `xp ${S.ev.xp}`);
+  // o dev mudou a regra (XP): esqueleto nível 1 dá enemyXp(1) = 1 XP (XP_MOB_MULT 0.03 x 20 = 0.6, arredondado); antes 20.
+check("o solo ganha o XP do que ele mesmo matou (enemyXp do nível 1 = 1)", S.ev.xp.at(-1) === 1, `xp ${S.ev.xp}`);
   check("o passante sem grupo e sem dano NÃO ganha XP", B.ev.xp.length === 0, `xp ${B.ev.xp}`);
   const gs = items(S);
   check("os itens são do solo, com dono exclusivo (sem grupo)", gs.length >= 1 && gs.every((g) => g.owner === S.id && g.party === ""), JSON.stringify(gs.map((g) => g.owner === S.id)));
@@ -178,7 +179,8 @@ async function kill(P, e, maxMs = 40000) {
   const ok = await kill(G1, e3);
   await sleep(600);
   check("o grupo abate o esqueleto", ok);
-  check("o XP é DIVIDIDO: 20 x 1,25 = 25 para o grupo, 13 para cada (mesmo para o Clérigo que não atacou)", G1.ev.xp.at(-1) === 13 && G2.ev.xp.at(-1) === 13, `G1 ${G1.ev.xp} G2 ${G2.ev.xp}`);
+  // com 1 de XP base, a divisão arredonda para 1 cada (a fórmula de party está em partyXpMult; a divisão exata é coberta pelo unit)
+check("o XP é dividido pelo grupo (1 x 1,25 / 2 arredonda para 1 cada; também o Clérigo que não atacou)", G1.ev.xp.at(-1) === 1 && G2.ev.xp.at(-1) === 1, `G1 ${G1.ev.xp} G2 ${G2.ev.xp}`);
   check("o passante de fora continua sem XP", B.ev.xp.length === 0, `xp ${B.ev.xp}`);
   const gs = items(G1);
   check("os itens saem por rodízio: parte para cada membro, dono exclusivo, nenhum para o passante", gs.length >= 2 && gs.every((g) => (g.owner === G1.id || g.owner === G2.id) && g.party === "") && gs.some((g) => g.owner === G1.id) && gs.some((g) => g.owner === G2.id), JSON.stringify(gs.map((g) => g.owner === G1.id ? "G1" : g.owner === G2.id ? "G2" : "?")));

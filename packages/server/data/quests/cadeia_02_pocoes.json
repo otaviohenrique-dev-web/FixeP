@@ -6,6 +6,6 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_01_ferreira"],
   "objetivos": [{ "tipo": "coletar", "itemId": "pocao_de_vida", "qtd": 4 }],
-  "recompensa": { "xp": 19, "ferro": 20, "itens": [] },
+  "recompensa": { "xp": 152, "ferro": 20, "itens": [{ "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Toque em Garrick, abra a loja e compre Poções de Vida.", "teclado": "Clique em Garrick, abra a loja e compre Poções de Vida." }
 }

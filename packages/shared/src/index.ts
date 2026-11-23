@@ -526,11 +526,11 @@ export const ENEMY_KINDS = {
 // pulso sombrio: a cada pulseEveryS atinge TODOS a até pulseRadius (ignora esquiva) com pulsePct da vida máxima de cada um: sem curandeiro não se aguenta
 const bossBase: Pick<BossDef, "slamWindupS" | "enrageAt" | "enrageSpeed" | "pulseEveryS" | "pulsePct" | "pulseRadius"> = { slamWindupS: 1.3, enrageAt: 0.3, enrageSpeed: 1.3, pulseEveryS: 6, pulsePct: 0.4, pulseRadius: 24 };
 ENEMY_KINDS.bone_king = { ...base, name: "Rei Ossudo", hpMul: 18, dmgMul: 1.2, speed: 2.2, aggro: 9, leash: 18, engage: 2.0, strikeOffset: 1.3, strikeRadius: 1.8, radius: 0.7, respawnS: 300, color: 0xe8e0c8,
-  scale: 1.7, boss: { xpMul: 8, slamEveryS: 9, slamRadius: 3.4, slamMul: 1.4, ...bossBase } };
+  scale: 1.7, boss: { xpMul: 2, slamEveryS: 9, slamRadius: 3.4, slamMul: 1.4, ...bossBase } }; // xpMul: o dev mudou a regra (antes 8; ver XP_MOB_MULT)
 ENEMY_KINDS.frost_alpha = { ...base, name: "Lobo Alfa", hpMul: 15, dmgMul: 1.2, speed: 3.6, aggro: 10, leash: 18, engage: 2.0, windupS: 0.6, strikeOffset: 1.2, strikeRadius: 1.6, recoverS: 0.9, radius: 0.7, respawnS: 420, color: 0xbfd8f2,
-  scale: 1.7, boss: { xpMul: 8, slamEveryS: 8, slamRadius: 3.2, slamMul: 1.4, ...bossBase } };
+  scale: 1.7, boss: { xpMul: 2, slamEveryS: 8, slamRadius: 3.2, slamMul: 1.4, ...bossBase } }; // xpMul: o dev mudou a regra (antes 8)
 ENEMY_KINDS.crypt_lord = { ...base, name: "Soberano das Catacumbas", hpMul: 18, dmgMul: 1.3, speed: 2.3, aggro: 11, leash: 20, engage: 2.6, windupS: 0.9, strikeOffset: 1.6, strikeRadius: 2.0, recoverS: 1.1, radius: 0.8, respawnS: 600, color: 0xc9a8ff,
-  scale: 1.8, boss: { xpMul: 10, slamEveryS: 8, slamRadius: 4, slamMul: 1.5, ...bossBase } };
+  scale: 1.8, boss: { xpMul: 2, slamEveryS: 8, slamRadius: 4, slamMul: 1.5, ...bossBase } }; // xpMul: o dev mudou a regra (antes 10)
 export const enemyKind = (k: string): EnemyKindDef => ENEMY_KINDS[k as EnemyKind] ?? ENEMY_KINDS.skeleton;
 
 /** Spawns da zona 1 (compatibilidade): os de cada zona ficam em ZONES. */
@@ -539,7 +539,12 @@ export const ENEMY_SPAWNS = ZONES[1].enemies;
 /** Vida, dano e XP do inimigo por nível (o nível 1 é o Esqueleto base). Vida cresce 25% por nível (antes 40%). */
 export const enemyHp = (level: number, kind: string = "skeleton") => Math.round(SKELETON.maxHp * enemyKind(kind).hpMul * (1 + ENEMY_HP_PER_LEVEL * (level - 1)));
 export const enemyDmg = (level: number, kind: string = "skeleton") => Math.round(SKELETON.dmg * enemyKind(kind).dmgMul * (1 + 0.3 * (level - 1)));
-export const enemyXp = (level: number) => Math.round(XP_PER_KILL * Math.pow(1.45, level - 1));
+/** o dev mudou a regra (design definitivo): XP de mob/chefe caiu forte; quem sobe de nível é a QUEST.
+ *  Antes: XP_PER_KILL 20 sem multiplicador (nível 21 dava ~33.700 XP por abate; subir para 50 num dia era possível).
+ *  Agora: XP_MOB_MULT = 0.03 (a base 20 vira 0,6). Nível 1 dá 1 XP; nível 6 dá 4; nível 12 dá 36; nível 21 dá 1.014.
+ *  O chefe multiplica por `boss.xpMul` (ver ENEMY_KINDS: agora 2). */
+export const XP_MOB_MULT = 0.03;
+export const enemyXp = (level: number) => Math.round(XP_PER_KILL * XP_MOB_MULT * Math.pow(1.45, level - 1));
 
 // ------------------------------------------------------------ progressão
 export const LEVEL_CAP = 50;

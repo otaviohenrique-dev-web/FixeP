@@ -83,6 +83,18 @@ M = multiplicador por raridade: comum 1, incomum 2, raro 4, épico 7, lendário 
 | Atributos de classe retirados (roubo de vida e queimadura de variação) | ✅ concluído (2026-11-23) | Cura por golpe do Guerreiro (`hitHeal` no golpe básico) saiu; variações `m_bol_chama` e `m_chu_persistente` deixaram de dar queimadura e viraram redução de custo; `w_esc_espinhos` deixou de devolver dano e passou a dar provocação. Mantidos: queimadura da Bola de Fogo, Chuva de Fogo e Meteoro; enraizamento e atordoamento do Mago; cura em área do Clérigo. |
 | Afixos em todo equipamento + fim de queimadura/reflexo nas classes (feedback do dono após o #137) | 🟢 concluído (2026-11-23) | **Classes:** queimadura saiu do Mago (Bola de Fogo, Chuva de Fogo, Meteoro): viraram lentidão e enraizamento, com mais dano. Reflexo saiu do Escudo do Guerreiro (agora **Escudo de Aço**, só provoca e reduz dano; o reflexo é o afixo Espinhos). Cura por golpe da Investida saiu (+4 de dano no lugar). Cura do Clérigo fica. **Afixos:** backfill determinístico (semente = personagem + espaço + id; `afixosDaSemente`) para equipamento antigo sem afixo, ao carregar a mochila e o equipamento (`repo.ts`), gravado no próximo salvamento. Loja, recompensa de quest e fusão do ferreiro sorteiam afixos (`addItemNovo`); a fusão preserva os afixos dos itens que sobram. Arma e mão secundária de raridade rara ou acima sorteiam SÓ afixos ofensivos. Afixos sem efeito (PD-15) não saem mais. Testes: `afixos-itens.unit.ts` (novo), `inventory.unit.ts` (backfill), `rebalance.mjs` (lentidão), `balance`/`acoes`/`variacoes` (asserts com justificativa). Pendências: PD-16 (mercado e baú) continua. |
 
+## Economia de XP, drops e comerciante (design definitivo do dono, 2026-11-23)
+
+| Item | Situação | Observação |
+|---|---|---|
+| XP de mob e chefe caiu forte; quest virou a maior fonte de XP | 🟢 concluído (2026-11-23) | `XP_MOB_MULT = 0.03` em `packages/shared/src/index.ts` (`enemyXp`); chefes com `xpMul` 2 (antes 8, 8 e 10). Quest: XP x8 nos 22 JSON. Ver tabela no PR. |
+| Épico, lendário e mítico fora de todas as zonas atuais (mobs e baús) | 🟢 concluído (2026-11-23) | Só saem de craft (outra frente). Ficam reservados a chefe de nível `EPIC_PLUS_MIN_BOSS_LEVEL = 45` (`rarityLiberada` em `zones.ts`, consultado por `pickRarity` em `loot.ts`). Hoje nenhum chefe chega lá. |
+| Verde domina, raro ocasional; baús de chefe com piso raro | 🟢 concluído (2026-11-23) | Pesos por zona em `zones.ts`. Teto de toda zona e da forja: raro. |
+| Materiais de craft `mat_ferro_bruto`, `mat_couro_curtido`, `mat_essencia_arcana` | 🟡 concluído com pendência (2026-11-23) | Itens (kind `material`, empilham 99, não equipam, vendem por 6) e tabela de drop por zona (70% de chance por abate). Ícones: sem arte, usa o desenho provisório. Craft não é desta frente. |
+| Recompensas de quest com material e verde/raro (nunca épico+) | 🟢 concluído (2026-11-23) | Validado em `packages/server/src/game/quests.ts`. |
+| Comerciante só vende comum e poção | 🟢 concluído (2026-11-23) | `SHOP_MAX_RARITY = "common"` em `economy.ts`. |
+| Suítes de integração (servidor de teste) | 🔴 não verificadas aqui | No Windows deste ambiente o servidor de teste morre com `out of memory` (PGlite/V8) antes de rodar as suítes; o CI (Linux) é quem roda `run-all.sh`. |
+
 ## Pendências abertas
 
 | ID | Pendência | Criticidade | Detalhe e próximo passo |
@@ -109,5 +121,6 @@ M = multiplicador por raridade: comum 1, incomum 2, raro 4, épico 7, lendário 
 | PD-17 | Talentos sem verificação visual em 1280x720 e 700x340 | **Média** | O painel foi conferido no navegador embutido em 800x600 (layout e clique no +) e 375x812 (celular vertical, uma coluna, rolagem). Falta 1280x720 e 700x340 (celular deitado). Próximo passo: abrir o painel nessas três medidas e ajustar a grade (2 colunas acima de 620 px). |
 | PD-18 | Painel de talentos redesenha a cada 700 ms | **Baixa** | Igual ao painel de variações: o clique pode cair durante a troca de DOM em aparelhos lentos. Próximo passo: redesenhar só quando o estado muda (comparar o JSON recebido). |
 | PD-17 | Procs de afixo sem teste de ponta a ponta | **Média** | Roubo de vida, queimadura ao acertar, execução, espinhos e esquiva têm código no `ZoneRoom`, mas só o drop, a persistência e o status são cobertos por `test/afixos.mjs`. Próximo passo: teste que acerta um inimigo com o afixo e confere a cura e a queimadura. |
+| PD-18 | Materiais de craft sem craft ainda | **Média** | `mat_*` já caem de mobs e quests, mas só servem de ingrediente quando o craft (outra sessão) entrar. Próximo passo: ligar as receitas ao craft e fechar os 3 ícones de `assets/items/item_mat_*.png`. |
 
 Regra: pendência **Alta** não passa de marco; **Média** deve ser resolvida até o fim da etapa seguinte; **Baixa** entra quando houver folga.

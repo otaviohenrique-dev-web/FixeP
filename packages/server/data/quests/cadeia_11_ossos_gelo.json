@@ -6,5 +6,5 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_10_lobos"],
   "objetivos": [{ "tipo": "abater", "kind": "skeleton", "qtd": 4, "zona": 2 }],
-  "recompensa": { "xp": 46, "ferro": 35, "itens": [] }
+  "recompensa": { "xp": 368, "ferro": 35, "itens": [{ "id": "mat_couro_curtido", "qtd": 3 }, { "id": "{classe}_cape_uncommon", "qtd": 1 }] }
 }

@@ -107,7 +107,8 @@ if (room) {
     await sleep(700);
   }
   await sleep(300);
-  check("matar um esqueleto dá XP no servidor", e1.st === "dead" && me().xp + (me().level - 1) * 70 >= 20, `nível ${me()?.level} xp ${me()?.xp}`);
+  // o dev mudou a regra (XP): esqueleto nível 1 dá enemyXp(1) = 1 XP (XP_MOB_MULT 0.03 x 20 = 0.6, arredondado); antes 20.
+check("matar um esqueleto dá XP no servidor (≥ 1: enemyXp do nível 1)", e1.st === "dead" && me().xp + (me().level - 1) * 70 >= 1, `nível ${me()?.level} xp ${me()?.xp}`);
   const xpNow = me().xp, lvNow = me().level;
   room.leave();
   await sleep(800);

@@ -6,5 +6,5 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_13_habilidade_3"],
   "objetivos": [{ "tipo": "abater", "kind": "wolf", "qtd": 5, "zona": 2 }],
-  "recompensa": { "xp": 57, "ferro": 40, "itens": [{ "id": "{classe}_boots_common", "qtd": 1 }] }
+  "recompensa": { "xp": 456, "ferro": 40, "itens": [{ "id": "{classe}_boots_uncommon", "qtd": 1 }, { "id": "mat_couro_curtido", "qtd": 3 }] }
 }

@@ -146,7 +146,7 @@ export function setEquipAf(inv: Inventory, slot: EquipSlot, af: string[] | undef
   inv.equipAf = next;
 }
 
-const KIND_ORDER = ["weapon", "offhand", "helmet", "armor", "boots", "cape", "potion"];
+const KIND_ORDER = ["weapon", "offhand", "helmet", "armor", "boots", "cape", "potion", "material"];
 /** Organiza a mochila: junta pilhas, ordena por tipo, raridade (maior primeiro) e nome, e encosta tudo no começo. */
 export function sortInventory(inv: Inventory): void {
   const all: InvStack[] = [];

@@ -107,10 +107,11 @@ A.act("attack", boss.x, boss.y);
 for (let i = 0; i < 12 && boss.st !== "dead"; i++) { await sleep(400); if (boss.st !== "dead") A.act("attack", boss.x, boss.y); }
 check("o chefe cai", await until(() => boss.st === "dead", 8000), boss.st);
 check("o anúncio da derrota chega a todos", await until(() => B.ev.notice.some((t) => t.includes("Rei Ossudo foi derrotado")), 3000));
-check("o evento do baú chega a todos (animação) com a raridade", await until(() => A.ev.chest.length === 1 && B.ev.chest.length === 1, 3000) && A.ev.chest[0].rarity === "uncommon" && A.ev.chest[0].boss === "Rei Ossudo", JSON.stringify(A.ev.chest[0]));
+check("o evento do baú chega a todos (animação) com a raridade", await until(() => A.ev.chest.length === 1 && B.ev.chest.length === 1, 3000) && A.ev.chest[0].rarity === "rare" && A.ev.chest[0].boss === "Rei Ossudo", JSON.stringify(A.ev.chest[0]));
 const bs = items(A);
-check("cada elegível (arqueiro e o clérigo do grupo) tem o SEU baú: 2 itens para cada, reservados ao dono", bs.length === 4 && bs.filter((g) => g.owner === A.id).length === 2 && bs.filter((g) => g.owner === C.id).length === 2 && bs.some((g) => g.itemId === "archer_helmet_uncommon") && bs.some((g) => g.itemId === "cleric_helmet_uncommon"), bs.map((g) => g.itemId).join(","));
-check("o XP do chefe é muito maior que o de um esqueleto", (A.ev.xp.at(-1) ?? 0) >= 500 && A.me().level > lv0, `xp ${A.ev.xp.at(-1)} nível ${lv0}→${A.me().level}`);
+check("cada elegível (arqueiro e o clérigo do grupo) tem o SEU baú: 2 itens para cada, reservados ao dono", bs.length === 4 && bs.filter((g) => g.owner === A.id).length === 2 && bs.filter((g) => g.owner === C.id).length === 2 && bs.some((g) => g.itemId === "archer_helmet_rare") && bs.some((g) => g.itemId === "cleric_helmet_rare"), bs.map((g) => g.itemId).join(","));
+// o dev mudou a regra (XP de mob/chefe caiu forte; quem sobe de nível é a quest): o chefe nível 6 dá 8 XP (antes 500+ e subia de nível)
+check("o XP do chefe é pequeno (quem sobe de nível é a quest): nível 6 x2 = 8 XP", (A.ev.xp.at(-1) ?? 0) >= 1 && (A.ev.xp.at(-1) ?? 0) <= 20 && A.me().level >= lv0, `xp ${A.ev.xp.at(-1)} nível ${lv0}→${A.me().level}`);
 check("quem não lutou não recebe baú próprio", items(B).every((g) => g.owner !== B.id));
 check("ninguém foi desconectado", A.ev.left === null && B.ev.left === null && C.ev.left === null);
 

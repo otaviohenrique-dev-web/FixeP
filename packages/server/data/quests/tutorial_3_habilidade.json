@@ -8,6 +8,6 @@
   "objetivos": [
     { "tipo": "usar", "acao": "skill1", "qtd": 1 }
   ],
-  "recompensa": { "xp": 40, "ferro": 20, "itens": [{ "id": "pocao_de_vida", "qtd": 1 }] },
+  "recompensa": { "xp": 320, "ferro": 20, "itens": [{ "id": "pocao_de_vida", "qtd": 1 }, { "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Toque no botão de habilidade 1 (o primeiro da barra).", "teclado": "Aperte Q para usar a habilidade 1." }
 }
