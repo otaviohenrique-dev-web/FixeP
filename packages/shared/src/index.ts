@@ -59,7 +59,8 @@ export const Msg = {
   MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
   Ready: "ready", // {}: o cliente terminou de carregar a zona e o jogador já pode agir: só então começa a contar a bolha de chegada
-  QMode: "q_mode", // { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
+  AutoPot: "auto_pot", // { at }: limiar da auto-poção em % de vida (0 = desligada); o servidor limita a 0..90, grava e sincroniza
+  QMode: "q_mode",// { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
   QuestAccept: "quest_aceitar", // { id }: aceita uma quest (o servidor valida nível, pré-requisitos e se já aceitou)
   QuestDeliver: "quest_entregar", // { id }: entrega uma quest pronta (perto do NPC dela, se houver); a recompensa sai na mesma transação
   QuestTalk: "quest_falar", // { npc }: conversa com um NPC da zona (conta para objetivos "falar"; o servidor confere a distância)

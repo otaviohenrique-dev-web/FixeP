@@ -1,4 +1,4 @@
-import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, AUTO_POT_MAX, AUTO_POT_STEP, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 import { skillImage, skillCategory } from "./skill-art";
 
@@ -22,8 +22,8 @@ export interface HudOptions {
   onNextTarget?(): void;
   /** botão de poção (no celular, onde não há tecla) */
   onPotion?(): void;
-  /** o jogador ligou ou desligou a auto-poção (o botão "Auto" da barra) */
-  onAutoPotion?(on: boolean): void;
+  /** o jogador escolheu o limiar da auto-poção (0 = desligada) ao soltar o controle "Auto" */
+  onAutoPotion?(at: number): void;
   /** botão PvP: `true` pede para entrar, `false` para sair (o servidor canaliza e decide) */
   onPvp?(on: boolean): void;
   /** Clérigo: pede a troca do Q (0 = cura em área, 1 = cura focada); o servidor só aceita fora de combate */
@@ -51,8 +51,8 @@ export interface Hud {
   setPotion(count: number): void;
   /** a poção não está em recarga? */
   potionReady(): boolean;
-  /** mostra o estado salvo da auto-poção (botão "Auto") */
-  setAutoPotion(on: boolean): void;
+  /** mostra o limiar da auto-poção vindo do servidor (botão "Auto"; 0 = desligada) */
+  setAutoPotion(at: number): void;
   /** aviso curto em destaque no alto da tela (ex.: "Canalização interrompida") */
   alert(text: string): void;
   /** Q ativo do Clérigo (vindo do servidor): troca nome, custo, recarga e ícone do botão */
@@ -67,7 +67,8 @@ const ICON: Record<string, string> = {
   flame: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M8 1h1v2h1v2h1v1h1v3h1v3h-1v2h-2v1H6v-1H4v-2H3V9h1V7h1V6h1V3h1z"/><path fill="#fff" opacity=".55" d="M8 8h1v1h1v3H8v1H7v-2h1z"/></svg>`,
   eye: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M5 5h6v1h2v1h2v2h-2v1h-2v1H5v-1H3V9H1V7h2V6h2z"/><path fill="#0b1018" d="M7 6h2v4H7z"/><path fill="#fff" opacity=".6" d="M7 6h1v1H7z"/></svg>`,
   swords: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M2 2h3l1 1 1 1 1 1 1 1-1 1-1-1-1-1-1-1-1-1H2zM14 2h-3l-1 1-1 1-1 1-1 1 1 1 1-1 1-1 1-1 1-1h3zM3 12l2-2 1 1-2 2zm10 0l-2-2-1 1 2 2zM7 8l1 1 1-1-1-1z"/><path fill="currentColor" d="M2 13h2v1H2zm10 0h2v1h-2z"/></svg>`,
-  potion: `<svg viewBox="0 0 16 16" width="18" height="18" shape-rendering="crispEdges"><path fill="#d8e4f0" d="M6 1h4v1H9v3h1v1h1v1h1v5h-1v2H5v-2H4V7h1V6h1V5h1V2H6z"/><path fill="#d94a4a" d="M5 9h6v4H5z"/><path fill="#ff8f8f" d="M6 10h1v2H6z"/><path fill="#fff" opacity=".5" d="M6 6h1v2H6z"/></svg>`,
+  // frasco de vidro em pixel art (grade 16x16): rolha, gargalo, vidro escuro e líquido vermelho com brilho
+  potion: `<svg viewBox="0 0 16 16" width="20" height="20" shape-rendering="crispEdges" aria-hidden="true"><rect x="6" y="0" width="4" height="2" fill="#9a6a34"/><rect x="6" y="1" width="4" height="1" fill="#5e3a1a"/><rect x="5" y="2" width="6" height="1" fill="#cfe3ef"/><rect x="5" y="3" width="1" height="2" fill="#cfe3ef"/><rect x="10" y="3" width="1" height="2" fill="#cfe3ef"/><rect x="6" y="3" width="4" height="2" fill="#2b3d52"/><rect x="4" y="5" width="1" height="1" fill="#cfe3ef"/><rect x="11" y="5" width="1" height="1" fill="#cfe3ef"/><rect x="5" y="5" width="6" height="1" fill="#2b3d52"/><rect x="3" y="6" width="1" height="7" fill="#cfe3ef"/><rect x="12" y="6" width="1" height="7" fill="#cfe3ef"/><rect x="4" y="6" width="8" height="2" fill="#2b3d52"/><rect x="5" y="6" width="1" height="1" fill="#9fb8cc"/><rect x="4" y="8" width="8" height="5" fill="#ff3b3b"/><rect x="4" y="8" width="8" height="1" fill="#ff8a8a"/><rect x="5" y="10" width="1" height="2" fill="#ffc2c2"/><rect x="4" y="13" width="8" height="1" fill="#b3161b"/><rect x="4" y="14" width="8" height="1" fill="#cfe3ef"/></svg>`,
   drop: `<svg viewBox="0 0 16 16" width="14" height="14" shape-rendering="crispEdges"><path fill="currentColor" d="M7 1h2v2h1v2h1v2h1v4h-1v2h-1v1H6v-1H5v-2H4V7h1V5h1V3h1z"/><path fill="#fff" opacity=".55" d="M6 8h1v3H6z"/></svg>`,
   // ícones das habilidades
   charge: `<svg viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges"><path fill="currentColor" d="M1 3h3l4 5-4 5H1l4-5zM8 3h3l4 5-4 5H8l4-5z"/></svg>`,
@@ -195,10 +196,19 @@ const CSS = `
 .hd-pot{margin-left:14px;border-color:#5f9a6a}
 .hd-auto{margin-left:6px;width:44px;font-size:10px;color:#9fb3c8;border-color:#4a5a6a}
 .hd-auto .hd-sn{position:static;font-size:10px;letter-spacing:.04em}
+.hd-aval{display:none;font:700 9px/1 "Cinzel",Georgia,serif;color:#7dff9a;pointer-events:none}
+.hd-auto.on .hd-aval{display:block}
 .hd-auto.on{color:#7dff9a;border-color:#7dff9a;box-shadow:0 0 8px rgba(125,255,154,.55)}
-.hd-pot svg{position:absolute;left:50%;top:7px;margin-left:-9px;pointer-events:none}
+.hd-apop{position:absolute;right:0;bottom:calc(100% + 12px);width:210px;padding:10px 12px;box-sizing:border-box;display:none;pointer-events:auto;z-index:5;border:1px solid #c9a34a;border-radius:8px;background:rgba(10,16,26,.96);box-shadow:0 6px 18px rgba(0,0,0,.6);font:700 11px/1.2 "Cinzel",Georgia,serif;color:#f1e3c2}
+.hd-apop.open{display:block}
+.hd-apop-t{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.hd-apop-v{color:#7dff9a;font-weight:700;white-space:nowrap}
+.hd-apop-r{display:block;width:100%;margin:0;accent-color:#7dff9a}
+.hd-apop-s{display:flex;justify-content:space-between;margin-top:4px;font:600 9px/1 system-ui,sans-serif;color:#9fb3c8}
+.hd-pot svg{position:absolute;left:50%;top:9px;margin-left:-10px;pointer-events:none}
+.hd-pot .hd-key{opacity:.7;left:3px;top:3px;background:rgba(0,0,0,.55)}
 .hd-pot .hd-sn{position:absolute;left:0;right:0;bottom:3px;font-size:7px}
-.hd-qty{position:absolute;right:4px;top:2px;font:900 12px/1 "Cinzel",Georgia,serif;color:#b8f0c4;text-shadow:0 0 3px #000,0 1px 3px #000;pointer-events:none}
+.hd-qty{position:absolute;right:3px;top:3px;min-width:14px;padding:2px 3px;box-sizing:border-box;border-radius:4px;background:rgba(0,0,0,.72);text-align:center;font:900 11px/1 "Cinzel",Georgia,serif;color:#c8ffd2;pointer-events:none}
 .hd-pot.empty{filter:saturate(.3) brightness(.65)}
 .hd-pot.empty .hd-qty{color:#ff7b6b}
 .hd.touch .hd-bar{left:auto;right:max(10px,env(safe-area-inset-right));bottom:calc(max(10px,env(safe-area-inset-bottom)) + 14px);transform:none;display:block;width:224px;height:232px;padding:0;background:none;border:0;box-shadow:none}
@@ -511,20 +521,34 @@ export function mountHud(opts: HudOptions): Hud {
     return tipHtml({ name: "Poção de Vida", key: "F", type: "Cura", stats: [`Cura: ${heal} de vida`, `Estoque: ${potCount}`, `Recarga: ${POTION_COOLDOWN_S} s`], desc: "Bebe uma poção do inventário e recupera vida na hora.", tip: "Compartilha a recarga com todas as poções: não desperdice com a vida cheia." });
   });
   bar.append(pb);
-  // auto-poção: com ela ligada, a poção é bebida sozinha quando a vida cai abaixo do limite (o botão mostra o estado)
-  let autoOn = false;
+  // auto-poção: o botão "Auto" abre um controle (0 = desligada, passo 5, até 90% de vida). O servidor decide, grava e bebe.
+  let autoAt = 0;
   const ab = document.createElement("button");
   ab.type = "button";
   ab.className = "hd-btn hd-auto";
-  ab.innerHTML = `<span class="hd-sn">Auto</span>`;
+  ab.innerHTML = `<span class="hd-sn">Auto</span><span class="hd-aval"></span>`;
+  const apop = document.createElement("div");
+  apop.className = "hd-apop";
+  apop.innerHTML = `<div class="hd-apop-t"><span>Auto-poção</span><b class="hd-apop-v"></b></div>`
+    + `<input class="hd-apop-r" type="range" min="0" max="${AUTO_POT_MAX}" step="${AUTO_POT_STEP}" aria-label="Beber a poção sozinho abaixo de quantos % de vida (0 = desligada)">`
+    + `<div class="hd-apop-s"><span>Desligada</span><span>${AUTO_POT_MAX}%</span></div>`;
+  const apRange = apop.querySelector<HTMLInputElement>(".hd-apop-r")!;
+  const apVal = apop.querySelector<HTMLElement>(".hd-apop-v")!;
   const paintAuto = () => {
-    ab.classList.toggle("on", autoOn);
-    ab.setAttribute("aria-pressed", String(autoOn));
-    ab.setAttribute("aria-label", autoOn ? "Auto-poção ligada: clique para desligar" : "Auto-poção desligada: clique para ligar");
-    ab.title = autoOn ? "Auto-poção ligada (bebe sozinho com pouca vida)" : "Auto-poção desligada";
+    ab.classList.toggle("on", autoAt > 0);
+    ab.setAttribute("aria-pressed", String(autoAt > 0));
+    ab.setAttribute("aria-label", autoAt > 0 ? `Auto-poção abaixo de ${autoAt}% de vida: abrir ajuste` : "Auto-poção desligada: abrir ajuste");
+    ab.title = autoAt > 0 ? `Auto-poção: bebe sozinho abaixo de ${autoAt}% de vida` : "Auto-poção desligada (toque para ajustar)";
+    ab.querySelector<HTMLElement>(".hd-aval")!.textContent = autoAt > 0 ? `${autoAt}%` : "";
+    apRange.value = String(autoAt);
+    apVal.textContent = autoAt > 0 ? `${autoAt}% de vida` : "Desligada";
   };
-  ab.addEventListener("click", () => { autoOn = !autoOn; paintAuto(); opts.onAutoPotion?.(autoOn); });
-  bar.append(ab);
+  const apOpen = (open: boolean) => apop.classList.toggle("open", open);
+  ab.addEventListener("click", () => apOpen(!apop.classList.contains("open")));
+  apRange.addEventListener("input", () => { autoAt = Number(apRange.value); paintAuto(); }); // mostra enquanto arrasta
+  apRange.addEventListener("change", () => opts.onAutoPotion?.(Number(apRange.value))); // manda ao soltar: o servidor limita e grava
+  document.addEventListener("pointerdown", (e) => { if (!apop.contains(e.target as Node) && !ab.contains(e.target as Node)) apOpen(false); });
+  bar.append(ab, apop);
   paintAuto();
   const potCd = pb.querySelector<HTMLElement>(".hd-cd")!;
   const potN = pb.querySelector<HTMLElement>(".hd-cdn")!;
@@ -657,7 +681,7 @@ export function mountHud(opts: HudOptions): Hud {
       pb.classList.toggle("empty", count <= 0);
     },
     potionReady: () => performance.now() >= potUntil,
-    setAutoPotion(on) { autoOn = on; paintAuto(); },
+    setAutoPotion(at) { autoAt = at; paintAuto(); },
     setQMode(mode) {
       if (mode === qMode) return;
       qMode = mode;

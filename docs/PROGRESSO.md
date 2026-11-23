@@ -41,7 +41,15 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | Card | Situação | Observação |
 |---|---|---|
 | ARTE Ícones da Besta por raridade | ✅ concluído (2026-11-22) | Desenhos aprovados pelo dev para common a mythic; `tools/gen_besta_icons.py` gera `assets/items/item_besta_<raridade>.png` (48 x 48) a partir de `assets/source/besta/`. Junk e ancestral ficam na pasta de origem (sem equipamento). |
->
+
+## Ajustes de interface (HUD)
+
+| Item | Situação | Observação |
+|---|---|---|
+| Ícone da Poção de Vida | ✅ concluído (2026-11-22) | Frasco em pixel art (grade 16x16, `crispEdges`) com rolha, vidro escuro e líquido vermelho com brilho; renderizado a 20 px no slot. Tecla F e contador em tarja escura, legíveis em PC e toque. Conferido no navegador embutido (1280x720 e 700x340). |
+| Auto-poção com limiar (slider) | 🟡 concluído com pendência (2026-11-22) | O botão "Auto" abre um controle: 0 = desligada, passo 5, até 90% de vida. Servidor limita (`clampAutoPot`), grava em `characters.auto_pot_at` (migração `014_auto_pocao.sql`) e bebe sozinho (`autoPotTick`, mesma recarga e regra de vida cheia do botão). Mensagem `auto_pot`; cliente lê o valor de `Player.autoPotAt` (sincroniza ao reconectar). Padrão 0 (desligada), como o jogo era. Testes: `test/autopocao.unit.ts` (16) e `test/autopocao.mjs` (9: limite, arredondamento, gravação, reconexão, sem gastar com vida cheia); `persistence.mjs` (34) e `inventory.unit.ts` (110) passam. **Pendência Média PD-14.** |
+| Faixa do tutorial | ✅ concluído (2026-11-22) | Saiu do meio da tela (base, sobre o centro de combate) e foi para o alto, centralizada e abaixo da barra de status, sem cobrir o retrato, o PvP, o rastreador nem as habilidades. Minimizar continua salvo em `localStorage`. Conferido em 700x340 e 1280x720. |
+
 ## Pendências abertas
 
 | ID | Pendência | Criticidade | Detalhe e próximo passo |
@@ -55,6 +63,7 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | PD-07 | Abate real de inimigo não é testado de ponta a ponta nas quests | **Média** | O `test/quests.mjs` avança os abates pelo atalho `quest_teste_abate` (só com `QUEST_TEST=1`), que chama a mesma função do abate de verdade (`questAbate`). Falta um teste que mate esqueletos em combate real e confira a quest. Próximo passo: adicionar isso junto com o C1.2. |
 | PD-08 | Tutorial não concluído no navegador: combate do passo 2 | **Resolvida** (2026-11-22) | Causa 1 (zona): o esqueleto nível 2 em (26,36) ficava a ~6 tiles do esqueleto de (26,30) e a ~5 do de (31,24), então o primeiro abate puxava 2 ou 3 de uma vez. Foi movido para (37,5), longe do bando (`packages/shared/src/zones.ts`); níveis e quantidade da zona 1 não mudaram. Causa 2 (mira no teclado): sem foco, a barra de espaço mirava no ponteiro do mouse; agora o ataque básico mira no inimigo do alcance, como no toque (`packages/client/src/main.ts`). Não mudou HP por nível nem o passo 2 (que já pede 1 esqueleto, PD-10). Verificação: typecheck e suítes `zones.mjs`, `tutorial.mjs`, `combate.mjs`; a partida real no navegador ainda não foi feita. |
 | PD-09 | Passo 4 do tutorial (poção) completa sem andar | **Baixa** | A poção vem da recompensa do passo 3, então o objetivo "coletar" já está cumprido quando o passo 4 é aceito. Mesmo assim o passo ensina a abrir a mochila e entregar. Ideal: um drop garantido de tutorial. Desvio do pedido: a armadura da classe sai como recompensa do passo 4 (não do 5), para o passo 5 poder ser "equipar" sem depender de um item de outra fonte. |
+| PD-14 | Auto-poção: disparo por vida baixa só testado por unidade e por leitura | **Média** | `test/autopocao.mjs` cobre clamp, gravação, reconexão e a regra "não gasta com vida cheia". O disparo real (vida cair até o limiar e a poção ser bebida pelo servidor) não tem teste de ponta a ponta: não há como baixar a vida do personagem num teste sem combate. Próximo passo: um atalho de teste (`AUTOPOCAO_TEST`) para rebaixar a vida, ou um teste de combate. Também: a antiga escolha "ligada" do `localStorage` (`frixep_autopot`) não é migrada; quem a tinha liga de novo pelo botão. |
 | PD-03 | Cobertura de CI só do servidor | **Baixa** | O cliente (Phaser/Vite) só passa pelo typecheck; não há teste automático de interface. Avaliar após a etapa C1. |
 | PD-04 | Servidores de teste esquecidos no Windows | **Baixa** | O `run-all.sh` agora encerra a árvore de processos; se uma rodada for interrompida à força, restam processos `tsx src/index.ts`. Encerre-os pelo Gerenciador de Tarefas. |
 | PD-10 | Quest de teste `caca_aos_ossos` (C1.1) aparece junto do tutorial | **Resolvida** (C1.5, 2026-11-22) | A quest de teste saiu de `data/quests/` e foi para `test/fixtures/quests_teste/` (carregada só com `QUEST_TEST=1` e `QUEST_FIXTURE=1`). O jogador novo não vê mais a quest de teste. |

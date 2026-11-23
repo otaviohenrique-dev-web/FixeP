@@ -19,6 +19,7 @@ export class Player extends Schema {
   @type("boolean") ember = false; // Brasa do Clérigo ativa
   @type("boolean") reflect = false; // Escudo Refletor do Guerreiro ativo
   @type("number") qMode = 0; // Clérigo: 0 = Q cura em área, 1 = Q cura focada
+  @type("number") autoPotAt = 0; // auto-poção: bebe sozinho com a vida até este % (0 = desligada; passo 5, máximo 90)
   @type("number") mana = 0; // recurso da classe (inteiro, para a HUD)
   @type("number") maxMana = 0;
   @type("number") level = 1;

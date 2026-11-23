@@ -18,8 +18,8 @@ export interface TutorialUi {
 type ToScreen = (x: number, y: number) => { sx: number; sy: number };
 
 const CSS = `
-.tut{position:fixed;z-index:17;bottom:calc(max(6px,env(safe-area-inset-bottom)) + 98px);left:50%;transform:translateX(-50%);
-  max-width:min(440px,calc(100vw - 220px));min-width:0;padding:5px 12px;border-radius:7px;pointer-events:none;
+.tut{position:fixed;z-index:17;top:calc(max(6px,env(safe-area-inset-top)) + 40px);left:50%;transform:translateX(-50%);
+  max-width:min(440px,calc(100vw - 280px));min-width:0;padding:5px 12px;border-radius:7px;pointer-events:none;
   font:700 12px/1.3 "Cinzel",Georgia,serif;color:#f4e6b8;text-align:center;
   background:linear-gradient(180deg,rgba(20,34,52,.9),rgba(6,12,20,.9));border:1px solid rgba(255,150,70,.55);box-shadow:0 6px 18px rgba(0,0,0,.55)}
 .tut[hidden]{display:none}
@@ -28,7 +28,7 @@ const CSS = `
 .tut-min{pointer-events:auto;cursor:pointer;width:22px;height:22px;margin:-3px -6px 0 0;padding:0;border-radius:50%;border:1px solid rgba(255,176,114,.6);background:rgba(10,16,26,.8);color:#ffb072;font:700 14px/1 Georgia,serif;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .tut.min{padding:3px 6px 3px 10px}
 .tut.min .tut-min{margin:0}
-@media (max-width:640px){.tut{max-width:calc(100vw - 24px);font-size:11px}}
+@media (max-width:640px){.tut{max-width:calc(100vw - 280px);font-size:11px}}
 @media (pointer:coarse) and (orientation:landscape){.tut{max-width:min(400px,calc(100vw - 300px))}}
 `;
 
