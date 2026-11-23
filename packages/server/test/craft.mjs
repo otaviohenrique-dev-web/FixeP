@@ -83,7 +83,10 @@ await after(A, () => A.room.send("craft", { npc: SMITH.npc, tipo: "arma", famili
 check("outro épico sem Óbolos: recusa", /Óbolos de Sangue 0\/2/.test(lastNotice(A)), lastNotice(A));
 
 console.log("\n== 5. Mochila cheia não consome nada");
+// a compra só funciona perto do comerciante: vai até ele antes de encher a mochila
+await goto(A, MERCHANT.x, MERCHANT.y);
 for (let i = 0; i < 40 && freeSlots(A.st.snap) > 0; i++) await after(A, () => A.room.send("shop_buy", { npc: MERCHANT.npc, id: "pocao_de_vida", qty: 10 }));
+check("a mochila ficou sem nenhum espaço livre antes do craft", freeSlots(A.st.snap) === 0, `espaços livres ${freeSlots(A.st.snap)}`);
 await goto(A, SMITH.x, SMITH.y);
 const cheioAntes = JSON.stringify(A.st.snap.inv);
 const ironAntes = A.st.snap.iron;
