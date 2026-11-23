@@ -53,7 +53,9 @@ Mago e Arqueiro estavam fortes demais por causa das habilidades em área; Guerre
 
 | Dano base | Antes → depois |
 |---|---|
-| Mago | Dardo 15→13, Bola de Fogo 44→28, Relâmpago 40→26, Chuva de Fogo 62→38, Meteoro 230→140 |
+| Mago | Dardo 15→13, Bola de Fogo 44→18 (+queimadura), Relâmpago 40→20 (atordoa 0,8 s), Chuva de Fogo 62→30 (+queimadura), Meteoro 230→50 (enraíza e queima) |
+| Guerreiro (rebalance de design) | Golpe 12→10 (+cura por golpe), Investida 18→10 (atordoa 1,2 s, cura 8), Correntes 14→10 (enraíza e deixa lento), Queda do Colosso 120→40 |
+| Clérigo (rebalance de design) | Cura em Área 16→26 (raio 4→5, +8 mana, escudo leve), Cura Focada 65→30 (até 3 acúmulos, +10% cada), Luz Divina 80 (escudo maior e purifica) |
 | Arqueiro | Flecha 10→9, Perfurar 18→15, Cilada 28→18, Chuva 15→10, Salva Final 40→26 |
 | Armas (% de dano) | Mago x0,70 e Arqueiro x0,75 do bônus da arma do Guerreiro/Clérigo; mãos secundárias: Tomo 40%→28%, Orbe Flutuante 30%→20%, Aljava 25%→18% |
 | Kits de arma | Cajado Arcano 1,2→1,1; Orbe Instável 1,35→1,2 (área 1,3→1,2) e Meteoro 1,3→1,15; Arco Longo 1,1→1,05; Besta 1,3→1,15 (Perfurar 1,15→1,1) |
@@ -62,10 +64,10 @@ DPS estimado (`packages/shared/src/balance.ts`, nível 1 e sem equipamento; rota
 
 | Classe | Alvo único antes → depois | Área antes → depois |
 |---|---|---|
-| Guerreiro | 24,9 → 24,3 | 63,3 → 57,2 (kit novo) |
-| Arqueiro | 24,9 → 21,5 (-14%) | 43,4 → 34,7 (-20%) |
+| Guerreiro | 24,9 → 19,2 (-23%) | 63,3 → 43,0 (-32%) |
+| Arqueiro | 24,9 → 20,7 (-17%) | 43,4 → 31,0 (-29%) |
 | Clérigo | 12,0 → 12,0 | 17,2 → 17,2 |
-| Mago | 23,0 → 18,6 (-19%) | 45,3 → 32,8 (-28%) |
+| Mago | 23,0 → 17,3 (-25%) | 45,3 → 26,3 (-42%) |
 
 O simulador assume o Guerreiro colado nos 5 inimigos (risco de corpo a corpo); Mago e Arqueiro mantêm a vantagem de bater **à distância e sem risco**, ainda com o dobro da área do Clérigo.
 
@@ -320,7 +322,7 @@ PORT=2999 PGLITE_DIR=memory API_RATE_MULT=100 npm run start        # terminal 1 
 SERVER=http://localhost:2999 npm run test:cheat                    # terminal 2: anti-trapaça (25 verificações)
 SERVER=http://localhost:2999 npm run test:persist                  # terminal 2: contas, personagem e XP (34 verificações)
 npm run test:inv:unit                                              # regras de itens, drops, chefes, classes e banco, sem servidor (109 verificações)
-npm run test:balance:unit -w @frixep/server                        # DPS por classe e regras do kit novo, sem servidor (36 verificações)
+npm run test:balance:unit -w @frixep/server                        # DPS por classe e regras do kit novo, sem servidor (46 verificações)
 ```
 
 Os testes de ponta a ponta do inventário e das classes exigem loot garantido (`LOOT_TEST=1`, ignorado em produção):

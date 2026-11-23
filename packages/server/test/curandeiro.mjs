@@ -38,8 +38,10 @@ console.log("\n== A. Cura em Área (padrão): cura todos em volta, mas pouco =="
   await Promise.all([arrive(W, 25.9, 16.5), arrive(C, 22.5, 17.5)]); // o Clérigo fica fora do aggro do esqueleto (7 tiles) e a 3,5 do guerreiro (dentro da cura de 4): só o guerreiro apanha
   check("o guerreiro apanha do esqueleto (perde mais de 20 de vida)", await until(() => W.me().hp <= W.me().maxHp - 20, 15000, 100), `hp ${W.me().hp}/${W.me().maxHp}`);
   C.act("skill1", C.me().x, C.me().y);
-  check("a cura em área chega ao aliado com 16 de vida (e sem `from`)", await until(() => C.ev.heal.some((h) => h.id === W.id && h.amount === 16 && !h.from) || W.ev.heal.some((h) => h.id === W.id && h.amount === 16 && !h.from), 1500), JSON.stringify(W.ev.heal.at(-1)));
-  check("custa 26 de Mana", await until(() => C.me().mana >= 90 && C.me().mana <= 98, 1500, 50), `mana ${C.me().mana}`); // o estado chega por sincronização: espera em vez de ler na hora
+  // REBALANCE: cura em área 16 → 26 (raio 4 → 5); cura focada 65 → 30 com acúmulos (ver test/rebalance.mjs)
+  check("a cura em área chega ao aliado com 26 de vida (e sem `from`)", await until(() => C.ev.heal.some((h) => h.id === W.id && h.amount === 26 && !h.from) || W.ev.heal.some((h) => h.id === W.id && h.amount === 26 && !h.from), 1500), JSON.stringify(W.ev.heal.at(-1)));
+  // custa 26 de Mana e devolve 8 ao conjurar (efeito "mana" da cura em área): 120 - 26 + 8 = 102, menos o regen
+  check("custa 26 de Mana e devolve 8", await until(() => C.me().mana >= 98 && C.me().mana <= 110, 1500, 50), `mana ${C.me().mana}`); // o estado chega por sincronização: espera em vez de ler na hora
   // em combate (o Clérigo acerta o esqueleto): a troca do Q é recusada
   C.act("attack", e.x, e.y);
   await until(() => C.ev.hits.some((h) => h.k === "e" && h.by === C.id), 3000);
@@ -70,9 +72,11 @@ console.log("\n== B. Cura Focada: um aliado só, bem mais forte ==");
   C.act("skill1", W.me().x, W.me().y);
   check("a cura focada acerta o aliado mirado, vinda do Clérigo (`from`)", await until(() => C.ev.heal.some((h) => h.id === W.id && h.from === C.id), 1500), JSON.stringify(C.ev.heal.at(-1)));
   const h = C.ev.heal.find((x) => x.id === W.id && x.from === C.id);
-  check("cura bem mais que a de área (≥ 40, até 65)", !!h && h.amount >= 40 && h.amount <= 65, `+${h?.amount}`);
-  check("custa 30 de Mana e só UMA pessoa é curada", C.me().mana <= m0 - 25 && C.ev.heal.filter((x) => x.from === C.id).length === 1, `mana ${m0}->${C.me().mana}`);
-  check("a vida do aliado sobe de verdade", W.me().hp > hp0 || W.me().hp === W.me().maxHp, `${hp0} -> ${W.me().hp}`);
+  // REBALANCE: cura focada caiu para 30 no primeiro uso (sem acúmulos ainda); o acúmulo do 2º uso aumenta as seguintes
+  check("cura focada no 1º uso: 30 (sem acúmulos), de UM alvo", !!h && h.amount >= 25 && h.amount <= 30, `+${h?.amount}`);
+  // o estado chega por sincronização: espera a mudança em vez de ler na hora (a cura focada agora é menor, 30)
+  check("custa 30 de Mana e só UMA pessoa é curada", await until(() => C.me().mana <= m0 - 25, 1500, 50) && C.ev.heal.filter((x) => x.from === C.id).length === 1, `mana ${m0}->${C.me().mana}`);
+  check("a vida do aliado sobe de verdade", await until(() => W.me().hp > hp0 || W.me().hp === W.me().maxHp, 1500, 50), `${hp0} -> ${W.me().hp}`);
   // mira longe do aliado (a mais de 2,2 tiles dele): o alvo vira o próprio Clérigo (cheio de vida: nada a curar) e o aliado NÃO é curado
   await sleep(4300);
   const n = C.ev.heal.length;

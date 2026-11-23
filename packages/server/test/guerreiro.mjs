@@ -92,7 +92,8 @@ console.log("\n== R Queda do Colosso: telegrafada, dano enorme em área e atordo
   W.act("ultimate", e.x, e.y);
   check("telégrafo da ultimate com o visual 'colossus' e raio grande", await until(() => W.ev.tele.some((t) => t.fx === "colossus" && t.r >= 4 && t.ms >= 1400), 800), JSON.stringify(W.ev.tele.at(-1)));
   check("ela custa 80 de Fúria", await until(() => W.me().mana >= 18 && W.me().mana <= 26, 1500, 50), `mana ${W.me().mana}`); // o estado chega por sincronização: espera em vez de ler na hora
-  check("a espada cai e o inimigo na área morre de um golpe só (dano > 100)", await until(() => e.st === "dead", 3000) && W.ev.hits.some((h) => h.k === "e" && h.dmg >= 100), `maior dano ${Math.max(0, ...W.ev.hits.map((h) => h.dmg))}`);
+  // REBALANCE (Guerreiro é tanque): a R foi de 120 para 40 de dano base; ela já não mata um esqueleto de 60 de vida num golpe só
+  check("a espada cai e a R dá dano médio na área (30 a 50, sem one-shot)", await until(() => W.ev.hits.some((h) => h.k === "e" && h.dmg >= 30 && h.dmg <= 50), 3000), `maior dano ${Math.max(0, ...W.ev.hits.map((h) => h.dmg))}`);
   W.act("ultimate", e.x, e.y);
   await sleep(300);
   check("a recarga longa (40 s) impede repetir", W.mine("ultimate") === 1);

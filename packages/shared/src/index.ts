@@ -283,6 +283,18 @@ export interface ActionDef {
   rootS?: number; // enraíza (não anda, mas ainda ataca de perto)
   reflect?: number; // fração do dano recebido de inimigos que volta a eles (kind "reflectBuff")
   icon?: string; // ícone da habilidade na HUD
+  // suporte e controle extra (C-rebalance): cada campo vem de um efeito (ver ActionEffect)
+  selfHeal?: number; // cura o próprio jogador ao usar
+  hitHeal?: number; // cura o próprio jogador por golpe que acerta (ao menos um inimigo)
+  manaGain?: number; // recurso recuperado ao conjurar a cura (Clérigo)
+  guardPct?: number; // aliados curados recebem -guardPct% de dano por guardS
+  guardS?: number;
+  stackMax?: number; // acúmulos máximos no aliado (Cura Focada)
+  stackPct?: number; // +% por acúmulo nas curas do Clérigo naquele aliado
+  stackS?: number; // duração dos acúmulos, renovada a cada uso
+  burnPct?: number; // queimadura: % do dano base por segundo
+  burnS?: number; // duração da queimadura (renova, não acumula)
+  cleanse?: boolean; // purifica: remove atordoamento e enraizamento dos aliados curados
 }
 
 export interface ClassDef {
@@ -315,9 +327,17 @@ export type ActionEffect =
   | { t: "pull"; s: number } // tempo da puxada (Compressor de Ar)
   | { t: "shred"; pct: number; s: number } // quebra armadura: +pct% de dano recebido por s
   | { t: "slow"; pct: number; s: number } // lentidão: -pct% de velocidade por s
-  | { t: "hasteAttack"; pct: number; s: number }; // ataque básico do dono +pct% mais rápido por s
+  | { t: "hasteAttack"; pct: number; s: number } // ataque básico do dono +pct% mais rápido por s
+  | { t: "selfHeal"; amount: number } // cura o próprio jogador ao usar
+  | { t: "hitHeal"; amount: number } // cura o próprio jogador por golpe que acerta
+  | { t: "mana"; amount: number } // recupera o recurso ao conjurar uma cura (Clérigo)
+  | { t: "guard"; pct: number; s: number } // aliados curados recebem -pct% de dano por s
+  | { t: "stacks"; max: number; pct: number; s: number } // cada uso no aliado soma 1 acúmulo (até max); cada acúmulo dá +pct% às curas do Clérigo nele por s desde o último uso
+  | { t: "burn"; pct: number; s: number } // queimadura: pct% do dano base por segundo, por s (inimigos; renova, não acumula)
+  | { t: "cleanse" }; // purifica: remove atordoamento e enraizamento dos aliados curados
 /** Campos da ActionDef que vêm dos efeitos (nunca são escritos direto na spec). */
-type EffectField = "dmg" | "heal" | "stunS" | "rootS" | "pullS" | "shredPct" | "shredS" | "slowPct" | "slowS" | "hasteAtkPct" | "hasteS";
+type EffectField = "dmg" | "heal" | "stunS" | "rootS" | "pullS" | "shredPct" | "shredS" | "slowPct" | "slowS" | "hasteAtkPct" | "hasteS"
+  | "selfHeal" | "hitHeal" | "manaGain" | "guardPct" | "guardS" | "stackMax" | "stackPct" | "stackS" | "burnPct" | "burnS" | "cleanse";
 /** Forma declarativa de uma habilidade: os dados fixos da ação (tecla, recarga, custo, visual...) + a lista de efeitos. */
 export type ActionSpec = Omit<ActionDef, EffectField> & { effects?: ActionEffect[] };
 type NumericActionKey = { [K in keyof ActionDef]-?: NonNullable<ActionDef[K]> extends number ? K : never }[keyof ActionDef];
@@ -337,6 +357,13 @@ const applyEffect = (out: ActionDef, e: ActionEffect) => {
     case "shred": out.shredPct = e.pct; out.shredS = e.s; break;
     case "slow": out.slowPct = e.pct; out.slowS = e.s; break;
     case "hasteAttack": out.hasteAtkPct = e.pct; out.hasteS = e.s; break;
+    case "selfHeal": out.selfHeal = e.amount; break;
+    case "hitHeal": out.hitHeal = e.amount; break;
+    case "mana": out.manaGain = e.amount; break;
+    case "guard": out.guardPct = e.pct; out.guardS = e.s; break;
+    case "stacks": out.stackMax = e.max; out.stackPct = e.pct; out.stackS = e.s; break;
+    case "burn": out.burnPct = e.pct; out.burnS = e.s; break;
+    case "cleanse": out.cleanse = true; break;
   }
 };
 
@@ -350,15 +377,16 @@ const CLASS_SPECS: Record<CharClass, ClassSpec> = {
     id: "warrior", name: "Guerreiro", role: "Tanque", maxHp: 120, color: 0xff8a3d,
     resource: { name: "Fúria", icon: "flame", color: 0xe0742a, max: 100, regen: 5, perLevel: 3 },
     actions: {
-      attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, offset: 1.0, radius: 1.25, effects: [{ t: "damage", amount: 12 }] },
-      // Q: avanço com o escudo à frente; quem estiver no caminho leva dano e fica ATORDOADO
-      skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dash: 4.5, dashTime: 0.25, radius: 1.2, icon: "charge", effects: [{ t: "damage", amount: 18 }, { t: "stun", s: 1.5 }] },
-      // W: correntes brotam do chão e ENRAIZAM os inimigos da área
-      skill2: { kind: "rain", name: "Correntes", key: "W", cd: 10, cost: 30, radius: 2.8, placeRange: 6, delayS: 0.45, fx: "chains", icon: "chains", effects: [{ t: "damage", amount: 14 }, { t: "root", s: 3.5 }] },
-      // E: PROVOCA e ergue o Escudo Refletor: menos dano recebido e parte do que os inimigos causam volta a eles
-      skill3: { kind: "reflectBuff", name: "Escudo Refletor", key: "E", cd: 14, cost: 35, buffS: 5, reduction: 0.5, reflect: 0.75, tauntRadius: 6, tauntS: 3, icon: "shield" },
-      // R: um colosso de aço desaba do céu (telegrafado): dano enorme em área e atordoamento
-      ultimate: { kind: "rain", name: "Queda do Colosso", key: "R", cd: 40, cost: 80, radius: 4.2, placeRange: 6, delayS: 1.5, fx: "colossus", icon: "hammer", effects: [{ t: "damage", amount: 120 }, { t: "stun", s: 2.2 }] },
+      // ataque básico: dano baixo, e cada golpe que acerta cura um pouco (sustento do tanque)
+      attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, offset: 1.0, radius: 1.25, effects: [{ t: "damage", amount: 10 }, { t: "hitHeal", amount: 2 }] },
+      // Q: avanço com o escudo à frente; quem estiver no caminho leva pouco dano e fica ATORDOADO por pouco; usar cura um pouco
+      skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dash: 4.5, dashTime: 0.25, radius: 1.2, icon: "charge", effects: [{ t: "damage", amount: 10 }, { t: "stun", s: 1.2 }, { t: "selfHeal", amount: 8 }] },
+      // W: correntes brotam do chão e ENRAIZAM os inimigos da área, que ainda ficam lentos
+      skill2: { kind: "rain", name: "Correntes", key: "W", cd: 10, cost: 30, radius: 2.8, placeRange: 6, delayS: 0.45, fx: "chains", icon: "chains", effects: [{ t: "damage", amount: 10 }, { t: "root", s: 3.5 }, { t: "slow", pct: 30, s: 3 }] },
+      // E: PROVOCA (inimigos próximos passam a mirar nele) e ergue o Escudo Refletor: menos dano recebido e parte do que os inimigos causam volta a eles
+      skill3: { kind: "reflectBuff", name: "Escudo Refletor", key: "E", cd: 14, cost: 35, buffS: 5, reduction: 0.5, reflect: 0.75, tauntRadius: 7, tauntS: 4, icon: "shield" },
+      // R: um colosso de aço desaba do céu (telegrafado): dano médio em área e atordoamento curto (ultimate de controle, não de dano)
+      ultimate: { kind: "rain", name: "Queda do Colosso", key: "R", cd: 40, cost: 80, radius: 4.2, placeRange: 6, delayS: 1.5, fx: "colossus", icon: "hammer", effects: [{ t: "damage", amount: 40 }, { t: "stun", s: 1.8 }] },
       dodge: dodge(3, 1.4),
     },
   },
@@ -379,24 +407,31 @@ const CLASS_SPECS: Record<CharClass, ClassSpec> = {
     resource: { name: "Mana", icon: "drop", color: 0x4aa8ff, max: 120, regen: 6, perLevel: 4 },
     actions: {
       attack: { kind: "projectile", name: "Raio", key: "ESPAÇO", cd: 0.7, cost: 4, speed: 12, range: 8, radius: 0.4, effects: [{ t: "damage", amount: 8 }] },
-      skill1: { kind: "healAoe", name: "Cura em Área", key: "Q", cd: 5, cost: 26, radius: 4, icon: "healAoe", effects: [{ t: "heal", amount: 16 }] }, // Q (A): cura todos em volta, mas pouco
+      // Q (A): cura todos em volta (mais que antes); cada uso devolve um pouco de mana ao Clérigo e dá um escudo leve (-15% de dano por 3 s) aos curados
+      skill1: { kind: "healAoe", name: "Cura em Área", key: "Q", cd: 5, cost: 26, radius: 5, icon: "healAoe", effects: [{ t: "heal", amount: 26 }, { t: "mana", amount: 8 }, { t: "guard", pct: 15, s: 3 }] },
+      // W: puxa o grupo para o centro e atordoa
       skill2: { kind: "pull", name: "Compressor de Ar", key: "W", cd: 12, cost: 30, radius: 4.5, placeRange: 6, effects: [{ t: "pull", s: 0.45 }, { t: "stun", s: 1.2 }] },
       skill3: { kind: "rain", name: "Julgamento", key: "E", cd: 7, cost: 30, radius: 3, placeRange: 7, delayS: 0.6, fx: "holy", effects: [{ t: "damage", amount: 26 }] },
-      ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, radius: 6, effects: [{ t: "heal", amount: 80 }] },
+      // R: cura em área grande, escudo curto (-25% de dano por 4 s) e purifica atordoamento e raízes dos aliados
+      ultimate: { kind: "healAoe", name: "Luz Divina", key: "R", cd: 45, cost: 90, radius: 6, icon: "healAoe", effects: [{ t: "heal", amount: 80 }, { t: "guard", pct: 25, s: 4 }, { t: "cleanse" }] },
       dodge: dodge(3, 1.4),
     },
-    // Q (B): cura focada em UM jogador (o selecionado, o mais próximo da mira ou o próprio): bem mais forte
-    skill1Alt: { kind: "healFocus", name: "Cura Focada", key: "Q", cd: 4, cost: 30, range: 9, icon: "healFocus", effects: [{ t: "heal", amount: 65 }] },
+    // Q (B): cura focada em UM jogador (o selecionado, o mais próximo da mira ou o próprio). Cada uso no mesmo aliado soma um acúmulo (até 3, 8 s): cada acúmulo dá +10% às curas do Clérigo nele
+    skill1Alt: { kind: "healFocus", name: "Cura Focada", key: "Q", cd: 4, cost: 30, range: 9, icon: "healFocus", effects: [{ t: "heal", amount: 30 }, { t: "stacks", max: 3, pct: 10, s: 8 }] },
   },
   mage: {
     id: "mage", name: "Mago", role: "Dano explosivo", maxHp: 75, color: 0xa070ff,
     resource: { name: "Mana", icon: "drop", color: 0xa070ff, max: 140, regen: 7, perLevel: 5 },
     actions: {
       attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, speed: 13, range: 9, radius: 0.4, effects: [{ t: "damage", amount: 13 }] },
-      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, speed: 11, range: 10, radius: 0.45, blast: 2.3, effects: [{ t: "damage", amount: 28 }] },
-      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning", effects: [{ t: "damage", amount: 26 }] },
-      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain", effects: [{ t: "damage", amount: 38 }] },
-      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor", effects: [{ t: "damage", amount: 140 }] },
+      // Q (fogo): explode ao acertar e QUEIMA quem atinge (dano ao longo do tempo)
+      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, speed: 11, range: 10, radius: 0.45, blast: 2.3, effects: [{ t: "damage", amount: 18 }, { t: "burn", pct: 25, s: 4 }] },
+      // W (raio): dano em área menor e ATORDOA por pouco (garantido; chefes resistem)
+      skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning", effects: [{ t: "damage", amount: 20 }, { t: "stun", s: 0.8 }] },
+      // E (fogo): chuva de chamas em área ampla que QUEIMA quem for atingido
+      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain", effects: [{ t: "damage", amount: 30 }, { t: "burn", pct: 30, s: 4 }] },
+      // R: meteoro com dano médio em área, ENRAIZA e queima por mais tempo
+      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor", effects: [{ t: "damage", amount: 50 }, { t: "root", s: 2 }, { t: "burn", pct: 30, s: 5 }] },
       dodge: dodge(4, 1.5), // passo arcano curto: o Mago tem pouco sustain, depende de manter distância
     },
   },

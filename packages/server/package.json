@@ -33,6 +33,7 @@
     "test:market": "node test/market.mjs",
     "test:guerreiro": "node test/guerreiro.mjs",
     "test:curandeiro": "node test/curandeiro.mjs",
+    "test:rebalance": "node test/rebalance.mjs",
     "test:balance:unit": "tsx test/balance.unit.ts",
     "test:acoes:unit": "tsx test/acoes.unit.ts",
     "test:telemetria:unit": "tsx test/telemetria.unit.ts",

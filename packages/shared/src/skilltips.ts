@@ -3,11 +3,11 @@ import type { ActionDef, ActionKind } from "./index";
 /** Texto do balão de cada habilidade: os números vêm da própria ActionDef; aqui ficam só o resumo e a dica de uso (chave = nome da ação). */
 export const SKILL_TEXT: Record<string, { desc: string; tip: string }> = {
   // Guerreiro
-  "Golpe": { desc: "Golpe do escudo e da espada à frente.", tip: "Ataque básico: use entre as habilidades." },
-  "Investida": { desc: "Avança com o escudo e atordoa quem estiver no caminho.", tip: "Entre no meio do grupo e siga com Correntes ou Escudo Refletor." },
-  "Correntes": { desc: "Correntes brotam do chão e prendem os inimigos da área.", tip: "Prenda os alvos e deixe o grupo atacar à vontade; chefes resistem." },
-  "Escudo Refletor": { desc: "Provoca inimigos próximos e devolve parte do dano que recebe.", tip: "Ative antes de puxar um grupo grande para o corpo a corpo." },
-  "Queda do Colosso": { desc: "Um colosso de aço desaba no local marcado: dano enorme e atordoamento.", tip: "Telegrafada: use sobre inimigos já presos pelas Correntes." },
+  "Golpe": { desc: "Golpe do escudo e da espada à frente. Cada golpe que acerta cura um pouco.", tip: "Ataque básico que se paga: use entre as habilidades para se manter de pé." },
+  "Investida": { desc: "Avança com o escudo, atordoa por pouco quem está no caminho e cura um pouco.", tip: "Entre no meio do grupo e siga com Correntes ou Escudo Refletor." },
+  "Correntes": { desc: "Correntes brotam do chão: enraízam e deixam lentos os inimigos da área.", tip: "Prenda os alvos e deixe o grupo atacar à vontade; chefes resistem." },
+  "Escudo Refletor": { desc: "Provoca os inimigos próximos (eles passam a atacar você), reduz o dano que você recebe e devolve parte dele.", tip: "Ative antes de puxar um grupo grande: você segura o aggro e o grupo não vai para cima dos aliados." },
+  "Queda do Colosso": { desc: "Um colosso de aço desaba no local marcado: dano médio em área e atordoamento curto.", tip: "Controle de grupo, não dano: use sobre inimigos já presos pelas Correntes." },
   // Arqueiro
   "Flecha": { desc: "Dispara uma flecha em linha reta.", tip: "Mantenha distância e atire entre as habilidades." },
   "Perfurar": { desc: "Flecha veloz que atravessa os inimigos da linha e quebra a armadura deles: todo o grupo passa a causar mais dano neles.", tip: "Abra a luta com ela: aliados e você aproveitam o dano extra. Alinhe os inimigos para acertar vários." },
@@ -16,17 +16,17 @@ export const SKILL_TEXT: Record<string, { desc: string; tip: string }> = {
   "Salva Final": { desc: "Saraivada gigante de flechas sobre a área marcada.", tip: "Guarde para chefes e grupos cercados; o atraso é curto." },
   // Clérigo
   "Raio": { desc: "Raio de luz em linha reta.", tip: "Ataque básico barato: ajuda a regenerar a mana entre curas." },
-  "Cura em Área": { desc: "Cura todos os aliados em volta, mas pouco.", tip: "Ótima para grupos; para um aliado ferido, troque para Cura Focada (Z)." },
-  "Cura Focada": { desc: "Cura UM aliado (o selecionado, o mais perto da mira ou você).", tip: "Troque com Z ou ⇄ fora de combate. Cura bem mais que a de área." },
+  "Cura em Área": { desc: "Cura todos os aliados em volta, devolve mana a você e dá um escudo leve (menos dano por alguns segundos).", tip: "Ótima para grupos. Para um aliado ferido, Cura Focada cura mais." },
+  "Cura Focada": { desc: "Cura UM aliado. Cada uso nele soma um acúmulo (até 3, por 8 s): cada acúmulo aumenta as suas curas nesse aliado.", tip: "Repita no mesmo aliado para acumular; cada cura seguinte fica mais forte enquanto dura." },
   "Compressor de Ar": { desc: "Puxa os inimigos da área para o centro e os atordoa.", tip: "Puxe os inimigos e depois use Julgamento para acertar todos juntos." },
   "Julgamento": { desc: "Luz sagrada cai na área marcada, depois de um breve atraso.", tip: "Combine com o Compressor de Ar para acertar o grupo inteiro." },
-  "Luz Divina": { desc: "Grande cura em todos os aliados num raio amplo.", tip: "Reserve para momentos críticos, como o pulso sombrio dos chefes." },
+  "Luz Divina": { desc: "Grande cura em todos os aliados num raio amplo, com escudo curto e purificação (sai de atordoamento e raízes).", tip: "Reserve para momentos críticos, como o pulso sombrio dos chefes." },
   // Mago
   "Dardo Arcano": { desc: "Dardo arcano em linha reta.", tip: "Ataque básico: regenere mana com ele entre as magias." },
-  "Bola de Fogo": { desc: "Projétil que explode ao acertar, ferindo uma área.", tip: "Acerte o inimigo da frente para atingir quem está junto dele." },
-  "Relâmpago": { desc: "Raio cai na área marcada quase na hora.", tip: "Pequeno e rápido: ideal para alvos que estão se movendo." },
-  "Chuva de Fogo": { desc: "Chuva de chamas em área ampla, depois de um atraso.", tip: "Jogue sobre inimigos presos por controle de aliados." },
-  "Meteoro": { desc: "Um meteoro desaba na área marcada: dano devastador.", tip: "Telegrafado: use em chefes ou grupos que não podem fugir." },
+  "Bola de Fogo": { desc: "Projétil que explode ao acertar, ferindo uma área, e queima quem for atingido.", tip: "Queimadura é dano ao longo do tempo: renova ao acertar de novo, não acumula." },
+  "Relâmpago": { desc: "Raio cai na área marcada quase na hora e atordoa por pouco quem é atingido.", tip: "Controle rápido: atordoa alvos que estão se movendo ou chegando perto." },
+  "Chuva de Fogo": { desc: "Chuva de chamas em área ampla, depois de um atraso. Quem for atingido queima.", tip: "Jogue sobre o grupo e siga com Bola de Fogo para manter a queimadura." },
+  "Meteoro": { desc: "Um meteoro desaba na área marcada: dano médio em área, enraíza e queima por mais tempo.", tip: "Telegrafado: use em grupos que não podem fugir; chefes resistem ao controle e à queimadura." },
   // comum
   "Esquiva": { desc: "Desliza para a direção do movimento e fica invulnerável por um instante.", tip: "Use no momento em que o aviso vermelho do inimigo estiver acabando." },
 };
@@ -64,6 +64,13 @@ export function skillTooltip(d: ActionDef, resourceName: string): SkillTooltipDa
   if (d.shredPct) s.push(`Quebra armadura: +${d.shredPct}% de dano recebido por ${f(d.shredS ?? 0)} s`);
   if (d.slowPct) s.push(`Lentidão: -${d.slowPct}% por ${f(d.slowS ?? 0)} s`);
   if (d.hasteAtkPct) s.push(`Ao acertar: ataque básico +${d.hasteAtkPct}% mais rápido por ${f(d.hasteS ?? 0)} s`);
+  if (d.selfHeal) s.push(`Cura ao usar: ${d.selfHeal}`);
+  if (d.hitHeal) s.push(`Cura por golpe que acerta: ${d.hitHeal}`);
+  if (d.manaGain) s.push(`Devolve ${d.manaGain} de ${resourceName} ao curar`);
+  if (d.guardPct) s.push(`Aliados curados: -${d.guardPct}% de dano recebido por ${f(d.guardS ?? 0)} s`);
+  if (d.stackMax) s.push(`Acúmulos no aliado: até ${d.stackMax}, +${d.stackPct ?? 0}% nas curas do Clérigo cada, por ${f(d.stackS ?? 0)} s`);
+  if (d.burnPct) s.push(`Queimadura: ${d.burnPct}% do dano por segundo, por ${f(d.burnS ?? 0)} s (chefes: metade)`);
+  if (d.cleanse) s.push("Purifica: tira atordoamento e raízes dos aliados curados");
   s.push(d.cost ? `Custo: ${d.cost} de ${resourceName}` : "Sem custo");
   s.push(`Recarga: ${f(d.cd)} s`);
   const t = SKILL_TEXT[d.name] ?? { desc: "", tip: "" };

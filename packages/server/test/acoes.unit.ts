@@ -2,6 +2,9 @@
 // para toda ação de toda classe, e que um modificador de teste altera só o campo esperado.
 // SNAPSHOT abaixo = CLASS_DEFS (actions e skill1Alt) do código ANTES da refatoração (commit 18fb8ca).
 // Não edite para fazer passar: se algum valor mudar, é balanceamento, e isso não é deste card.
+// REBALANCE DO GUERREIRO, CLÉRIGO E MAGO (design do dono): os blocos "warrior", "cleric" e "mage" foram REGERADOS
+// com resolveAction depois desse rebalance (novos efeitos: cura, acúmulos, queimadura, escudo, mana). O Arqueiro
+// segue exatamente como estava na C2.1, e é ele que continua provando que a refatoração não mudou nada.
 // Uso (em packages/server): npx tsx test/acoes.unit.ts
 import { CLASS_DEFS, resolveAction, classAction, type ActionDef, type ActionId, type ActionModifier, type CharClass } from "@frixep/shared";
 
@@ -19,9 +22,10 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "name": "Golpe",
     "key": "ESPAÇO",
     "cd": 0.55,
-    "dmg": 12,
     "offset": 1,
-    "radius": 1.25
+    "radius": 1.25,
+    "dmg": 10,
+    "hitHeal": 2
    },
    "skill1": {
     "kind": "dashHit",
@@ -29,12 +33,13 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "Q",
     "cd": 7,
     "cost": 25,
-    "dmg": 18,
     "dash": 4.5,
     "dashTime": 0.25,
     "radius": 1.2,
-    "stunS": 1.5,
-    "icon": "charge"
+    "icon": "charge",
+    "dmg": 10,
+    "stunS": 1.2,
+    "selfHeal": 8
    },
    "skill2": {
     "kind": "rain",
@@ -42,13 +47,15 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "W",
     "cd": 10,
     "cost": 30,
-    "dmg": 14,
     "radius": 2.8,
     "placeRange": 6,
     "delayS": 0.45,
-    "rootS": 3.5,
     "fx": "chains",
-    "icon": "chains"
+    "icon": "chains",
+    "dmg": 10,
+    "rootS": 3.5,
+    "slowPct": 30,
+    "slowS": 3
    },
    "skill3": {
     "kind": "reflectBuff",
@@ -59,8 +66,8 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "buffS": 5,
     "reduction": 0.5,
     "reflect": 0.75,
-    "tauntRadius": 6,
-    "tauntS": 3,
+    "tauntRadius": 7,
+    "tauntS": 4,
     "icon": "shield"
    },
    "ultimate": {
@@ -69,13 +76,13 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "R",
     "cd": 40,
     "cost": 80,
-    "dmg": 120,
     "radius": 4.2,
     "placeRange": 6,
     "delayS": 1.5,
-    "stunS": 2.2,
     "fx": "colossus",
-    "icon": "hammer"
+    "icon": "hammer",
+    "dmg": 40,
+    "stunS": 1.8
    },
    "dodge": {
     "kind": "dodge",
@@ -176,10 +183,10 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "ESPAÇO",
     "cd": 0.7,
     "cost": 4,
-    "dmg": 8,
     "speed": 12,
     "range": 8,
-    "radius": 0.4
+    "radius": 0.4,
+    "dmg": 8
    },
    "skill1": {
     "kind": "healAoe",
@@ -187,9 +194,12 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "Q",
     "cd": 5,
     "cost": 26,
-    "heal": 16,
-    "radius": 4,
-    "icon": "healAoe"
+    "radius": 5,
+    "icon": "healAoe",
+    "heal": 26,
+    "manaGain": 8,
+    "guardPct": 15,
+    "guardS": 3
    },
    "skill2": {
     "kind": "pull",
@@ -208,11 +218,11 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "E",
     "cd": 7,
     "cost": 30,
-    "dmg": 26,
     "radius": 3,
     "placeRange": 7,
     "delayS": 0.6,
-    "fx": "holy"
+    "fx": "holy",
+    "dmg": 26
    },
    "ultimate": {
     "kind": "healAoe",
@@ -220,8 +230,12 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "R",
     "cd": 45,
     "cost": 90,
+    "radius": 6,
+    "icon": "healAoe",
     "heal": 80,
-    "radius": 6
+    "guardPct": 25,
+    "guardS": 4,
+    "cleanse": true
    },
    "dodge": {
     "kind": "dodge",
@@ -239,9 +253,12 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
    "key": "Q",
    "cd": 4,
    "cost": 30,
-   "heal": 65,
    "range": 9,
-   "icon": "healFocus"
+   "icon": "healFocus",
+   "heal": 30,
+   "stackMax": 3,
+   "stackPct": 10,
+   "stackS": 8
   }
  },
  "mage": {
@@ -252,10 +269,10 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "ESPAÇO",
     "cd": 0.8,
     "cost": 4,
-    "dmg": 13,
     "speed": 13,
     "range": 9,
-    "radius": 0.4
+    "radius": 0.4,
+    "dmg": 13
    },
    "skill1": {
     "kind": "blast",
@@ -263,11 +280,13 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "Q",
     "cd": 5,
     "cost": 30,
-    "dmg": 28,
     "speed": 11,
     "range": 10,
     "radius": 0.45,
-    "blast": 2.3
+    "blast": 2.3,
+    "dmg": 18,
+    "burnPct": 25,
+    "burnS": 4
    },
    "skill2": {
     "kind": "rain",
@@ -275,11 +294,12 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "W",
     "cd": 7,
     "cost": 28,
-    "dmg": 26,
     "radius": 1.7,
     "placeRange": 9,
     "delayS": 0.35,
-    "fx": "lightning"
+    "fx": "lightning",
+    "dmg": 20,
+    "stunS": 0.8
    },
    "skill3": {
     "kind": "rain",
@@ -287,11 +307,13 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "E",
     "cd": 11,
     "cost": 45,
-    "dmg": 38,
     "radius": 3.1,
     "placeRange": 8,
     "delayS": 0.9,
-    "fx": "firerain"
+    "fx": "firerain",
+    "dmg": 30,
+    "burnPct": 30,
+    "burnS": 4
    },
    "ultimate": {
     "kind": "rain",
@@ -299,11 +321,14 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "key": "R",
     "cd": 45,
     "cost": 100,
-    "dmg": 140,
     "radius": 4.2,
     "placeRange": 9,
     "delayS": 1.5,
-    "fx": "meteor"
+    "fx": "meteor",
+    "dmg": 50,
+    "rootS": 2,
+    "burnPct": 30,
+    "burnS": 5
    },
    "dodge": {
     "kind": "dodge",
