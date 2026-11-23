@@ -35,7 +35,7 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 
 | Card | Situação | Observação |
 |---|---|---|
-| ARTE Kit do Guerreiro (2 mãos e espada + escudo) | 🟡 kit e placeholder prontos (2026-11-22) | Referência em `assets/source/warrior_ref_2h.jpg`; guia `docs/ARTE_GUERREIRO_KIT.md` (auditoria, paleta, peças, 7 animações x SE/NE x 2 variações). Gerador `tools/gen_warrior_kit.py` produz `assets/characters/warrior_2h.*` e `warrior_1h.*` (placeholder por código). Cliente não carrega ainda: o jogo segue com `assets/placeholder/warrior.*`. Pendência **Média**: arte final desenhada à mão pelo dev de arte e integração da variação no cliente (PR próprio). |
+| ARTE Ícones da Besta por raridade | ✅ concluído (2026-11-22) | Desenhos aprovados pelo dev para common a mythic; `tools/gen_besta_icons.py` gera `assets/items/item_besta_<raridade>.png` (48 x 48) a partir de `assets/source/besta/`. Junk e ancestral ficam na pasta de origem (sem equipamento). |
 
 ## Pendências abertas
 
