@@ -1,7 +1,7 @@
 import { isTypingTarget } from "./keys";
 import { silhouetteSvg } from "./silhouette";
 import { animatePoder, previewPoderDelta } from "./poder";
-import { bindItemTip, hideItemTip, setItemTipContext, compareStats, type ItemTipData } from "./itemtip";
+import { bindItemTip, bindDoubleTap, COARSE, hideItemTip, setItemTipContext, compareStats, type ItemTipData } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
@@ -323,10 +323,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       b.classList.add("full", ...pulse(def));
       b.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
       if (s === "weapon") b.classList.add("wglow", `w${RARITY_ORDER.indexOf(def.rarity)}`); // a arma brilha pela raridade: mais forte a cada nível
-      b.draggable = true;
+      b.draggable = !COARSE;
       b.ondragstart = (e) => startDrag(e, { from: "equip", s });
       b.ondragend = endDrag;
-      b.ondblclick = () => opts.send(Msg.InvUnequip, { slot: s });
+      bindDoubleTap(b, `e${s}`, () => opts.send(Msg.InvUnequip, { slot: s }));
       attachTip(b, () => ({ def, af: snap.equipAf?.[s], extra: "Duplo clique: desequipar" }));
     } else b.insertAdjacentHTML("afterbegin", ICONS[s]);
     b.onclick = () => { sel = def ? { kind: "equip", s } : null; confirmDrop = false; render(); };
@@ -414,10 +414,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
         if (q) q.textContent = String(st.qty);
         b.classList.add("full", ...pulse(def));
         b.style.setProperty("--rc", RARITY_COLOR[def.rarity] + "aa");
-        b.draggable = true;
+        b.draggable = !COARSE;
         b.ondragstart = (e) => startDrag(e, { from: "slot", i });
         b.ondragend = endDrag;
-        b.ondblclick = () => { if (def.kind === "potion") opts.send(Msg.InvUse, { slot: i }); else opts.send(Msg.InvEquip, { slot: i }); };
+        bindDoubleTap(b, `s${i}`, () => { if (def.kind === "potion") opts.send(Msg.InvUse, { slot: i }); else opts.send(Msg.InvEquip, { slot: i }); });
         attachTip(b, () => ({ def, af: st.af, cmp: def.kind !== "potion" ? equippedDef(def.kind as EquipSlot) : null }));
       }
       b.onclick = () => { sel = def ? { kind: "slot", i } : null; confirmDrop = false; render(); };
