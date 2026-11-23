@@ -77,7 +77,7 @@ run_case() {
 
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
-for file in test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
+for file in test/acoes.unit.ts test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
             test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"

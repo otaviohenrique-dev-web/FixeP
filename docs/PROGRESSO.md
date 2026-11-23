@@ -30,7 +30,18 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | Card | Situação | Observação |
 |---|---|---|
 | PVP-1 Arena Sangrenta (zona 5) | 🟡 concluído com pendência (2026-11-22) | Zona 5 em `packages/shared/src/zones.ts` (`pvp: true`): sem monstros nem chefe, acessível pelo mapa-mundo do portão de Brasalume, portal sul de volta à cidade; chegada pelo lado oeste (vindo da cidade). PvP vale SÓ na arena: dano entre jogadores só lá, membros do mesmo grupo nunca se ferem; o PvP já está ligado ao entrar (o pedido manual foi desativado: fora da arena o servidor avisa que o PvP só existe lá). Morte na arena: renasce no ponto da arena após `RESPAWN_S`, sem perda de XP/itens e sem drop. Teste: `test/pvp.mjs` (18 verificações, registrado em `run-all.sh`). Suítes zones (46), morte (7), combate (23) e pvp passaram; typecheck verde. **Não verificado no navegador:** botão PvP e layout da arena. Pendência **Média**: remover o código morto da canalização antiga (`updatePvp`, `interruptPvp`, `pvpChan`) numa limpeza própria. |
+## Etapa C2 · Identidade de build
 
+| Card | Situação | Observação |
+|---|---|---|
+| C2.1 Habilidades como dados | ✅ concluído (2026-11-22) | Cada habilidade é uma lista de efeitos tipados (dano, cura, atordoar, enraizar, puxar, quebra de armadura, lentidão, aceleração do ataque) em `CLASS_SPECS` (`packages/shared/src/index.ts`). `resolveAction(classe, slot, modificadores)` devolve a ação efetiva; `CLASS_DEFS` e `classAction` (servidor e cliente) usam essa função. Lista de modificadores vazia hoje (C2.2 e C2.3 plugam aqui). Sem mudança de comportamento: `test/acoes.unit.ts` compara as 25 ações com os valores anteriores. Sem pendência nova. |
+
+## Arte
+
+| Card | Situação | Observação |
+|---|---|---|
+| ARTE Ícones da Besta por raridade | ✅ concluído (2026-11-22) | Desenhos aprovados pelo dev para common a mythic; `tools/gen_besta_icons.py` gera `assets/items/item_besta_<raridade>.png` (48 x 48) a partir de `assets/source/besta/`. Junk e ancestral ficam na pasta de origem (sem equipamento). |
+>
 ## Pendências abertas
 
 | ID | Pendência | Criticidade | Detalhe e próximo passo |
