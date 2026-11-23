@@ -196,7 +196,8 @@ for (let i = 0; i < 25 && X.ev.xp.length === 0; i++) {
   await sleep(650);
 }
 await sleep(400);
-check("o XP do abate é DIVIDIDO no grupo: 20 x 1,25 (bônus de 2 membros) / 2 = 13 para cada um", X.ev.xp[0] === 13 && Y.ev.xp[0] === 13, `X ${X.ev.xp} Y ${Y.ev.xp}`);
+// o dev mudou a regra (XP): esqueleto nível 1 dá enemyXp(1) = 1 XP (XP_MOB_MULT 0.03 x 20 = 0.6, arredondado); antes 20.
+check("o XP do abate é DIVIDIDO no grupo: enemyXp(1)=1 x 1,25 (2 membros) / 2 arredonda para 1 cada", X.ev.xp[0] === 1 && Y.ev.xp[0] === 1, `X ${X.ev.xp} Y ${Y.ev.xp}`);
 check("quem está por perto, fora do grupo e sem dano relevante NÃO ganha XP", Z.ev.xp.length === 0, `Z ${Z.ev.xp}`);
 await Promise.all([X, Y, Z].map((p) => p.room.leave()));
 

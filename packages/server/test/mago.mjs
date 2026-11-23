@@ -74,7 +74,8 @@ while (e1.st !== "dead" && Date.now() - t0 < 60000 && !me().dead) {
   if (me().mana > 70) act("skill1", e1.x, e1.y);
 }
 check("o Mago derruba o esqueleto à distância", e1.st === "dead", `hp ${e1.hp}`);
-check("ganha XP do abate", me().xp >= 20 || me().level > 1, `xp ${me().xp}`);
+// o dev mudou a regra (XP): esqueleto nível 1 dá enemyXp(1) = 1 XP (XP_MOB_MULT 0.03 x 20 = 0.6, arredondado); antes 20.
+check("ganha XP do abate", me().xp >= 1 || me().level > 1, `xp ${me().xp}`);
 await sleep(400);
 const t1 = Date.now();
 while (room.state.items.size > 0 && Date.now() - t1 < 9000) {
