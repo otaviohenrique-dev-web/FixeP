@@ -22,6 +22,7 @@ export interface CharacterRow {
   xp: number;
   zone: number;
   auto_pot_at: number;
+  variacoes: string; // JSON: habilidade -> id da variação (C2.2)
 }
 
 /** Normaliza o nome para a chave de unicidade: sem acento, sem maiúsculas, espaços colapsados. */
@@ -105,7 +106,7 @@ export class Repo {
 
   async getCharacter(accountId: string): Promise<CharacterRow | null> {
     const { rows } = await this.db.query<CharacterRow>(
-      "select id, account_id, name, class, level, xp, zone, auto_pot_at from characters where account_id = $1 order by created_at limit 1",
+      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes from characters where account_id = $1 order by created_at limit 1",
       [accountId],
     );
     return rows[0] ?? null;
@@ -125,7 +126,7 @@ export class Repo {
         const id = randomUUID();
         const zone = startZone();
         await q("insert into characters (id, account_id, name, name_key, class, zone) values ($1, $2, $3, $4, $5, $6)", [id, accountId, name, nameKey(name), cls, zone]);
-        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone, auto_pot_at: 0 } };
+        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone, auto_pot_at: 0, variacoes: "{}" } };
       });
     } catch (e: any) {
       if (e?.code === "23505") return { ok: false, error: "name_taken" }; // violação da unicidade de name_key
@@ -140,6 +141,11 @@ export class Repo {
   /** limiar da auto-poção (já validado por clampAutoPot no servidor) */
   async setAutoPot(charId: string, at: number): Promise<void> {
     await this.db.query("update characters set auto_pot_at = $2 where id = $1", [charId, at]);
+  }
+
+  /** escolha das variações de habilidade (JSON já limpo por limparEscolhas no servidor) */
+  async setVariacoes(charId: string, json: string): Promise<void> {
+    await this.db.query("update characters set variacoes = $2 where id = $1", [charId, json]);
   }
 
   async setZone(charId: string, zone: number): Promise<void> {

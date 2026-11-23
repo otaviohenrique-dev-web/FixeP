@@ -9,6 +9,7 @@ import {
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
   START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
+  VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 
@@ -281,6 +282,12 @@ export class ZoneRoom extends Room<ZoneState> {
       if (pl.autoPotAt === at) return;
       pl.autoPotAt = at;
       if (pl.charId) this.repo.setAutoPot(pl.charId, at).catch((e) => console.error("[db] falha ao gravar a auto-poção:", (e as Error).message));
+    });
+    // variações de habilidade (C2.2): só na cidade; o servidor confere nível, classe e slot, grava e sincroniza
+    this.onMessage(Msg.Variacao, (client, p: { slot?: unknown; id?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) this.escolherVariacao(client.sessionId, pl, p);
     });
     this.onMessage(Msg.QMode, (client, p: { mode?: unknown }) => {
       if (!this.allow(client)) return;
@@ -985,11 +992,13 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.charId = auth.character.id;
     pl.cls = auth.character.class;
     pl.level = auth.character.level;
+    if (process.env.VARIACAO_TEST_LEVEL && process.env.NODE_ENV !== "production") pl.level = Number(process.env.VARIACAO_TEST_LEVEL); // só nos testes (test/variacoes.mjs): nível para testar o desbloqueio
     pl.pvp = this.zone.pvp === true; // arena: PvP ligado desde a entrada (o servidor decide; o cliente não liga nem desliga)
     pl.xp = auth.character.xp;
     pl.inv = auth.inventory;
     pl.quests = auth.quests;
     pl.autoPotAt = clampAutoPot(auth.character.auto_pot_at); // a escolha da auto-poção volta com o personagem
+    pl.variacoes = JSON.stringify(limparEscolhas(auth.character.variacoes, pl.cls as CharClass, pl.level)); // as variações voltam com o personagem (C2.2)
     if (econTest() && !auth.inventory.slots.some(Boolean) && auth.inventory.iron === 0) { // só nos testes (ECON_TEST=1): kit inicial para exercitar loja, fusão e troca sem jogar horas
       const i = auth.inventory;
       i.iron = 50000; i.obols = 2;
@@ -1390,12 +1399,35 @@ export class ZoneRoom extends Room<ZoneState> {
     return best;
   }
 
+  /** Variação de habilidade (C2.2): só na cidade, só no nível da habilidade, só variação da própria classe e slot. id null = volta à base. */
+  private escolherVariacao(id: string, pl: Player, p: { slot?: unknown; id?: unknown }) {
+    if (pl.dead) return;
+    if (!this.zone.safe) return this.notify(id, "Troque as variações na cidade.");
+    const slot = p?.slot as VariacaoSlot;
+    if (!(VARIACAO_SLOTS as readonly string[]).includes(slot)) return;
+    if (!variacaoDesbloqueada(slot, pl.level)) return this.notify(id, `Esta variação libera no nível ${VARIACAO_NIVEL[slot]}.`);
+    const novo = typeof p.id === "string" ? p.id : null;
+    if (novo !== null) {
+      const v = variacaoPorId(novo);
+      if (!v || v.classe !== pl.cls || v.slot !== slot) return; // id de outra classe ou de outra habilidade
+    }
+    const e: EscolhasVariacao = limparEscolhas(pl.variacoes, pl.cls as CharClass, pl.level);
+    if (novo === null) delete e[slot]; else e[slot] = novo;
+    const json = JSON.stringify(e);
+    if (json === pl.variacoes) return;
+    pl.variacoes = json;
+    if (pl.charId) this.repo.setVariacoes(pl.charId, json).catch((err) => console.error("[db] falha ao gravar as variações:", (err as Error).message));
+    const nome = novo ? variacaoPorId(novo)?.nome ?? novo : "base";
+    this.notifyOk(id, `${slot === "ultimate" ? "Final" : slot === "skill1" ? "Q" : slot === "skill2" ? "W" : "E"}: ${nome}`);
+  }
+
   private queueAct(p: Player, a: ActionId, ax: number, ay: number) { p.queued = { a, ax, ay, until: this.t + 0.5 }; }
 
   private sendTo(id: string, evt: string, payload: unknown) { this.clients.getById(id)?.send(evt, payload); }
 
   private doAction(id: string, p: Player, a: ActionId, ax: number, ay: number) {
-    const def: ActionDef = effectiveAction(classAction(p.cls as CharClass, a, p.qMode), a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
+    const mods = modificadoresDaEscolha(limparEscolhas(p.variacoes, p.cls as CharClass, p.level)); // variações escolhidas (C2.2)
+    const def: ActionDef = effectiveAction(classAction(p.cls as CharClass, a, p.qMode, mods), a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
     if (this.t < p.stunUntil) return; // atordoado (PvP ou puxado): não age
     const left = (p.cdUntil[a] ?? 0) - this.t;
     if (left > 0.05) { // em recarga (tolerância de rede)
