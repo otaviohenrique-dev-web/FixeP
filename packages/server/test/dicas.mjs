@@ -36,6 +36,8 @@ async function entrar(acc) {
     async sincronizar(esperado) { return until(() => { r.send("dicas_sync", {}); return esperado(P.ids()); }, 5000); },
     async sair() { ev.left = false; r.leave(); await until(() => ev.left, 3000); },
   };
+  // o servidor manda a lista ao entrar, mas pode mandar antes deste receptor existir: pede explicitamente (Msg.DicasSync) e espera o Evt.DicasVistas
+  r.send("dicas_sync", {});
   await until(() => ev.dicas, 5000);
   return P;
 }
