@@ -1,4 +1,4 @@
-// Teste de ponta a ponta do Guerreiro redesenhado: Investida (atordoa), Correntes (enraíza), Escudo Refletor (provoca, mitiga e devolve dano)
+// Teste de ponta a ponta do Guerreiro redesenhado: Investida (atordoa), Correntes (enraíza), Escudo de Aço (provoca e mitiga dano)
 // e Queda do Colosso (ultimate telegrafada, dano enorme e atordoamento). Servidor de teste sem .env (veja o README). Uso: SERVER=http://localhost:2999 node test/guerreiro.mjs
 import { Client } from "colyseus.js";
 
@@ -67,20 +67,22 @@ console.log("\n== Q Investida: avanço que machuca e ATORDOA; W Correntes: ENRA�
   W.room.leave();
 }
 
-console.log("\n== E Escudo Refletor: provoca, reduz o dano e DEVOLVE parte dele ==");
+
+console.log("\n== E Escudo de Aço: provoca e reduz o dano (SEM reflexo) ==");
+// O reflexo saiu da classe (antes "Escudo Refletor" devolvia 75% do golpe): devolver dano agora é o afixo
+// Espinhos, de item. Por isso este teste garante o contrário: o escudo NÃO reflete, mas continua reduzindo o dano.
 {
   const W = await spawn("warrior");
   const e = W.room.state.enemies.get("e2"); // (31,24) nível 1
   check("chegou perto do esqueleto", await arrive(W, 29.6, 23.8));
   W.act("skill3");
-  check("o escudo liga (buff e reflect sincronizados)", await until(() => W.me().buff && W.me().reflect, 800), `buff=${W.me().buff} reflect=${W.me().reflect}`);
-  check("o Escudo Refletor custa 35 de Fúria", W.me().mana >= 60 && W.me().mana <= 66, `mana ${W.me().mana}`);
-  check("o esqueleto bate no escudo e leva dano de volta (evento hit com refl)", await until(() => W.ev.hits.some((h) => h.k === "e" && h.refl && h.by === W.id), 6000), `refl=${W.ev.hits.filter((h) => h.refl).length}`);
-  const refl = W.ev.hits.find((h) => h.k === "e" && h.refl);
-  check("o dano devolvido é ~75% do golpe (14 → ~10)", !!refl && refl.dmg >= 8 && refl.dmg <= 13, `dmg ${refl?.dmg}`);
+  check("o escudo liga (buff sincronizado)", await until(() => W.me().buff, 800), `buff=${W.me().buff}`);
+  check("o Escudo de Aço custa 35 de Fúria", W.me().mana >= 60 && W.me().mana <= 66, `mana ${W.me().mana}`);
+  check("o esqueleto bate no escudo e o golpe chega ao Guerreiro", await until(() => W.ev.hits.some((h) => h.k === "p" && h.id === W.id), 6000));
+  check("o escudo não devolve dano: nenhum evento com refl (reflexo saiu da classe)", !W.ev.hits.some((h) => h.refl), `refl=${W.ev.hits.filter((h) => h.refl).length}`);
   const taken = W.ev.hits.find((h) => h.k === "p" && h.id === W.id);
-  check("e o golpe que o Guerreiro leva é reduzido à metade (14 → ~7)", !!taken && taken.dmg >= 6 && taken.dmg <= 8, `dmg ${taken?.dmg}`);
-  check("o escudo acaba depois de ~5 s", await until(() => !W.me().reflect && !W.me().buff, 6000));
+  check("o golpe que o Guerreiro leva é reduzido à metade (14 → ~7)", !!taken && taken.dmg >= 6 && taken.dmg <= 8, `dmg ${taken?.dmg}`);
+  check("o escudo acaba depois de ~5 s", await until(() => !W.me().buff, 6000));
   W.room.leave();
 }
 
