@@ -34,6 +34,7 @@ import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
 import { mountDiario, type DiarioUi } from "./diario";
 import { mountVariacoes, type VariacoesUi } from "./variacoes";
+import { mountTalentos, type TalentosUi } from "./talentos";
 import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
@@ -148,6 +149,7 @@ class WorldScene extends Phaser.Scene {
   private econ!: EconomyUi;
   private diario!: DiarioUi;
   private variacoes!: VariacoesUi;
+  private talentos!: TalentosUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -350,6 +352,7 @@ class WorldScene extends Phaser.Scene {
       acoes: [
         { label: "Diário", run: () => this.diario.toggle() },
         { label: "Variações", run: () => this.variacoes.toggle() },
+        { label: "Talentos", run: () => this.talentos.toggle() },
       ],
     });
     mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
@@ -361,6 +364,13 @@ class WorldScene extends Phaser.Scene {
       estado: () => { const me = this.me(); return me ? { variacoes: String(me.variacoes ?? "{}"), level: Number(me.level) || 1 } : null; },
       cidade: () => !!ZONES[this.zoneId]?.safe,
       escolher: (slot, id) => this.room?.send(Msg.Variacao, { slot, id }),
+    });
+    this.talentos = mountTalentos({ // talentos (C2.3): o servidor confere e grava; o painel só mostra e pede
+      cls: this.cls,
+      estado: () => { const me = this.me(); return me ? { talentos: String(me.talentos ?? "{}"), resets: Number(me.talentosResets) || 0, level: Number(me.level) || 1 } : null; },
+      cidade: () => !!ZONES[this.zoneId]?.safe,
+      subir: (id) => this.room?.send(Msg.Talento, { id }),
+      resetar: () => this.room?.send(Msg.TalentoResetar, {}),
     });
     this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.armTravelWatch(); this.room.send(Msg.Travel, { to }); });
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });

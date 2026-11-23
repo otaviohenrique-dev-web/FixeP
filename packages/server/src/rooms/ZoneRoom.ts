@@ -10,6 +10,7 @@ import {
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
   START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
   VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
+  limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 
@@ -288,6 +289,16 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
       if (pl) this.escolherVariacao(client.sessionId, pl, p);
+    });
+    // talentos (C2.3): gastar é livre; o servidor confere pontos, máximo e porta do ramo. Reset só na cidade (ver resetarTalentos).
+    this.onMessage(Msg.Talento, (client, p: { id?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) this.escolherTalento(client.sessionId, pl, p);
+    });
+    this.onMessage(Msg.TalentoResetar, (client) => {
+      if (!this.allow(client)) return;
+      this.resetarTalentos(client);
     });
     this.onMessage(Msg.QMode, (client, p: { mode?: unknown }) => {
       if (!this.allow(client)) return;
@@ -609,7 +620,8 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** vida máxima e dano dependem do nível E do equipamento */
   private refreshStats(p: Player, fill = false) {
-    p.gear = bonuses(p.inv, this.classOf(p).id);
+    // talentos (C2.3) somam aos bônus do equipamento: vida, dano, recurso, recarga, cura, redução e crítico
+    p.gear = aplicarTalentos(bonuses(p.inv, this.classOf(p).id), limparTalentos(p.talentos, this.classOf(p).id, p.level), this.classOf(p).id);
     const wId = p.inv.equip.weapon;
     p.weaponRarity = (wId ? ITEMS[wId]?.rarity : undefined) ?? "";
     p.maxHp = maxHpFor(this.classOf(p).id, p.level, p.gear.hp);
@@ -999,6 +1011,8 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.quests = auth.quests;
     pl.autoPotAt = clampAutoPot(auth.character.auto_pot_at); // a escolha da auto-poção volta com o personagem
     pl.variacoes = JSON.stringify(limparEscolhas(auth.character.variacoes, pl.cls as CharClass, pl.level)); // as variações voltam com o personagem (C2.2)
+    pl.talentos = JSON.stringify(limparTalentos(auth.character.talentos, pl.cls as CharClass, pl.level)); // os talentos também (C2.3)
+    pl.talentosResets = Math.max(0, Math.floor(Number(auth.character.talentos_resets) || 0));
     if (econTest() && !auth.inventory.slots.some(Boolean) && auth.inventory.iron === 0) { // só nos testes (ECON_TEST=1): kit inicial para exercitar loja, fusão e troca sem jogar horas
       const i = auth.inventory;
       i.iron = 50000; i.obols = 2;
@@ -1424,6 +1438,44 @@ export class ZoneRoom extends Room<ZoneState> {
     if (pl.charId) this.repo.setVariacoes(pl.charId, json).catch((err) => console.error("[db] falha ao gravar as variações:", (err as Error).message));
     const nome = novo ? variacaoPorId(novo)?.nome ?? novo : "base";
     this.notifyOk(id, `${slot === "ultimate" ? "Final" : slot === "skill1" ? "Q" : slot === "skill2" ? "W" : "E"}: ${nome}`);
+  }
+
+  /** Gasta 1 ponto num talento (C2.3). A validação (pontos, máximo, porta do ramo) é a do shared; o servidor grava e manda o estado. */
+  private escolherTalento(sid: string, pl: Player, p: { id?: unknown }) {
+    if (pl.dead) return;
+    const id = typeof p?.id === "string" ? p.id : "";
+    const cls = pl.cls as CharClass;
+    const esc = limparTalentos(pl.talentos, cls, pl.level);
+    const r = podeSubirTalento(esc, cls, pl.level, id);
+    if (!r.ok) return this.notify(sid, r.error);
+    const novo = subirTalento(esc, id);
+    pl.talentos = JSON.stringify(novo);
+    this.gravarTalentos(pl);
+    this.refreshStats(pl);
+    const t = talentoPorId(id);
+    this.notifyOk(sid, `${t?.nome ?? id}: rank ${novo[id]}/${t?.max ?? novo[id]}`);
+  }
+
+  /** Reset dos talentos (C2.3): só na cidade e pagando tostões (50 × (resets + 1)). Usa a operação de economia (mochila e tostões juntos). */
+  private resetarTalentos(client: Client) {
+    this.econOp(client, null, null, (p) => {
+      if (!this.zone.safe) return { ok: false, error: "Os talentos só podem ser resetados na cidade (Brasalume)." };
+      if (p.talentos === "{}") return { ok: false, error: "Nenhum talento para resetar." };
+      const custo = resetCusto(p.talentosResets);
+      if (p.inv.iron < custo) return { ok: false, error: `Tostões insuficientes (o reset custa ${custo}).` };
+      p.inv.iron -= custo;
+      p.talentos = "{}";
+      p.talentosResets++;
+      this.gravarTalentos(p);
+      return { ok: true, msg: `Talentos resetados (−${custo} tostões).` };
+    });
+  }
+
+  /** Grava os talentos e o número de resets em fila (a última gravação é sempre a mais nova). */
+  private gravarTalentos(p: Player) {
+    if (!p.charId) return;
+    const charId = p.charId, json = p.talentos, resets = p.talentosResets;
+    p.saveChain = p.saveChain.then(() => this.repo.setTalentos(charId, json, resets)).catch((err) => console.error("[db] falha ao gravar os talentos:", (err as Error).message));
   }
 
   private queueAct(p: Player, a: ActionId, ax: number, ay: number) { p.queued = { a, ax, ay, until: this.t + 0.5 }; }
