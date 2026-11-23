@@ -1,5 +1,5 @@
 import {
-  ITEMS, ENEMY_KINDS, COIN_IRON, type NpcDef, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent, type Objetivo,
+  ITEMS, ENEMY_KINDS, COIN_IRON, ZONE_NPCS, nomeNpcPorId, type NpcDef, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent, type Objetivo,
 } from "@frixep/shared";
 
 /**
@@ -67,7 +67,7 @@ function linhaObjetivo(o: Objetivo, valor: number): string {
   if (o.tipo === "coletar") return `Ter ${ITEMS[o.itemId]?.name ?? o.itemId}: ${Math.min(valor, o.qtd)}/${o.qtd}`;
   if (o.tipo === "usar") return `Usar a habilidade ${SLOT_HABILIDADE[o.acao]}: ${Math.min(valor, o.qtd)}/${o.qtd}`;
   if (o.tipo === "equipar") return `Equipar ${SLOT_NOME[o.slot]}: ${valor >= 1 ? "feito" : "falta"}`;
-  if (o.tipo === "falar") return `Conversar com ${o.npc}: ${valor >= 1 ? "feito" : "falta"}`;
+  if (o.tipo === "falar") return `Conversar com ${nomeNpcPorId(o.npc, Object.values(ZONE_NPCS).flat())}: ${valor >= 1 ? "feito" : "falta"}`;
   return `Chegar ao ponto (zona ${o.zona}): ${valor >= 1 ? "feito" : "falta"}`;
 }
 

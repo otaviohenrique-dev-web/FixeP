@@ -202,6 +202,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   function openNpc(n: NpcDef) {
     if (tradeOpen) return;
     opts.onNpc?.(n);
+    opts.send("quest_falar", { npc: n.id }); // objetivos "falar": o servidor confere a distância
     if (n.kind === "auctioneer") { closeNpc(); market.open(n); return; }
     if (quest.open(n)) return;
     openShop(n);
