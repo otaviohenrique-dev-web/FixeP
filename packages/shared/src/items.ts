@@ -158,6 +158,17 @@ export function migrateItemId(id: string, cls: CharClass): string {
 // ------------------------------------------------------------ inventário
 export const INV_SLOTS = 20;
 export const POTION_COOLDOWN_S = 6;
+/** auto-poção: a partir de que % de vida a poção é bebida sozinha (0 = desligada). Passo 5, máximo 90. */
+export const AUTO_POT_STEP = 5;
+export const AUTO_POT_MAX = 90;
+/** limpa o valor vindo do cliente ou do banco: inteiro, múltiplo do passo, entre 0 e o máximo */
+export function clampAutoPot(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(AUTO_POT_MAX, Math.max(0, Math.round(n / AUTO_POT_STEP) * AUTO_POT_STEP));
+}
+/** a auto-poção dispara? (vida em `at`% do máximo ou abaixo; `at` 0 = desligada) */
+export const autoPotDispara = (hp: number, maxHp: number, at: number): boolean => at > 0 && maxHp > 0 && hp * 100 <= maxHp * at;
 
 export interface InvStack { id: string; qty: number }
 export interface InventorySnapshot {

@@ -79,10 +79,6 @@ const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number
 const tileHash = (x: number, y: number) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
 /** densidade de pixels do canvas: nítido em telas retina, mas limitado (3) para não pesar em celular fraco */
 const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-/** auto-poção: limite de vida (fração do máximo) para beber sozinho, e a chave da escolha salva */
-const AUTO_POT_AT = 0.35;
-const AUTO_POT_KEY = "frixep_autopot";
-const readAutoPot = () => { try { return localStorage.getItem(AUTO_POT_KEY) === "on"; } catch { return false; } };
 const MODO = modoQualidade(); // botão "Gráficos" do menu (teste A/B de FPS)
 const SEM_DESENHOS = MODO === "sem-desenhos"; // Teste A
 const SEM_SPRITES = MODO === "sem-sprites"; // Teste B
@@ -172,10 +168,7 @@ class WorldScene extends Phaser.Scene {
   private leaving = false; // saída voluntária (menu/sair): não tenta reconectar
   private stats!: ReturnType<typeof mountStats>;
   private chatUi!: ChatUi;
-  private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "" };
-  /** auto-poção: bebe sozinho com a vida abaixo de AUTO_POT_AT (escolha salva neste navegador) */
-  private autoPot = readAutoPot();
-  private autoPotNext = 0; // próximo instante (ms) em que o auto pode beber, para não mandar várias de uma vez
+  private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "", ap: -1 as number };
   private travelWatch = 0;
   private gateBlock = false; // a travessia foi recusada (em combate): não mostra a tela de load de novo enquanto o jogador continuar em cima do portão
   private enterSeq = 0;
@@ -290,7 +283,7 @@ class WorldScene extends Phaser.Scene {
     T.mark("mundo");
     // 3) câmera exatamente sobre o personagem (sem deslizar), no zoom certo, antes de revelar
     this.centerCameraOnMe();
-    this.hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "" };
+    this.hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "", ap: -1 };
     await new Promise<void>((r) => { requestAnimationFrame(() => r()); setTimeout(r, 120); }); // 1 quadro já desenhado com a câmera no lugar (o timeout cobre aba em segundo plano)
     this.cameras.main.setLerp(0.1, 0.1); // a partir daqui o seguimento volta a ser suave
     this.zoneBanner(zone.name);
@@ -335,8 +328,7 @@ class WorldScene extends Phaser.Scene {
   /** interface do DOM (HUD, mochila, loja, baú, chat, grupo, FPS) e entradas: montada UMA vez; as salas só trocam os receptores */
   private mountUi() {
     this.lowHp = mountLowHp();
-    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), aim: { start: (a, x, y) => this.aimStart(a, x, y), move: (x, y) => this.aimMove(x, y), end: () => this.aimEnd() }, onNextTarget: () => this.cycleTarget(), targetMode: this.targetMode, onTargetMode: (m) => this.setTargetMode(m), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (on) => this.setAutoPot(on) });
-    this.hud.setAutoPotion(this.autoPot);
+    this.hud = mountHud({ cls: this.cls, name: this.me()?.name, onAction: (a) => this.act(a), aim: { start: (a, x, y) => this.aimStart(a, x, y), move: (x, y) => this.aimMove(x, y), end: () => this.aimEnd() }, onNextTarget: () => this.cycleTarget(), targetMode: this.targetMode, onTargetMode: (m) => this.setTargetMode(m), onPotion: () => this.drinkPotion(), onPvp: (on) => this.room.send(Msg.Pvp, { on }), onQMode: (m) => this.setQMode(m), onAutoPotion: (at) => this.setAutoPot(at) });
     this.joy = mountJoystick();
     this.applyTouch();
     this.paintPortrait();
@@ -664,11 +656,11 @@ class WorldScene extends Phaser.Scene {
     this.armTravelWatch(); // o servidor não confirmou: libera
   }
 
-  /** liga ou desliga a auto-poção e guarda a escolha */
-  private setAutoPot(on: boolean) {
-    this.autoPot = on;
-    try { localStorage.setItem(AUTO_POT_KEY, on ? "on" : "off"); } catch { /* sem armazenamento: vale só nesta sessão */ }
-    this.inv.toast(on ? "Auto-poção ligada" : "Auto-poção desligada", on ? "#7dff9a" : "#9fb3c8");
+  /** define o limiar da auto-poção (0 = desligada): o servidor limita, grava e bebe; o cliente só pede e mostra o valor que vier do servidor */
+  private setAutoPot(at: number) {
+    if (!this.room) return;
+    this.room.send(Msg.AutoPot, { at });
+    this.inv.toast(at > 0 ? `Auto-poção: abaixo de ${at}% de vida` : "Auto-poção desligada", at > 0 ? "#7dff9a" : "#9fb3c8");
   }
 
   /** Avisos recusados do servidor que viram dica (C1.6): mochila cheia e falta de recurso (Fúria, Foco, Mana). */
@@ -1577,10 +1569,6 @@ class WorldScene extends Phaser.Scene {
     timed("chao", () => this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? "")));
     if (!SEM_DESENHOS) timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
     const meNow = this.me();
-    if (this.autoPot && meNow && !meNow.dead && meNow.hp / Math.max(1, meNow.maxHp) <= AUTO_POT_AT && time >= this.autoPotNext) {
-      this.autoPotNext = time + 400;
-      if (this.inv.firstPotionSlot() >= 0) this.drinkPotion(); // sem poção na bolsa, não faz nada (sem aviso repetido)
-    }
     if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
       timed("npcs", () => this.npcs.update(time, meNow.x, meNow.y));
       const near = this.npcs.inReach(meNow.x, meNow.y);
@@ -1727,6 +1715,8 @@ class WorldScene extends Phaser.Scene {
       if (H.mana !== mn) { H.mana = mn; this.hud.setMana(me.mana, me.maxMana); }
       const q = Number(me.qMode) === 1 ? 1 : 0;
       if (H.q !== q) { H.q = q; this.hud.setQMode(q); }
+      const ap = Number(me.autoPotAt) || 0; // auto-poção: o valor vem do servidor (sincroniza ao reconectar)
+      if (H.ap !== ap) { H.ap = ap; this.hud.setAutoPotion(ap); }
       const bf = `${!!me.buff}|${!!me.ember}`;
       if (H.buff !== bf) { H.buff = bf; this.hud.setBuff(!!me.buff || !!me.ember, me.buff ? "Escudo ativo" : "Brasa ativa"); }
       const hpk = `${me.hp}|${me.maxHp}`;

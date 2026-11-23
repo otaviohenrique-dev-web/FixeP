@@ -4,7 +4,7 @@ import {
   TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, TRADE_CHAT_MAX_LEN, ZONES, ZONE_IDS, WORLD_GATE, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   PLAYER_RADIUS, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, BOSS_CC_RESIST, classAction, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
-  LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, defenseMult, HEAL_BLOCK_AFTER_HIT_S, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex,
+  LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, defenseMult, HEAL_BLOCK_AFTER_HIT_S, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex, clampAutoPot, autoPotDispara,
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
@@ -271,6 +271,16 @@ export class ZoneRoom extends Room<ZoneState> {
       this.requestPvp(client.sessionId, pl, p.on);
     });
     // Clérigo: escolhe o Q (0 = cura em área, 1 = cura focada). Só fora de combate; o servidor decide.
+    // auto-poção: o limiar (0..90, passo 5) é limitado aqui e gravado; 0 desliga. O cliente só pede.
+    this.onMessage(Msg.AutoPot, (client, p: { at?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (!pl || typeof p?.at !== "number") return;
+      const at = clampAutoPot(p.at);
+      if (pl.autoPotAt === at) return;
+      pl.autoPotAt = at;
+      if (pl.charId) this.repo.setAutoPot(pl.charId, at).catch((e) => console.error("[db] falha ao gravar a auto-poção:", (e as Error).message));
+    });
     this.onMessage(Msg.QMode, (client, p: { mode?: unknown }) => {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
@@ -856,6 +866,18 @@ export class ZoneRoom extends Room<ZoneState> {
     return { ok: true };
   }
 
+  /** auto-poção: com a vida em (ou abaixo de) autoPotAt % e uma poção na bolsa, bebe uma sozinha. Segue as mesmas regras do botão (recarga, vida cheia). */
+  private autoPotTick(id: string, p: Player) {
+    if (p.dead || p.traveling || !autoPotDispara(p.hp, p.maxHp, p.autoPotAt)) return; // acima do limiar, ou desligada
+    if (this.t < p.potionCdUntil) return; // recarga das poções
+    const slot = p.inv.slots.findIndex((s) => s && ITEMS[s.id]?.kind === "potion");
+    if (slot < 0) return; // sem poção: não faz nada (sem aviso repetido)
+    if (!this.usePotion(p, slot).ok) return;
+    p.invDirty = true;
+    this.refreshStats(p);
+    this.sendInv(id, p);
+  }
+
   // ------------------------------------------------------------------ itens no chão
   private canPickup(id: string, p: Player, g: GroundItem): boolean {
     return this.t >= g.unlockAt || g.owner === id || (!!g.party && g.party === p.party);
@@ -973,6 +995,7 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.xp = auth.character.xp;
     pl.inv = auth.inventory;
     pl.quests = auth.quests;
+    pl.autoPotAt = clampAutoPot(auth.character.auto_pot_at); // a escolha da auto-poção volta com o personagem
     if (econTest() && !auth.inventory.slots.some(Boolean) && auth.inventory.iron === 0) { // só nos testes (ECON_TEST=1): kit inicial para exercitar loja, fusão e troca sem jogar horas
       const i = auth.inventory;
       i.iron = 50000; i.obols = 2;
@@ -1254,6 +1277,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.state.players.forEach((p, id) => {
       this.updatePlayer(id, p, dt);
       this.updatePvp(id, p);
+      this.autoPotTick(id, p);
       if (!p.dead && !p.traveling) { // pisou num portal: atravessa (sem apertar nada)
         const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= q.r);
         if (portal && portal.to === WORLD_GATE) { // portão da cidade: abre o mapa-mundo uma vez por entrada no raio
