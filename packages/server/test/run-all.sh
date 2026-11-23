@@ -96,7 +96,7 @@ run_case 2992 "ECON_TEST=1 LOOT_TEST=1 MARKET_TTL_S=4" test/economy.mjs ""
 run_case 2992 "ECON_TEST=1 LOOT_TEST=1 MARKET_TTL_S=4" test/market.mjs ""
 run_case 2992 "ECON_TEST=1" test/cidade.mjs ""
 # Classes e inventário com loot garantido.
-for file in test/inventory.mjs test/classes.mjs test/mago.mjs test/guerreiro.mjs test/curandeiro.mjs; do
+for file in test/inventory.mjs test/classes.mjs test/mago.mjs test/guerreiro.mjs test/curandeiro.mjs test/rebalance.mjs; do
   run_case 2993 "LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" "$file" ""
 done
 # Itens no chão e chefe de 1 de vida.

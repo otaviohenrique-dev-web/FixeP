@@ -30,6 +30,7 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | Card | Situação | Observação |
 |---|---|---|
 | C2.1 Habilidades como dados | ✅ concluído (2026-11-22) | Cada habilidade é uma lista de efeitos tipados (dano, cura, atordoar, enraizar, puxar, quebra de armadura, lentidão, aceleração do ataque) em `CLASS_SPECS` (`packages/shared/src/index.ts`). `resolveAction(classe, slot, modificadores)` devolve a ação efetiva; `CLASS_DEFS` e `classAction` (servidor e cliente) usam essa função. Lista de modificadores vazia hoje (C2.2 e C2.3 plugam aqui). Sem mudança de comportamento: `test/acoes.unit.ts` compara as 25 ações com os valores anteriores. Sem pendência nova. |
+| C2.R Rebalance de Guerreiro, Clérigo e Mago (design do dono) | ✅ implementado (2026-11-22), aguardando CI | Dados em `CLASS_SPECS`; efeitos novos: `selfHeal`, `hitHeal`, `mana`, `guard` (aliados -% de dano), `stacks` (acúmulos da Cura Focada, até 3, +10% cada, 8 s), `burn` (queimadura: % do dano por s; renova, não acumula; chefes resistem) e `cleanse`. Campos no schema: `Player.healStacks/healStackS`, `Enemy.burning`. Provocar (Escudo Refletor) já existia e foi reforçado (raio 7, 4 s). Tabela antes/depois no PR. Testes: `test/rebalance.mjs` (novo), `balance.unit.ts` e `acoes.unit.ts` (números atualizados com motivo). |
 
 ## Arte
 

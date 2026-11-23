@@ -33,7 +33,7 @@ import { dicaValida, dicasValidas } from "@frixep/shared";
 const DEFS = carregarQuests(questsDoServidor());
 import { deposit, withdraw, moveInVault, moveCoins, vaultSnapshot, type Vault } from "../game/vault.js";
 
-interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string>; shredPct?: number; shredS?: number }
+interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string>; shredPct?: number; shredS?: number; burnDmg?: number; burnS?: number }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number; slowPct?: number; slowS?: number }
 interface Trade { a: string; b: string; offer: Record<string, TradeOffer>; ready: Record<string, boolean>; rev: number; seq: Record<string, number> }
 interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory; quests: QuestMap }
@@ -1303,6 +1303,8 @@ export class ZoneRoom extends Room<ZoneState> {
     p.reflect = this.t < p.reflectUntil;
     p.stunned = this.t < p.stunUntil;
     p.rooted = this.t < p.rootUntil;
+    if (this.t >= p.healStackUntil) { p.healStacks = 0; p.healStackPct = 0; } // acúmulos de Cura Focada expiraram
+    p.healStackS = this.t < p.healStackUntil ? Math.round((p.healStackUntil - this.t) * 10) / 10 : 0; // para a UI mostrar o tempo
     if (p.hp < p.maxHp && this.t - p.combatAt >= PLAYER_REGEN_DELAY_S && !this.healBlocked(id, p)) { // fora de combate: recupera aos poucos (o servidor decide)
       p.regenAcc += p.maxHp * PLAYER_REGEN_PCT_S * dt;
       const whole = Math.floor(p.regenAcc);
@@ -1421,7 +1423,8 @@ export class ZoneRoom extends Room<ZoneState> {
       case "melee":
       case "ring": {
         const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
-        this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + enemyKind(e.kind).radius);
+        const n = this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + enemyKind(e.kind).radius);
+        if (n > 0 && def.hitHeal) this.healPlayer(id, p, Math.round(def.hitHeal * power)); // golpe que acerta cura um pouco (Guerreiro)
         this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, cx, cy) <= (def.radius ?? 1) + PLAYER_RADIUS, def);
         break;
       }
@@ -1462,7 +1465,7 @@ export class ZoneRoom extends Room<ZoneState> {
         const sx = p.x + dx * 0.6, sy = p.y + dy * 0.6;
         const look = def.kind === "blast" ? "fire" : def.pierce ? "pierce" : p.cls === "mage" ? "arcane" : p.cls === "cleric" ? "bolt" : "arrow";
         const blast = def.kind === "blast" ? def.blast ?? 2 : 0;
-        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, blast, hit: new Set(), shredPct: def.shredPct, shredS: def.shredS });
+        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, blast, hit: new Set(), shredPct: def.shredPct, shredS: def.shredS, burnDmg: def.burnPct ? Math.max(1, Math.round((dmg * def.burnPct) / 100)) : undefined, burnS: def.burnS });
         this.broadcast(Evt.Proj, { id: pid, x: sx, y: sy, dir: p.face, speed: def.speed ?? 12, range: def.range ?? 8, look, blast: blast || undefined });
         break;
       }
@@ -1489,6 +1492,8 @@ export class ZoneRoom extends Room<ZoneState> {
             const hit = dist(e.x, e.y, pos.x, pos.y) <= r + enemyKind(e.kind).radius;
             if (hit && def.stunS) this.stunEnemy(e, def.stunS);
             if (hit && def.rootS) this.rootEnemy(e, def.rootS);
+            if (hit && def.slowPct) this.slowEnemy(e, def.slowPct, def.slowS ?? 3);
+            if (hit && def.burnPct) this.burnEnemy(e, id, Math.max(1, Math.round((dmg * def.burnPct) / 100)), def.burnS ?? 0);
             if (hit) hits++;
             return hit;
           });
@@ -1521,10 +1526,19 @@ export class ZoneRoom extends Room<ZoneState> {
         break;
       }
       case "healAoe": {
-        const amount = Math.round((def.heal ?? 0) * power);
+        const base = (def.heal ?? 0) * power;
+        let healed = 0;
         this.state.players.forEach((o, oid) => {
-          if (!o.dead && !this.hostile(id, p, oid, o) && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) this.healPlayer(oid, o, amount);
+          if (o.dead || this.hostile(id, p, oid, o) || dist(o.x, o.y, p.x, p.y) > (def.radius ?? 0)) return;
+          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o)), id);
+          if (def.guardPct) this.grantGuard(o, def.guardPct, def.guardS ?? 0);
+          if (def.cleanse) { o.stunUntil = 0; o.rootUntil = 0; } // purifica: aliado curado sai do atordoamento e das raízes
+          healed++;
         });
+        if (healed > 0 && def.manaGain) { // curar devolve mana ao Clérigo
+          p.manaF = Math.min(p.maxMana, p.manaF + def.manaGain);
+          p.mana = Math.floor(p.manaF);
+        }
         break;
       }
       case "healFocus": { // um só alvo: o jogador vivo mais perto da mira (até 2,2 tiles dela) dentro do alcance; sem ninguém ali, cura a si mesmo
@@ -1534,7 +1548,9 @@ export class ZoneRoom extends Room<ZoneState> {
           const d = dist(o.x, o.y, ax, ay);
           if (d <= 2.2 && d < bestD) { bestD = d; target = [oid, o]; }
         });
-        this.healPlayer(target[0], target[1], Math.round((def.heal ?? 0) * power), id);
+        const [tid, t] = target;
+        this.healPlayer(tid, t, Math.round((def.heal ?? 0) * power * this.healStackMult(t)), id); // acúmulos atuais valem para esta cura
+        if (def.stackMax) this.addHealStack(t, def.stackMax, def.stackPct ?? 0, def.stackS ?? 0); // e este uso soma mais um
         break;
       }
       case "emberBuff": {
@@ -1558,6 +1574,7 @@ export class ZoneRoom extends Room<ZoneState> {
         break;
       }
     }
+    if (def.selfHeal) this.healPlayer(id, p, Math.round(def.selfHeal * power)); // cura do próprio jogador ao usar (Guerreiro)
   }
 
   /** Bloqueia só a REGENERAÇÃO AUTOMÁTICA em repouso: apanhou há pouco, ou algum inimigo vivo está focando este jogador. Poções, habilidades de cura e aliados não passam por aqui. */
@@ -1644,7 +1661,7 @@ export class ZoneRoom extends Room<ZoneState> {
       for (const [, eid, e] of cands) {
         pr.hit.add(eid);
         if (e instanceof Player) this.damagePvp(pr.owner, eid, e, pr.dmg);
-        else { this.damageEnemy(pr.owner, eid, e, pr.dmg); if (pr.shredPct) this.shredEnemy(e, pr.shredPct, pr.shredS ?? 5); }
+        else { this.damageEnemy(pr.owner, eid, e, pr.dmg); if (pr.shredPct) this.shredEnemy(e, pr.shredPct, pr.shredS ?? 5); if (pr.burnDmg) this.burnEnemy(e, pr.owner, pr.burnDmg, pr.burnS ?? 0); }
         if (!pr.pierce) { ended = true; break; } // flecha comum para no primeiro alvo
       }
       pr.x = nx;
@@ -1660,7 +1677,11 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** explosão de um projétil "blast": fere inimigos e (em PvP) jogadores numa área ao redor do ponto final */
   private explodeBlast(pr: Proj) {
-    this.hitEnemies(pr.owner, pr.dmg, (e) => dist(e.x, e.y, pr.x, pr.y) <= pr.blast + enemyKind(e.kind).radius);
+    this.hitEnemies(pr.owner, pr.dmg, (e) => {
+      const hit = dist(e.x, e.y, pr.x, pr.y) <= pr.blast + enemyKind(e.kind).radius;
+      if (hit && pr.burnDmg) this.burnEnemy(e, pr.owner, pr.burnDmg, pr.burnS ?? 0);
+      return hit;
+    });
     this.hitPlayers(pr.owner, pr.dmg, (o) => dist(o.x, o.y, pr.x, pr.y) <= pr.blast + PLAYER_RADIUS);
   }
 
@@ -1785,11 +1806,55 @@ export class ZoneRoom extends Room<ZoneState> {
     this.broadcast(Evt.Chest, { x: e.x, y: e.y, rarity: best, boss: name });
   }
 
-  private hitEnemies(by: string, baseDmg: number, inArea: (e: Enemy) => boolean) {
+  /** Acerta os inimigos da área. Devolve quantos foram atingidos (o golpe que acerta pode curar o dono: hitHeal). */
+  private hitEnemies(by: string, baseDmg: number, inArea: (e: Enemy, eid: string) => boolean): number {
+    let n = 0;
     this.state.enemies.forEach((e, eid) => {
-      if (e.st === "dead" || !inArea(e)) return;
+      if (e.st === "dead" || !inArea(e, eid)) return;
+      n++;
       this.damageEnemy(by, eid, e, baseDmg);
     });
+    return n;
+  }
+
+  /** Queimadura (Mago): o inimigo recebe `dmg` por segundo por `s` segundos (chefes resistem como nos outros CCs). Renova a duração; não acumula: só vale o maior dano por segundo. */
+  private burnEnemy(e: Enemy, by: string, dmg: number, s: number) {
+    if (e.st === "dead" || s <= 0) return;
+    const boss = !!enemyKind(e.kind).boss;
+    const active = this.t < e.burnUntil;
+    e.burnDmg = Math.max(active ? e.burnDmg : 0, dmg);
+    e.burnBy = by;
+    e.burnUntil = this.t + s * (boss ? BOSS_CC_RESIST : 1);
+    if (!active) e.nextBurn = this.t + 1; // o primeiro tick vem 1 s depois de acender
+  }
+
+  /** Dano da queimadura: um tick por segundo enquanto houver. Conta como dano normal (XP, loot, regeneração e crítico). */
+  private tickBurn(eid: string, e: Enemy) {
+    if (this.t < e.burnUntil && this.t >= e.nextBurn) {
+      e.nextBurn = this.t + 1;
+      this.damageEnemy(e.burnBy, eid, e, e.burnDmg);
+    }
+    e.burning = this.t < e.burnUntil && e.st !== "dead";
+  }
+
+  /** Acúmulos de Cura Focada: cada uso no aliado soma 1 (até max), e cada acúmulo aumenta as curas do Clérigo nele. Some sozinho depois de `s` sem novo uso. */
+  private healStackMult(o: Player): number {
+    if (this.t >= o.healStackUntil) { o.healStacks = 0; o.healStackPct = 0; }
+    return 1 + (o.healStacks * o.healStackPct) / 100;
+  }
+
+  private addHealStack(o: Player, max: number, pct: number, s: number) {
+    if (this.t >= o.healStackUntil) o.healStacks = 0;
+    o.healStacks = Math.min(max, o.healStacks + 1);
+    o.healStackPct = pct;
+    o.healStackUntil = this.t + s;
+  }
+
+  /** Escudo leve de cura (Cura em Área / Luz Divina): -pct% de dano por s. Usa o maior valor ativo (não soma com o Refletor do Guerreiro). */
+  private grantGuard(o: Player, pct: number, s: number) {
+    const active = this.t < o.buffUntil;
+    o.buffRed = Math.max(active ? o.buffRed : 0, pct / 100);
+    o.buffUntil = Math.max(active ? o.buffUntil : 0, this.t + s);
   }
 
   // ------------------------------------------------------------------ IA do esqueleto
@@ -1862,6 +1927,8 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private updateEnemy(_id: string, e: Enemy, dt: number) {
     if (e.st === "dead") {
+      e.burning = false; // morto: a queimadura apaga (ela não renova depois da morte)
+      e.burnUntil = 0;
       if (this.t >= e.respawnAt) {
         e.hp = e.maxHp;
         e.x = e.sx;
@@ -1880,6 +1947,8 @@ export class ZoneRoom extends Room<ZoneState> {
     e.rooted = this.t < e.rootUntil;
     e.shredded = this.t < e.shredUntil;
     e.slowed = this.t < e.slowUntil;
+    this.tickBurn(_id, e); // queimadura corre mesmo atordoado
+    if (e.hp <= 0) return; // a queimadura pode ter matado o inimigo neste tick (morte zera a vida)
     if (e.stunned) return; // atordoado: congelado (depois segue o estado em que estava)
 
     if (this.t < e.pullUntil) { // puxado para o centro: não age até terminar (depois fica atordoado em "recover")

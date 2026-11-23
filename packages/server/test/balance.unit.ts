@@ -26,11 +26,15 @@ for (const c of ["mage", "archer"] as const) {
   const n = CLASS_DEFS[c].name;
   check(`${n}: DPS de alvo único caiu pelo menos 12%`, now[c].single <= BEFORE[c].single * 0.88, `${BEFORE[c].single} → ${now[c].single.toFixed(1)}`);
   check(`${n}: DPS em área caiu pelo menos 20%`, now[c].aoe <= BEFORE[c].aoe * 0.8, `${BEFORE[c].aoe} → ${now[c].aoe.toFixed(1)}`);
-  check(`${n}: alvo único não passa o do Guerreiro (tanque)`, now[c].single <= now.warrior.single, `${now[c].single.toFixed(1)} vs ${now.warrior.single.toFixed(1)}`);
+  // Rebalance de design (Guerreiro = tanque, com R de 120 para 40): o Guerreiro agora tem DPS único menor, então
+  // o limite do Mago/Arqueiro passa de "não passa do Guerreiro" para "no máximo 1,15x do Guerreiro".
+  check(`${n}: alvo único no máximo 1,15x o do Guerreiro (tanque)`, now[c].single <= now.warrior.single * 1.15, `${now[c].single.toFixed(1)} vs ${now.warrior.single.toFixed(1)}`);
   check(`${n}: ainda é classe de dano (≥ 70% do alvo único do Guerreiro e ≥ 1,5x o Clérigo em área)`, now[c].single >= now.warrior.single * 0.7 && now[c].aoe >= now.cleric.aoe * 1.5, `área ${now[c].aoe.toFixed(1)} vs clérigo ${now.cleric.aoe.toFixed(1)}`);
   check(`${n}: nenhuma habilidade de dano passa de 150 (antes o Meteoro do Mago tinha 230)`, Object.values(CLASS_DEFS[c].actions).every((a) => (a.dmg ?? 0) <= 150));
 }
-check("Clérigo e Guerreiro seguem na mesma faixa (Clérigo: suporte, poucos pontos de dano)", now.cleric.single < now.warrior.single && Math.abs(now.warrior.single - BEFORE.warrior.single) <= 3, `guerreiro ${BEFORE.warrior.single} → ${now.warrior.single.toFixed(1)}`);
+// Guerreiro (tanque): DPS cai com o rebalance (R de 120 para 40, golpes 12 → 10) e continua na faixa de dano baixo/médio.
+check("Guerreiro: DPS de alvo único cai e fica na faixa de tanque (15 a 22)", now.warrior.single < BEFORE.warrior.single && now.warrior.single >= 15 && now.warrior.single <= 22, `guerreiro ${BEFORE.warrior.single} → ${now.warrior.single.toFixed(1)}`);
+check("Clérigo segue como suporte: menos dano que o Guerreiro", now.cleric.single < now.warrior.single, `clérigo ${now.cleric.single.toFixed(1)} vs guerreiro ${now.warrior.single.toFixed(1)}`);
 
 console.log("\n== Armas e itens que dão dano percentual ==");
 const rar = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
@@ -50,14 +54,26 @@ check("segue sendo o tanque: mais vida que as outras classes de dano e Fúria 10
 check("Q Investida: avanço que ATORDOA", W.actions.skill1.kind === "dashHit" && (W.actions.skill1.stunS ?? 0) > 0);
 check("W Correntes: área que ENRAÍZA, com visual 'chains'", W.actions.skill2.kind === "rain" && (W.actions.skill2.rootS ?? 0) > 0 && W.actions.skill2.fx === "chains");
 check("E Escudo Refletor: PROVOCA, reduz dano e REFLETE", W.actions.skill3.kind === "reflectBuff" && (W.actions.skill3.reflect ?? 0) > 0 && (W.actions.skill3.reduction ?? 0) > 0 && (W.actions.skill3.tauntRadius ?? 0) > 0);
-check("R Queda do Colosso: do alto (fx colossus), grande e atordoa", W.actions.ultimate.fx === "colossus" && W.actions.ultimate.radius! >= 4 && (W.actions.ultimate.stunS ?? 0) > 0 && W.actions.ultimate.dmg! >= 5 * W.actions.attack.dmg!);
+check("R Queda do Colosso: do alto (fx colossus), grande e atordoa", W.actions.ultimate.fx === "colossus" && W.actions.ultimate.radius! >= 4 && (W.actions.ultimate.stunS ?? 0) > 0 && W.actions.ultimate.dmg! >= 3 * W.actions.attack.dmg! && W.actions.ultimate.dmg! <= 4 * W.actions.attack.dmg!); // R 120 → 40 (≈ 4x o golpe de 10): dano médio, controle é o papel
 check("a ultimate é a mais forte do Guerreiro e tem telégrafo (atraso ≥ 1 s)", W.actions.ultimate.dmg! > Math.max(W.actions.skill1.dmg!, W.actions.skill2.dmg!) && (W.actions.ultimate.delayS ?? 0) >= 1);
 check("os chefes resistem ao controle (duração × " + BOSS_CC_RESIST + ")", BOSS_CC_RESIST > 0 && BOSS_CC_RESIST < 1);
+check("Guerreiro sobrevive: golpe e Investida curam um pouco; Correntes deixa lento além de enraizar", (W.actions.attack.hitHeal ?? 0) > 0 && (W.actions.skill1.selfHeal ?? 0) > 0 && (W.actions.skill2.slowPct ?? 0) >= 20 && (W.actions.skill2.rootS ?? 0) > 0);
+check("Guerreiro: nenhuma habilidade passa de 40 de dano (tanque: a R é a maior e fica nesse teto)", Object.values(W.actions).every((a) => (a.dmg ?? 0) <= 40));
+
+console.log("\n== Clérigo: acúmulos, mana e apoio ==");
+const K = CLASS_DEFS.cleric.actions;
+check("Cura em Área devolve mana, dá escudo leve e a Luz Divina purifica e dá escudo maior", K.skill1.manaGain! > 0 && (K.skill1.guardPct ?? 0) > 0 && K.ultimate.cleanse === true && (K.ultimate.guardPct ?? 0) > (K.skill1.guardPct ?? 0));
+
+console.log("\n== Mago: queimadura e controle ==");
+const M = CLASS_DEFS.mage.actions;
+check("Fogo (Q, E) e Meteoro (R) queimam: burnPct > 0 com duração; Relâmpago (W) atordoa por pouco", (M.skill1.burnPct ?? 0) > 0 && (M.skill3.burnPct ?? 0) > 0 && (M.ultimate.burnPct ?? 0) > 0 && (M.skill2.stunS ?? 0) > 0 && (M.skill2.stunS ?? 0) < 1.5);
+check("Meteoro (R) passou a ter dano médio, abaixo de 60 (antes 140)", M.ultimate.dmg! <= 60 && M.ultimate.dmg! >= 40);
 
 console.log("\n== Clérigo: dois Q ==");
 const C = CLASS_DEFS.cleric;
-check("Q padrão: cura em área, pouca", C.actions.skill1.kind === "healAoe" && C.actions.skill1.heal! <= 20);
-check("Q alternativo: cura focada, mais forte (≥ 3x) e com alcance", C.skill1Alt?.kind === "healFocus" && C.skill1Alt.heal! >= 3 * C.actions.skill1.heal! && (C.skill1Alt.range ?? 0) >= 8);
+// Rebalance de design: a cura em área subiu (16 → 26, raio 4 → 5) e a cura focada caiu (65 → 30), que agora compensa com acúmulos.
+check("Q padrão: cura em área, forte o bastante para grupos (26)", C.actions.skill1.kind === "healAoe" && C.actions.skill1.heal! >= 22 && C.actions.skill1.heal! <= 30);
+check("Q alternativo: cura focada ≤ 1,5x a de área (é de UM alvo), com alcance e acúmulos até 3", C.skill1Alt?.kind === "healFocus" && C.skill1Alt.heal! <= 1.5 * C.actions.skill1.heal! && (C.skill1Alt.range ?? 0) >= 8 && C.skill1Alt.stackMax === 3);
 check("classAction troca o Q só do Clérigo e só no modo 1", classAction("cleric", "skill1", 1).kind === "healFocus" && classAction("cleric", "skill1", 0).kind === "healAoe" && classAction("warrior", "skill1", 1).kind === "dashHit" && classAction("mage", "skill1", 1).kind === "blast");
 
 console.log("\n== PvP ==");

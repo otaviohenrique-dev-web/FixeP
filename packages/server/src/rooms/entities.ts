@@ -18,6 +18,8 @@ export class Player extends Schema {
   @type("boolean") buff = false; // Escudo Refletor ativo (mitigação)
   @type("boolean") ember = false; // Brasa do Clérigo ativa
   @type("boolean") reflect = false; // Escudo Refletor do Guerreiro ativo
+  @type("number") healStacks = 0; // acúmulos de Cura Focada NESTE jogador (0 a 3): a UI mostra o número
+  @type("number") healStackS = 0; // segundos restantes dos acúmulos (0 = sem acúmulo); o cliente conta daí
   @type("number") qMode = 0; // Clérigo: 0 = Q cura em área, 1 = Q cura focada
   @type("number") mana = 0; // recurso da classe (inteiro, para a HUD)
   @type("number") maxMana = 0;
@@ -64,6 +66,8 @@ export class Player extends Schema {
   reflectUntil = 0;
   reflectPct = 0; // fração do dano dos inimigos que volta a eles
   hurtAt = -1e9; // último dano RECEBIDO (o PvP só canaliza depois de PVP_NO_DAMAGE_S sem apanhar)
+  healStackUntil = 0; // fim dos acúmulos de Cura Focada (relógio da simulação); depois zera
+  healStackPct = 0; // +% por acúmulo nas curas do Clérigo neste jogador (vem do efeito "stacks")
   deadUntil = 0;
   marketBusy = false; // uma operação do mercado está gravando: a mochila não muda por outros caminhos até acabar
   trading = false; // numa troca: a mochila fica travada (nada se move) até fechar a janela
@@ -98,8 +102,13 @@ export class Enemy extends Schema {
   @type("boolean") rooted = false; // enraizado: não anda (o cliente mostra raízes/correntes)
   @type("boolean") shredded = false; // armadura quebrada: recebe mais dano (o cliente mostra um escudo rachado)
   @type("boolean") slowed = false; // lento (o cliente mostra um floco de gelo)
+  @type("boolean") burning = false; // queimadura ativa (Mago): dano ao longo do tempo (o cliente mostra chamas)
 
   // --- só no servidor ---
+  burnUntil = 0; // queimadura: dano por segundo até burnUntil (renova; não acumula)
+  burnDmg = 0;
+  burnBy = ""; // quem queimou (recebe o crédito do abate)
+  nextBurn = 0; // próximo tick de queimadura
   stunUntil = 0;
   rootUntil = 0;
   shredUntil = 0; // quebra de armadura: recebe +shredPct de dano até shredUntil
