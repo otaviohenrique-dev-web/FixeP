@@ -168,13 +168,46 @@ export function bindItemTip(el: HTMLElement, get: () => ItemTipData): void {
   });
   el.addEventListener("mousemove", (e) => { if (owner === el) place(e.clientX, e.clientY, false); });
   el.addEventListener("mouseleave", () => { if (owner === el) hideItemTip(); });
+  // toque: a dica abre ao SEGURAR (0,45 s) e fica aberta; o toque curto só seleciona o item (antes a dica abria no
+  // toque e sumia ao selecionar, e o arrastar nativo do celular cancelava o segurar)
+  let timer = 0, x0 = 0, y0 = 0;
+  const limpar = () => { clearTimeout(timer); timer = 0; };
   el.addEventListener("pointerdown", (e) => {
     if (e.pointerType !== "touch") return;
-    build(get());
-    owner = el;
-    ensure().style.display = "block";
-    const r = el.getBoundingClientRect();
-    place(r.left + r.width / 2, r.top, true);
+    limpar();
+    x0 = e.clientX; y0 = e.clientY;
+    timer = window.setTimeout(() => {
+      timer = 0;
+      build(get());
+      owner = el;
+      ensure().style.display = "block";
+      const r = el.getBoundingClientRect();
+      place(r.left + r.width / 2, r.top, true);
+      try { navigator.vibrate?.(15); } catch { /* sem vibração */ }
+      // o soltar do dedo depois do segurar não pode selecionar/rerenderizar o item
+      const engolir = (ev: Event) => { ev.stopImmediatePropagation(); ev.preventDefault(); };
+      el.addEventListener("click", engolir, { capture: true, once: true });
+      setTimeout(() => el.removeEventListener("click", engolir, true), 700);
+    }, 450);
+  });
+  el.addEventListener("pointermove", (e) => { if (timer && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) limpar(); });
+  el.addEventListener("pointerup", limpar);
+  el.addEventListener("pointercancel", limpar);
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
+/** celular/tablet (toque principal): sem arrastar nativo, que cancela o segurar e o toque */
+export const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
+/** duplo toque no celular (o dblclick nativo não é confiável no toque); no mouse o dblclick normal continua valendo */
+let toque = { k: "", t: 0 }, acao = 0; // estado global: o inventário recria os botões a cada toque, então a chave (não o elemento) identifica o item
+export function bindDoubleTap(el: HTMLElement, key: string, fn: () => void): void {
+  const rodar = () => { const n = Date.now(); if (n - acao < 500) return; acao = n; fn(); };
+  el.addEventListener("dblclick", rodar);
+  el.addEventListener("pointerup", (e) => {
+    if (e.pointerType !== "touch") return;
+    const n = Date.now();
+    if (toque.k === key && n - toque.t < 350) { toque = { k: "", t: 0 }; rodar(); } else toque = { k: key, t: n };
   });
 }
 
