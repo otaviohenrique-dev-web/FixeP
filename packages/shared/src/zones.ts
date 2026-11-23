@@ -96,7 +96,7 @@ export const ZONES: Record<number, ZoneDef> = {
     ],
     lootMult: 1.6,
     drops: { gear: 0.09, potion: 0.1, weights: { common: 62, uncommon: 30, rare: 8 } },
-    boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 28, rare: 50, epic: 18, legendary: 4 } } },
+    boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 30, rare: 52, epic: 18 } } },
   },
   3: {
     id: 3, name: "Catacumbas", theme: "crypt", w: 44, h: 44,
