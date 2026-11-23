@@ -62,6 +62,8 @@ export const Msg = {
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
   Ready: "ready", // {}: o cliente terminou de carregar a zona e o jogador já pode agir: só então começa a contar a bolha de chegada
   Variacao: "variacao", // { slot, id }: escolhe a variação de uma habilidade (id null = volta à base); só na cidade e a partir do nível do slot (C2.2)
+  Talento: "talento", // { id }: gasta 1 ponto (1 rank) num talento do ramo; o servidor confere pontos, máximo e porta do ramo (C2.3)
+  TalentoResetar: "talento_resetar", // {}: zera todos os talentos; só na cidade e pagando tostões (50 × (resets + 1)) (C2.3)
   AutoPot: "auto_pot", // { at }: limiar da auto-poção em % de vida (0 = desligada); o servidor limita a 0..90, grava e sincroniza
   QMode: "q_mode",// { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
   QuestAccept: "quest_aceitar", // { id }: aceita uma quest (o servidor valida nível, pré-requisitos e se já aceitou)
@@ -591,5 +593,6 @@ export * from "./zones";
 export * from "./vault";
 export * from "./skilltips";
 export * from "./variacoes";
+export * from "./talentos";
 export * from "./buffs";
 export * from "./crafting";
