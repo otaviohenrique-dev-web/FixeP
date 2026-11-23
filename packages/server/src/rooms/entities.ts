@@ -22,6 +22,8 @@ export class Player extends Schema {
   @type("number") healStackS = 0; // segundos restantes dos acúmulos (0 = sem acúmulo); o cliente conta daí
   @type("number") qMode = 0; // Clérigo: 0 = Q cura em área, 1 = Q cura focada
   @type("string") variacoes = "{}"; // C2.2: escolha de variação por habilidade (JSON: slot -> id); "{}" = todas na base
+  @type("string") talentos = "{}"; // C2.3: ranks gastos por talento (JSON: id -> ranks); "{}" = nenhum
+  @type("number") talentosResets = 0; // C2.3: quantos resets pagos (o custo do próximo é 50 × (resets + 1))
   @type("number") autoPotAt = 0; // auto-poção: bebe sozinho com a vida até este % (0 = desligada; passo 5, máximo 90)
   @type("number") mana = 0; // recurso da classe (inteiro, para a HUD)
   @type("number") maxMana = 0;
