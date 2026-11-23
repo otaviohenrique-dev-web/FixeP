@@ -148,6 +148,7 @@ export class Enemy extends Schema {
 export class GroundItem extends Schema {
   @type("string") itemId = "";
   @type("number") qty = 1;
+  @type("string") af = ""; // afixos do item no chão, separados por vírgula ("" = sem afixos)
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") owner = ""; // sessão do dono (quem abateu)

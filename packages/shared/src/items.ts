@@ -1,4 +1,5 @@
 import type { ActionDef, ActionId, CharClass } from "./index";
+import { afixoStats, afixosValidos, emptyAfixoStats, type AfixoStats } from "./afixos";
 
 /**
  * Itens do jogo. Definições compartilhadas: o servidor decide tudo; o cliente só exibe.
@@ -170,31 +171,40 @@ export function clampAutoPot(v: unknown): number {
 /** a auto-poção dispara? (vida em `at`% do máximo ou abaixo; `at` 0 = desligada) */
 export const autoPotDispara = (hp: number, maxHp: number, at: number): boolean => at > 0 && maxHp > 0 && hp * 100 <= maxHp * at;
 
-export interface InvStack { id: string; qty: number }
+/** Uma pilha da mochila. `af` = afixos do item (só equipamento de drop; itens antigos não têm). */
+export interface InvStack { id: string; qty: number; af?: string[] }
 export interface InventorySnapshot {
   inv: (InvStack | null)[];
   equip: Record<EquipSlot, string | null>;
+  equipAf?: Partial<Record<EquipSlot, string[]>>; // afixos do que está equipado (ver afixos.ts)
   iron: number; // saldo de Tostões de Ferro
   obols: number; // saldo de Óbolos de Sangue
 }
-export interface LootEvent { id: string; qty: number }
+export interface LootEvent { id: string; qty: number; af?: string[] }
 export interface NoticeEvent { text: string; ok?: boolean } // ok: aviso de sucesso (o cliente mostra em verde)
 
 // ------------------------------------------------------------ bônus e kit do equipamento
-export interface GearBonuses { dmgPct: number; hp: number; crit: number; dr: number; cdr: number; mana: number; regen: number; kit: WeaponKit }
+/** `af`: soma dos afixos de todo o equipamento (ver afixos.ts). Os campos de status (hp, dmgPct, dr...) já incluem os afixos. */
+export interface GearBonuses { dmgPct: number; hp: number; crit: number; dr: number; cdr: number; mana: number; regen: number; kit: WeaponKit; af: AfixoStats }
 export const NO_KIT: WeaponKit = {};
-export const emptyBonuses = (): GearBonuses => ({ dmgPct: 0, hp: 0, crit: 0, dr: 0, cdr: 0, mana: 0, regen: 0, kit: NO_KIT });
+export const emptyBonuses = (): GearBonuses => ({ dmgPct: 0, hp: 0, crit: 0, dr: 0, cdr: 0, mana: 0, regen: 0, kit: NO_KIT, af: emptyAfixoStats() });
 export const MAX_CDR = 30; // redução de recarga: teto (%)
 export const MAX_DR = 60; // redução de dano de equipamento: teto (%)
 
-/** Soma os bônus do que está equipado e escolhe o kit da arma. Item de outra classe NÃO conta (equipar já recusa; isto protege dados antigos). */
-export function gearBonuses(equip: Record<EquipSlot, string | null>, cls: CharClass): GearBonuses {
+/**
+ * Soma os bônus do que está equipado e escolhe o kit da arma. Item de outra classe NÃO conta (equipar já recusa; isto protege dados antigos).
+ * `equipAf` (opcional): afixos de cada slot. Itens sem afixo (dados antigos) funcionam como antes.
+ */
+export function gearBonuses(equip: Record<EquipSlot, string | null>, cls: CharClass, equipAf: Partial<Record<EquipSlot, string[]>> = {}): GearBonuses {
   const b = emptyBonuses();
   for (const s of EQUIP_SLOTS) {
     const d = equip[s] ? ITEMS[equip[s]!] : undefined;
     if (!d || (d.cls && d.cls !== cls)) continue;
     b.dmgPct += d.dmgPct ?? 0; b.hp += d.hp ?? 0; b.crit += d.crit ?? 0; b.dr += d.dr ?? 0; b.cdr += d.cdr ?? 0; b.mana += d.mana ?? 0; b.regen += d.regen ?? 0;
     if (s === "weapon" && d.wtype) b.kit = WEAPON_TYPES[d.wtype]?.kit ?? NO_KIT;
+    const af = afixoStats(afixosValidos(equipAf[s] ?? [], d.kind, d.rarity), d.rarity);
+    for (const k of Object.keys(af) as (keyof AfixoStats)[]) b.af[k] += af[k];
+    b.hp += af.hp; b.dmgPct += af.dmgPct; b.crit += af.crit; b.dr += af.dr; b.cdr += af.cdr; b.mana += af.mana; b.regen += af.regen;
   }
   b.dr = Math.min(MAX_DR, b.dr);
   b.cdr = Math.min(MAX_CDR, b.cdr);

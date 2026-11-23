@@ -1,5 +1,5 @@
 import { fmtDelta } from "./poder";
-import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
+import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, afixoLinha, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
 /**
  * Dica de item: a MESMA ficha em todo lugar (mochila, trocas, mercado, baú).
  * - PC: aparece ao passar o mouse e segue o ponteiro.
@@ -8,7 +8,7 @@ import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, t
  * ▲ é melhor, ▼ é pior e = é igual. Para recarga e custo, valor menor é melhor.
  */
 
-export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string }
+export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string; af?: string[] } // af: afixos do item (cor da raridade)
 export interface ItemTipCtx {
   getClass(): CharClass;
   getLevel(): number;
@@ -123,6 +123,8 @@ function build(data: ItemTipData): void {
     }
     t.append(row);
   });
+  // afixos (atributos de drop): uma linha por afixo, na cor da raridade do item
+  for (const id of data.af ?? []) { const r = document.createElement("div"); r.className = "afixo"; r.style.color = RARITY_COLOR[d.rarity]; r.textContent = afixoLinha(id, d.rarity); t.append(r); }
   const pv = ctx.previewPoder?.(d);
   if (pv) {
     const r = document.createElement("div"); r.className = "row";

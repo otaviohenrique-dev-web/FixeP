@@ -57,7 +57,7 @@ check("E Escudo Refletor: PROVOCA, reduz dano e REFLETE", W.actions.skill3.kind 
 check("R Queda do Colosso: do alto (fx colossus), grande e atordoa", W.actions.ultimate.fx === "colossus" && W.actions.ultimate.radius! >= 4 && (W.actions.ultimate.stunS ?? 0) > 0 && W.actions.ultimate.dmg! >= 3 * W.actions.attack.dmg! && W.actions.ultimate.dmg! <= 4 * W.actions.attack.dmg!); // R 120 → 40 (≈ 4x o golpe de 10): dano médio, controle é o papel
 check("a ultimate é a mais forte do Guerreiro e tem telégrafo (atraso ≥ 1 s)", W.actions.ultimate.dmg! > Math.max(W.actions.skill1.dmg!, W.actions.skill2.dmg!) && (W.actions.ultimate.delayS ?? 0) >= 1);
 check("os chefes resistem ao controle (duração × " + BOSS_CC_RESIST + ")", BOSS_CC_RESIST > 0 && BOSS_CC_RESIST < 1);
-check("Guerreiro sobrevive: golpe e Investida curam um pouco; Correntes deixa lento além de enraizar", (W.actions.attack.hitHeal ?? 0) > 0 && (W.actions.skill1.selfHeal ?? 0) > 0 && (W.actions.skill2.slowPct ?? 0) >= 20 && (W.actions.skill2.rootS ?? 0) > 0);
+check("Guerreiro sobrevive: a Investida cura um pouco (sem cura no golpe básico: isso é afixo de item); Correntes deixa lento além de enraizar", (W.actions.attack.hitHeal ?? 0) === 0 && (W.actions.skill1.selfHeal ?? 0) > 0 && (W.actions.skill2.slowPct ?? 0) >= 20 && (W.actions.skill2.rootS ?? 0) > 0);
 check("Guerreiro: nenhuma habilidade passa de 40 de dano (tanque: a R é a maior e fica nesse teto)", Object.values(W.actions).every((a) => (a.dmg ?? 0) <= 40));
 
 console.log("\n== Clérigo: acúmulos, mana e apoio ==");
