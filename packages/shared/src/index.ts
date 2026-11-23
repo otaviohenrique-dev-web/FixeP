@@ -382,12 +382,12 @@ const CLASS_SPECS: Record<CharClass, ClassSpec> = {
     actions: {
       // ataque básico: dano baixo (sem cura por golpe: roubo de vida é atributo de item, ver afixos.ts)
       attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, offset: 1.0, radius: 1.25, effects: [{ t: "damage", amount: 10 }] },
-      // Q: avanço com o escudo à frente; quem estiver no caminho leva pouco dano e fica ATORDOADO por pouco; usar cura um pouco
-      skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dash: 4.5, dashTime: 0.25, radius: 1.2, icon: "charge", effects: [{ t: "damage", amount: 10 }, { t: "stun", s: 1.2 }, { t: "selfHeal", amount: 8 }] },
+      // Q: avanço com o escudo à frente; quem estiver no caminho leva mais dano e fica ATORDOADO por pouco (sem cura: recuperação de vida é afixo de item, ver afixos.ts)
+      skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dash: 4.5, dashTime: 0.25, radius: 1.2, icon: "charge", effects: [{ t: "damage", amount: 14 }, { t: "stun", s: 1.2 }] },
       // W: correntes brotam do chão e ENRAIZAM os inimigos da área, que ainda ficam lentos
       skill2: { kind: "rain", name: "Correntes", key: "W", cd: 10, cost: 30, radius: 2.8, placeRange: 6, delayS: 0.45, fx: "chains", icon: "chains", effects: [{ t: "damage", amount: 10 }, { t: "root", s: 3.5 }, { t: "slow", pct: 30, s: 3 }] },
-      // E: PROVOCA (inimigos próximos passam a mirar nele) e ergue o Escudo Refletor: menos dano recebido e parte do que os inimigos causam volta a eles
-      skill3: { kind: "reflectBuff", name: "Escudo Refletor", key: "E", cd: 14, cost: 35, buffS: 5, reduction: 0.5, reflect: 0.75, tauntRadius: 7, tauntS: 4, icon: "shield" },
+      // E: PROVOCA (inimigos próximos passam a mirar nele) e ergue o Escudo de Aço: menos dano recebido (sem reflexo: Espinhos é afixo de item)
+      skill3: { kind: "reflectBuff", name: "Escudo de Aço", key: "E", cd: 14, cost: 35, buffS: 5, reduction: 0.5, tauntRadius: 7, tauntS: 4, icon: "shield" },
       // R: um colosso de aço desaba do céu (telegrafado): dano médio em área e atordoamento curto (ultimate de controle, não de dano)
       ultimate: { kind: "rain", name: "Queda do Colosso", key: "R", cd: 40, cost: 80, radius: 4.2, placeRange: 6, delayS: 1.5, fx: "colossus", icon: "hammer", effects: [{ t: "damage", amount: 40 }, { t: "stun", s: 1.8 }] },
       dodge: dodge(3, 1.4),
@@ -427,14 +427,14 @@ const CLASS_SPECS: Record<CharClass, ClassSpec> = {
     resource: { name: "Mana", icon: "drop", color: 0xa070ff, max: 140, regen: 7, perLevel: 5 },
     actions: {
       attack: { kind: "projectile", name: "Dardo Arcano", key: "ESPAÇO", cd: 0.8, cost: 4, speed: 13, range: 9, radius: 0.4, effects: [{ t: "damage", amount: 13 }] },
-      // Q (fogo): explode ao acertar e QUEIMA quem atinge (dano ao longo do tempo)
-      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, speed: 11, range: 10, radius: 0.45, blast: 2.3, effects: [{ t: "damage", amount: 18 }, { t: "burn", pct: 25, s: 4 }] },
+      // Q (fogo): explode ao acertar, ferindo uma área, e LENTIFICA quem é atingido (controle básico; queimadura é afixo de item)
+      skill1: { kind: "blast", name: "Bola de Fogo", key: "Q", cd: 5, cost: 30, speed: 11, range: 10, radius: 0.45, blast: 2.3, effects: [{ t: "damage", amount: 24 }, { t: "slow", pct: 30, s: 3 }] },
       // W (raio): dano em área menor e ATORDOA por pouco (garantido; chefes resistem)
       skill2: { kind: "rain", name: "Relâmpago", key: "W", cd: 7, cost: 28, radius: 1.7, placeRange: 9, delayS: 0.35, fx: "lightning", effects: [{ t: "damage", amount: 20 }, { t: "stun", s: 0.8 }] },
-      // E (fogo): chuva de chamas em área ampla que QUEIMA quem for atingido
-      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain", effects: [{ t: "damage", amount: 30 }, { t: "burn", pct: 30, s: 4 }] },
-      // R: meteoro com dano médio em área, ENRAIZA e queima por mais tempo
-      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor", effects: [{ t: "damage", amount: 50 }, { t: "root", s: 2 }, { t: "burn", pct: 30, s: 5 }] },
+      // E (fogo): chuva de chamas em área ampla que ENRAIZA quem for atingido (controle de grupo)
+      skill3: { kind: "rain", name: "Chuva de Fogo", key: "E", cd: 11, cost: 45, radius: 3.1, placeRange: 8, delayS: 0.9, fx: "firerain", effects: [{ t: "damage", amount: 36 }, { t: "root", s: 1.5 }] },
+      // R: meteoro com dano médio-alto em área e ENRAIZA por mais tempo
+      ultimate: { kind: "rain", name: "Meteoro", key: "R", cd: 45, cost: 100, radius: 4.2, placeRange: 9, delayS: 1.5, fx: "meteor", effects: [{ t: "damage", amount: 56 }, { t: "root", s: 2 }] },
       dodge: dodge(4, 1.5), // passo arcano curto: o Mago tem pouco sustain, depende de manter distância
     },
   },

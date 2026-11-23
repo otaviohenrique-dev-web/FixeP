@@ -1,4 +1,4 @@
-import { ITEMS, INV_SLOTS, EQUIP_SLOTS, CLASS_DEFS, rarityIndex, migrateItemId, gearBonuses, afixosValidos, type GearBonuses, type CharClass, type InvStack, type EquipSlot, type InventorySnapshot } from "@frixep/shared";
+import { ITEMS, INV_SLOTS, EQUIP_SLOTS, CLASS_DEFS, rarityIndex, migrateItemId, gearBonuses, afixosValidos, sortearAfixos, KINDS_EQUIPAVEIS, type GearBonuses, type CharClass, type InvStack, type EquipSlot, type InventorySnapshot } from "@frixep/shared";
 
 /** Inventário de um jogador (só existe no servidor; o cliente recebe fotografias). Funções puras e testáveis. */
 export interface Inventory {
@@ -53,6 +53,18 @@ export function addItem(inv: Inventory, id: string, qty: number, af?: string[]):
       left -= take;
     }
   }
+  return left;
+}
+
+/**
+ * Item NOVO (loja, recompensa de quest, fusão do ferreiro): equipamento sai com afixos sorteados, um sorteio por unidade.
+ * Não use para mover item que já existe (venda entre jogadores, mercado, cofre): esses carregam os afixos que já tinham.
+ */
+export function addItemNovo(inv: Inventory, id: string, qty: number): number {
+  const def = ITEMS[id];
+  if (!def || !KINDS_EQUIPAVEIS.includes(def.kind) || !Number.isInteger(qty) || qty <= 0) return addItem(inv, id, qty);
+  let left = 0;
+  for (let i = 0; i < qty; i++) left += addItem(inv, id, 1, sortearAfixos(def.kind, def.rarity));
   return left;
 }
 

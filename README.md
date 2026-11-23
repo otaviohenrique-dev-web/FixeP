@@ -22,7 +22,7 @@ ficam em `packages/shared/src/index.ts` (`CLASS_DEFS`) e o servidor decide todos
 | ESPAÇO | Golpe corpo a corpo | Flecha | Raio sagrado | Dardo Arcano |
 | Q | **Investida** (avanço com o escudo: fere e **atordoa 1,5 s** quem estiver no caminho) | Perfurar (flecha que atravessa) | **Dois Q à escolha** (tecla **Z** ou botão ⇄): **Cura em Área** (todos num raio de 4, pouca) ou **Cura Focada** (um aliado, bem mais forte) | Bola de Fogo (projétil que explode em área) |
 | W | **Correntes** (correntes e raízes brotam do chão e **enraízam** a área por 3,5 s) | Cilada (armadilha no chão, até 3) | Compressor de Ar (puxa os inimigos de uma área para o ponto mirado e os atordoa por 1,2 s) | Relâmpago (raio do céu, quase instantâneo) |
-| E | **Escudo Refletor** (provoca; -50% de dano; **devolve 75%** do golpe a quem o atacou, por 5 s) | Chuva (área atingida após 0,8 s) | Julgamento (dano em área média, atinge após 0,6 s) | Chuva de Fogo (área grande, 0,9 s) |
+| E | **Escudo de Aço** (provoca; -50% de dano, por 5 s; sem reflexo: Espinhos é afixo de item) | Chuva (área atingida após 0,8 s) | Julgamento (dano em área média, atinge após 0,6 s) | Chuva de Fogo (área grande, 0,9 s) |
 | R (ultimate) | **Queda do Colosso** (uma espada gigante desaba do céu após 1,5 s: dano 120, raio 4,2 e **atordoa 2,2 s**; 80 de Fúria, recarga 40 s) | Salva Final (chuva enorme, 80 de Foco, 40 s) | Luz Divina (cura forte num raio de 6, 90 de Mana, 45 s) | **Meteoro** (o maior golpe do jogo: 140 base, raio 4,2, cai após 1,5 s, 100 de Mana, 45 s) |
 | SHIFT | Esquiva (3 tiles) | Rolamento longo (5 tiles) | Esquiva (3 tiles) | Passo arcano (4 tiles) |
 
@@ -34,7 +34,7 @@ O Guerreiro é o **tanque** do grupo (120 de vida, mitigação alta, provoca) e 
 
 - **Atordoar** (Investida e Queda do Colosso): o inimigo atordoado **não age** (cancela o golpe que preparava) e mostra estrelas girando sobre a cabeça. Campo sincronizado `stunned`.
 - **Enraizar** (Correntes): o inimigo **não anda**, mas ainda ataca quem estiver ao alcance dele. Correntes e raízes brotam do chão na área e ficam em volta dos pés (`rooted`).
-- **Provocar + refletir** (Escudo Refletor, 5 s): inimigos num raio de 6 passam 3 s atacando você, o dano que você leva cai pela metade e **75% de cada golpe de inimigo volta** a quem o deu (evento `hit` com `refl`; raio azul do Guerreiro ao inimigo; cúpula de escudo pulsando em volta dele). O pulso sombrio dos chefes não é refletido.
+- **Provocar + proteger** (Escudo de Aço, 5 s): inimigos num raio de 6 passam 3 s atacando você e o dano que você leva cai pela metade (cúpula de escudo pulsando em volta dele). O reflexo saiu da classe: devolver dano é o afixo *Espinhos* (item). O pulso sombrio dos chefes não é reduzido.
 - **Chefes resistem**: atordoar e enraizar duram só 40% (`BOSS_CC_RESIST`).
 - **Queda do Colosso**: telégrafo no chão (sombra crescendo e anel pulsante), a espada cai do alto em diagonal (eixo Z) e, no impacto, tremor forte de câmera, clarão, ondas de choque, rachaduras no chão, destroços e coluna de luz.
 - Custos: Investida 25, Correntes 30, Escudo 35, Colosso 80 de Fúria (máx. 100, regenera 5/s). Armas: o Montante aumenta o Colosso; a Lâmina Rúnica reforça Investida e Correntes e barateia o resto.
@@ -53,8 +53,8 @@ Mago e Arqueiro estavam fortes demais por causa das habilidades em área; Guerre
 
 | Dano base | Antes → depois |
 |---|---|
-| Mago | Dardo 15→13, Bola de Fogo 44→18 (+queimadura), Relâmpago 40→20 (atordoa 0,8 s), Chuva de Fogo 62→30 (+queimadura), Meteoro 230→50 (enraíza e queima) |
-| Guerreiro (rebalance de design) | Golpe 12→10 (+cura por golpe), Investida 18→10 (atordoa 1,2 s, cura 8), Correntes 14→10 (enraíza e deixa lento), Queda do Colosso 120→40 |
+| Mago | Dardo 15→13, Bola de Fogo 44→24 (lentidão 3 s), Relâmpago 40→20 (atordoa 0,8 s), Chuva de Fogo 62→36 (enraíza 1,5 s), Meteoro 230→56 (enraíza 2 s). Sem queimadura: é afixo de item |
+| Guerreiro (rebalance de design) | Golpe 12→10 (sem cura por golpe), Investida 18→14 (atordoa 1,2 s, sem cura: recuperação de vida é afixo de item), Correntes 14→10 (enraíza e deixa lento), Queda do Colosso 120→40 |
 | Clérigo (rebalance de design) | Cura em Área 16→26 (raio 4→5, +8 mana, escudo leve), Cura Focada 65→30 (até 3 acúmulos, +10% cada), Luz Divina 80 (escudo maior e purifica) |
 | Arqueiro | Flecha 10→9, Perfurar 18→15, Cilada 28→18, Chuva 15→10, Salva Final 40→26 |
 | Armas (% de dano) | Mago x0,70 e Arqueiro x0,75 do bônus da arma do Guerreiro/Clérigo; mãos secundárias: Tomo 40%→28%, Orbe Flutuante 30%→20%, Aljava 25%→18% |
@@ -86,7 +86,7 @@ Cada classe tem um **recurso** que as habilidades gastam e que regenera sozinho 
 
 | Classe | Recurso | Máx. | Regen./s | Custos |
 |---|---|---|---|---|
-| Guerreiro | Fúria | 100 | 5 | Investida 25, Correntes 30, Escudo Refletor 35, Queda do Colosso 80 |
+| Guerreiro | Fúria | 100 | 5 | Investida 25, Correntes 30, Escudo de Aço 35, Queda do Colosso 80 |
 | Arqueiro | Foco | 100 | 6 | Perfurar 20, Cilada 25, Chuva 35 |
 | Clérigo | Mana | 120 | 6 | Raio 4, Cura em Área 26 / Cura Focada 30, Compressor de Ar 30, Julgamento 30 |
 | Mago | Mana (violeta) | 140 | 7 | Dardo 4, Bola de Fogo 30, Relâmpago 28, Chuva de Fogo 45, Meteoro 100 |
@@ -249,7 +249,7 @@ Tudo é decidido pelo servidor (`ZoneRoom.ts`); as constantes e fórmulas ficam 
 **Regeneração de vida (jogadores)**: sem causar nem receber dano por **6 s** (`PLAYER_REGEN_DELAY_S`), o personagem recupera **2% da vida máxima por segundo** (`PLAYER_REGEN_PCT_S`; vida cheia em ~50 s). Qualquer dano dado ou recebido (inclusive PvP) zera a espera.
 
 **IA dos inimigos (correção do "vai e volta")**: antes, o inimigo que passava da coleira (`leash`) ou perdia o alvo voltava para casa **se curando 20%/s** e, ao entrar de novo na coleira com o jogador por perto, voltava a persegui-lo: oscilava e a cura anulava o dano. Agora:
-- Estados: `idle → chase → windup → recover` e o novo **`evade`**. Passou da coleira ou perdeu o alvo no meio da luta: entra em `evade`, ignora jogadores e provocação (Escudo Refletor) e **só volta a agir ao chegar em casa**. Não oscila.
+- Estados: `idle → chase → windup → recover` e o novo **`evade`**. Passou da coleira ou perdeu o alvo no meio da luta: entra em `evade`, ignora jogadores e provocação (Escudo de Aço) e **só volta a agir ao chegar em casa**. Não oscila.
 - **O dano recebido sempre conta**: em `evade` o inimigo continua apanhando e **não recupera vida** enquanto for ferido.
 - Cura: só **parado em casa ou voltando (`evade`) e sem apanhar há 5 s** (`ENEMY_REGEN`): 10% da vida máxima por segundo; chefe 8 s e 3%/s. Nada de cura durante a perseguição.
 - Quem está além da coleira do ponto de origem do inimigo não vira alvo dele (evita "puxar" e perder o alvo em seguida).
@@ -266,7 +266,7 @@ Jogador **fora de grupo** e sem dano relevante **não ganha nada**; quem luta so
 **Chefes exigem grupo (tanque + curandeiro + dano)**: um jogador solo com build convencional não consegue vencer. Fórmula (`shared/src/index.ts`; `n` = jogadores elegíveis vivos a até 24 tiles do chefe):
 - **Vida**: 15 a 18 vezes a de um inimigo do mesmo nível (antes 5 a 6): Rei Ossudo 3.240, Lobo Alfa 4.500, Soberano 9.720. O trio mata em ~1 a 2 min; o solo, não.
 - **Dano do chefe** (golpe, pancada e pulso) `x bossDmgMult(n) = 1 + 0,75 x max(0, 3 - n)`: solo **x2,5**, dupla **x1,75**, trio ou mais **x1** (`BOSS_GROUP_MIN = 3`).
-- **Pulso Sombrio**: a cada 6 s (telégrafo de 1,5 s) atinge **todos** a até 24 tiles com **40% da vida máxima** de cada um (x o multiplicador do grupo), **ignorando a esquiva**. Só se aguenta com **curandeiro** (Cura Focada ou em Área/Luz Divina); o **tanque** (Escudo Refletor: -50% de dano, provocação e reflexão) segura os golpes e pancadas para os que têm pouca vida; poções sozinhas (40 de vida a cada 6 s) não sustentam.
+- **Pulso Sombrio**: a cada 6 s (telégrafo de 1,5 s) atinge **todos** a até 24 tiles com **40% da vida máxima** de cada um (x o multiplicador do grupo), **ignorando a esquiva**. Só se aguenta com **curandeiro** (Cura Focada ou em Área/Luz Divina); o **tanque** (Escudo de Aço: -50% de dano e provocação) segura os golpes e pancadas para os que têm pouca vida; poções sozinhas (40 de vida a cada 6 s) não sustentam.
 - **Fúria por tempo**: depois de 150 s de luta (`BOSS_ENRAGE_S`) o dano cresce +50% a cada 30 s, até x4 (`bossEnrageMult`). A fúria por vida baixa (<30%) continua.
 - O contador de luta e o pulso começam no primeiro dano e zeram quando o chefe volta a se curar por inteiro, e ele só se cura depois de 8 s sem apanhar.
 - Testes: `npm run test:boss:unit -w @frixep/server` (21 verificações, sem servidor) simula, com as constantes reais, que o solo (mesmo com todas as habilidades sem custo e armadura boa) morre antes de matar, que o trio com curandeiro aguenta o pulso e mata antes da fúria, e que o trio sem curandeiro não aguenta.

@@ -5,7 +5,7 @@ import {
   ITEMS, ENEMY_KINDS, ZONES, zoneNpcs, LEVEL_CAP, xpToNext, validarFormatoQuest, objetivoContavel, CLASSE_PLACEHOLDER,
   type QuestDef, type Objetivo, type EstadoQuest, type QuestEstado, type CharClass, type AcaoUsar,
 } from "@frixep/shared";
-import { addItem, type Inventory } from "./inventory.js";
+import { addItem, addItemNovo, type Inventory } from "./inventory.js";
 import { addCoins } from "./economy.js";
 
 /**
@@ -204,7 +204,7 @@ export function aplicarRecompensa(inv: Inventory, def: QuestDef, cls: CharClass)
   const c: Inventory = { ...inv, equip: { ...inv.equip }, slots: inv.slots.map((s) => (s ? { ...s } : null)) };
   for (const o of def.objetivos) if (o.tipo === "coletar") removerItem(c, o.itemId, o.qtd);
   let sobra = 0;
-  for (const r of def.recompensa.itens) sobra += addItem(c, resolverItem(r.id, cls), r.qtd);
+  for (const r of def.recompensa.itens) sobra += addItemNovo(c, resolverItem(r.id, cls), r.qtd);
   if (sobra > 0) return { ok: false, error: "Mochila cheia: libere espaço para receber a recompensa." };
   addCoins(c, "iron", def.recompensa.ferro);
   return { ok: true, inv: c };

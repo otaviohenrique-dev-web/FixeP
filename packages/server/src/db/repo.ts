@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, afixosValidos, type CharClass, type EquipSlot } from "@frixep/shared";
+import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, KINDS_EQUIPAVEIS, migrateItemId, afixosValidos, afixosDaSemente, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 import { emptyVault, type Vault } from "../game/vault.js";
 import type { QuestMap, QuestRt } from "../game/quests.js";
@@ -163,7 +163,11 @@ export class Repo {
       const def = ITEMS[id]; // item removido do jogo é ignorado em vez de quebrar a entrada
       if (!def || r.slot < 0 || r.slot >= INV_SLOTS || inv.slots[r.slot]) continue;
       if (id !== r.item_id) inv.migrated = true;
-      const af = afixosValidos(r.af, def.kind, def.rarity); // itens antigos não têm afixos: a lista vazia vale
+      let af = afixosValidos(r.af, def.kind, def.rarity);
+      if (!af.length && r.af == null && KINDS_EQUIPAVEIS.includes(def.kind)) { // backfill: item antigo (sem coluna de afixos) ganha afixos determinísticos
+        af = afixosDaSemente(`${charId}:${r.slot}:${id}`, def.kind, def.rarity);
+        if (af.length) inv.migrated = true; // grava no próximo salvamento
+      }
       inv.slots[r.slot] = af.length ? { id, qty: Math.max(1, Math.min(def.stack, r.qty)), af } : { id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
     }
     const w = await this.db.query<{ iron: number; obols: number }>("select iron, obols from characters where id = $1", [charId]);
@@ -175,7 +179,11 @@ export class Repo {
       const def = ITEMS[id];
       if (def && (EQUIP_SLOTS as readonly string[]).includes(r.slot) && def.kind === r.slot) {
         inv.equip[r.slot as EquipSlot] = id;
-        const af = afixosValidos(r.af, def.kind, def.rarity);
+        let af = afixosValidos(r.af, def.kind, def.rarity);
+        if (!af.length && r.af == null) { // backfill do equipamento vestido (mesma regra da mochila)
+          af = afixosDaSemente(`${charId}:eq:${r.slot}:${id}`, def.kind, def.rarity);
+          if (af.length) inv.migrated = true;
+        }
         if (af.length) inv.equipAf = { ...(inv.equipAf ?? {}), [r.slot]: af };
         if (id !== r.item_id) inv.migrated = true;
       }

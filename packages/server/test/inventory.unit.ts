@@ -264,14 +264,17 @@ console.log("\n== Persistência no banco ==");
   check("personagem novo tem inventário vazio", (await repo.loadInventory(id)).slots.every((s) => s === null));
   const inv = emptyInventory();
   addItem(inv, "pocao_de_vida", 7);
-  addItem(inv, "espada_1m_uncommon", 1);
-  addItem(inv, "warrior_armor_rare", 1);
+  // Com afixos explícitos: equipamento SEM afixo é recuperado com backfill ao carregar (ver o bloco de backfill abaixo),
+  // então este round-trip precisa dar afixos a cada peça para comparar exatamente.
+  addItem(inv, "espada_1m_uncommon", 1, ["afiado"]);
+  addItem(inv, "warrior_armor_rare", 1, ["vigor"]);
   inv.equip.weapon = "espada_1m_common";
   inv.equip.armor = "warrior_armor_common";
   inv.equip.offhand = "escudo_guerra_epic";
   inv.equip.helmet = "warrior_helmet_legendary";
   inv.equip.boots = "warrior_boots_mythic";
   inv.equip.cape = "warrior_cape_rare";
+  inv.equipAf = { weapon: ["afiado"], offhand: ["afiado"], helmet: ["vigor"], armor: ["vigor"], boots: ["vigor"], cape: ["vigor"] }; // ordem dos EQUIP_SLOTS (o snapshot compara o JSON)
   await repo.saveInventory(id, inv);
   const back = await repo.loadInventory(id);
   check("inventário e os 6 espaços de equipamento voltam idênticos do banco", JSON.stringify(snapshot(back)) === JSON.stringify(snapshot(inv)) && !back.migrated);
@@ -279,6 +282,7 @@ console.log("\n== Persistência no banco ==");
   // salvar de novo com menos coisas: não pode sobrar lixo nem duplicar
   inv.slots[1] = null;
   inv.equip.weapon = null;
+  delete inv.equipAf?.weapon; // tirar do equipamento também tira os afixos dele (como unequip faz no jogo)
   await repo.saveInventory(id, inv);
   const back2 = await repo.loadInventory(id);
   check("salvar de novo substitui (não acumula) itens e equipamento", JSON.stringify(snapshot(back2)) === JSON.stringify(snapshot(inv)) && back2.equip.weapon === null);
@@ -291,6 +295,21 @@ console.log("\n== Persistência no banco ==");
   check("item removido do jogo é ignorado ao carregar", !back3.slots.some((s) => s?.id === "item_removido"));
   check("pilha com quantidade acima do máximo é limitada ao carregar", back3.slots.find((s) => s?.id === "pocao_de_vida")?.qty === ITEMS.pocao_de_vida.stack);
   check("arma no espaço de armadura é ignorada ao carregar", back3.equip.armor === null);
+
+  // backfill: equipamento antigo (coluna af nula) ganha afixos DETERMINÍSTICOS ao carregar e marca para gravar
+  await db.query("delete from inventory_items where character_id = $1", [id]);
+  await db.query("delete from equipment where character_id = $1", [id]);
+  await db.query("insert into inventory_items (character_id, slot, item_id, qty) values ($1, 0, 'espada_1m_epic', 1)", [id]);
+  await db.query("insert into equipment (character_id, slot, item_id) values ($1, 'weapon', 'espada_1m_legendary')", [id]);
+  const bf1 = await repo.loadInventory(id, "warrior");
+  const bf2 = await repo.loadInventory(id, "warrior");
+  check("backfill: arma épica antiga ganha 2 afixos ao carregar", (bf1.slots[0]?.af ?? []).length === 2, JSON.stringify(bf1.slots[0]));
+  check("backfill: arma lendária equipada ganha afixos (equipAf)", (bf1.equipAf?.weapon ?? []).length >= 2, JSON.stringify(bf1.equipAf));
+  check("backfill é determinístico: carregar de novo dá os mesmos afixos", JSON.stringify(snapshot(bf1)) === JSON.stringify(snapshot(bf2)));
+  check("backfill marca o inventário para gravar (migrated)", bf1.migrated === true);
+  await repo.saveInventory(id, bf1);
+  const bf3 = await repo.loadInventory(id, "warrior");
+  check("depois de gravar, os afixos do backfill ficam no banco (não são refeitos)", JSON.stringify(bf3.slots[0]?.af) === JSON.stringify(bf1.slots[0]?.af) && !bf3.migrated);
 
   // itens da primeira versão no banco são traduzidos ao carregar
   await db.query("delete from inventory_items where character_id = $1", [id]);
