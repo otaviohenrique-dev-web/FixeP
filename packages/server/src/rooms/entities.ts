@@ -25,6 +25,8 @@ export class Player extends Schema {
   @type("number") xp = 0;
   @type("boolean") pvp = false; // modo PvP ativo (só entre quem também está nele)
   @type("number") pvpChan = 0; // canalização: 0 nenhuma, 1 entrando, 2 saindo (o cliente conta os segundos)
+  @type("boolean") stunned = false; // atordoado (PvP): não age nem anda (o cliente mostra estrelas)
+  @type("boolean") rooted = false; // enraizado (PvP): não anda (o cliente mostra correntes)
   @type("string") party = ""; // id do grupo ("" = sem grupo); o cliente marca a placa de quem é do seu grupo
   @type("string") weaponRarity = ""; // raridade da arma equipada ("" = sem arma): o cliente desenha o brilho público no personagem
 
@@ -68,6 +70,11 @@ export class Player extends Schema {
   dropAt = 0; // último item solto no chão (limite de frequência)
   traveling = false; // travessia aprovada: o jogador não age nem é alvo até sair da sala
   pvpChanUntil = 0; // fim da canalização (relógio da simulação)
+  stunUntil = 0; // atordoado até este instante (Investida, Chuva, Compressor de Ar...)
+  rootUntil = 0; // enraizado até este instante (Correntes)
+  pullUntil = 0; // puxado pelo Compressor de Ar até este instante
+  pullX = 0; // ponto para onde é puxado
+  pullY = 0;
   travelNoteAt = -1e9; // último aviso "em combate" ao tentar atravessar (para não repetir a cada tick)
   combatAt = -1e9; // último instante em que causou ou recebeu dano (a regeneração de vida espera PLAYER_REGEN_DELAY_S)
   regenAcc = 0; // fração de vida regenerada ainda não aplicada (hp é inteiro)

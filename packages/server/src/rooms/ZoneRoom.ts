@@ -454,10 +454,32 @@ export class ZoneRoom extends Room<ZoneState> {
     return !(a.party && a.party === o.party); // membros do mesmo grupo nunca se ferem
   }
 
-  private hitPlayers(by: string, baseDmg: number, inArea: (o: Player) => boolean) {
+  /** inimigo de quem agiu no PvP (os dois em PvP e de grupos diferentes): curas, bônus e área de apoio só valem para aliados */
+  private hostile(byId: string, by: Player, oid: string, o: Player): boolean {
+    if (oid === byId || !by.pvp || !o.pvp) return false;
+    return !(by.party && by.party === o.party);
+  }
+
+  /** controle de jogador (PvP), com as mesmas regras dos inimigos: atordoa (não age nem anda), enraíza e puxa. Cancela a canalização de quem é afetado. */
+  private stunPlayer(oid: string, o: Player, s: number) {
+    if (o.dead) return;
+    o.stunUntil = Math.max(o.stunUntil, this.t + s);
+    o.dashLeft = 0; // corta a esquiva ou investida no meio
+    this.interruptPvp(oid, o, "damage");
+  }
+
+  private rootPlayer(oid: string, o: Player, s: number) {
+    if (o.dead) return;
+    o.rootUntil = Math.max(o.rootUntil, this.t + s);
+    this.interruptPvp(oid, o, "damage");
+  }
+
+  private hitPlayers(by: string, baseDmg: number, inArea: (o: Player) => boolean, cc?: { stunS?: number; rootS?: number }) {
     this.state.players.forEach((o, oid) => {
       if (!this.canPvpHit(by, o, oid) || !inArea(o)) return;
       this.damagePvp(by, oid, o, baseDmg);
+      if (cc?.stunS) this.stunPlayer(oid, o, cc.stunS);
+      if (cc?.rootS) this.rootPlayer(oid, o, cc.rootS);
     });
   }
 
@@ -1279,6 +1301,8 @@ export class ZoneRoom extends Room<ZoneState> {
     p.buff = this.t < p.buffUntil;
     p.ember = this.t < p.emberUntil;
     p.reflect = this.t < p.reflectUntil;
+    p.stunned = this.t < p.stunUntil;
+    p.rooted = this.t < p.rootUntil;
     if (p.hp < p.maxHp && this.t - p.combatAt >= PLAYER_REGEN_DELAY_S && !this.healBlocked(id, p)) { // fora de combate: recupera aos poucos (o servidor decide)
       p.regenAcc += p.maxHp * PLAYER_REGEN_PCT_S * dt;
       const whole = Math.floor(p.regenAcc);
@@ -1295,6 +1319,18 @@ export class ZoneRoom extends Room<ZoneState> {
       if (this.t > q.until) { p.queued = null; this.sendTo(id, Evt.ActDenied, { a: q.a }); }
       else if (p.dashLeft <= 0 && this.t >= (p.cdUntil[q.a] ?? 0) - 0.05) { p.queued = null; this.doAction(id, p, q.a as ActionId, q.ax, q.ay); }
     }
+    if (this.t < p.pullUntil) { // puxado pelo Compressor de Ar: vai até o ponto; depois fica atordoado
+      const d = Math.hypot(p.pullX - p.x, p.pullY - p.y);
+      if (!p.rooted && d > 0.5) {
+        const sp = Math.max(d, 0.5) / Math.max(0.05, p.pullUntil - this.t);
+        const st = Math.min(d, sp * dt);
+        p.x += ((p.pullX - p.x) / d) * st;
+        p.y += ((p.pullY - p.y) / d) * st;
+      }
+      p.tx = p.x; p.ty = p.y;
+      return;
+    }
+    if (p.stunned) { p.dashLeft = 0; p.tx = p.x; p.ty = p.y; return; } // atordoado: parado, sem deslocamento
 
     if (p.dashLeft > 0) {
       const step = Math.min(dt, p.dashLeft);
@@ -1304,6 +1340,7 @@ export class ZoneRoom extends Room<ZoneState> {
       if (p.dashLeft <= 0) { p.tx = p.x; p.ty = p.y; }
       return;
     }
+    if (p.rooted) { p.tx = p.x; p.ty = p.y; return; } // enraizado (Correntes): não anda
 
     const dx = p.tx - p.x, dy = p.ty - p.y;
     const d = Math.hypot(dx, dy);
@@ -1337,6 +1374,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private doAction(id: string, p: Player, a: ActionId, ax: number, ay: number) {
     const def: ActionDef = effectiveAction(classAction(p.cls as CharClass, a, p.qMode), a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
+    if (this.t < p.stunUntil) return; // atordoado (PvP ou puxado): não age
     const left = (p.cdUntil[a] ?? 0) - this.t;
     if (left > 0.05) { // em recarga (tolerância de rede)
       if (left <= 0.25) this.queueAct(p, a, ax, ay); // quase pronta: guarda o comando em vez de perdê-lo
@@ -1384,7 +1422,7 @@ export class ZoneRoom extends Room<ZoneState> {
       case "ring": {
         const cx = p.x + dx * (def.offset ?? 0), cy = p.y + dy * (def.offset ?? 0);
         this.hitEnemies(id, dmg, (e) => dist(e.x, e.y, cx, cy) <= (def.radius ?? 1) + enemyKind(e.kind).radius);
-        this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, cx, cy) <= (def.radius ?? 1) + PLAYER_RADIUS);
+        this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, cx, cy) <= (def.radius ?? 1) + PLAYER_RADIUS, def);
         break;
       }
       case "dashHit": {
@@ -1395,7 +1433,7 @@ export class ZoneRoom extends Room<ZoneState> {
           if (hit && def.stunS) this.stunEnemy(e, def.stunS);
           return hit;
         });
-        this.hitPlayers(id, dmg, (o) => distToSegment(o.x, o.y, sx, sy, ex, ey) <= (def.radius ?? 1) + PLAYER_RADIUS);
+        this.hitPlayers(id, dmg, (o) => distToSegment(o.x, o.y, sx, sy, ex, ey) <= (def.radius ?? 1) + PLAYER_RADIUS, def);
         this.startDash(p, dx, dy, def);
         break;
       }
@@ -1455,7 +1493,7 @@ export class ZoneRoom extends Room<ZoneState> {
             return hit;
           });
           if (hits > 0 && def.hasteAtkPct) { p.hasteUntil = this.t + (def.hasteS ?? 5); p.hastePct = def.hasteAtkPct / 100; } // acertou: o ataque básico acelera
-          this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, pos.x, pos.y) <= r + PLAYER_RADIUS);
+          this.hitPlayers(id, dmg, (o) => dist(o.x, o.y, pos.x, pos.y) <= r + PLAYER_RADIUS, def);
         } });
         break;
       }
@@ -1471,20 +1509,28 @@ export class ZoneRoom extends Room<ZoneState> {
           e.st = "recover"; // cancela o golpe que ele preparava e o deixa atordoado depois da puxada
           e.recoverEnd = until + (def.stunS ?? 1);
         });
+        this.state.players.forEach((o, oid) => { // PvP: o mesmo efeito nos inimigos jogadores (puxa e atordoa depois)
+          if (!this.canPvpHit(id, o, oid) || dist(o.x, o.y, pos.x, pos.y) > r + PLAYER_RADIUS) return;
+          o.pullUntil = until;
+          o.pullX = pos.x;
+          o.pullY = pos.y;
+          o.stunUntil = Math.max(o.stunUntil, until + (def.stunS ?? 1));
+          this.interruptPvp(oid, o, "damage");
+        });
         this.broadcast(Evt.Telegraph, { id: `r${++this.seq}`, x: pos.x, y: pos.y, r, ms: (def.pullS ?? 0.4) * 1000, friendly: true });
         break;
       }
       case "healAoe": {
         const amount = Math.round((def.heal ?? 0) * power);
         this.state.players.forEach((o, oid) => {
-          if (!o.dead && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) this.healPlayer(oid, o, amount);
+          if (!o.dead && !this.hostile(id, p, oid, o) && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) this.healPlayer(oid, o, amount);
         });
         break;
       }
       case "healFocus": { // um só alvo: o jogador vivo mais perto da mira (até 2,2 tiles dela) dentro do alcance; sem ninguém ali, cura a si mesmo
         let target: [string, Player] = [id, p], bestD = Infinity;
         this.state.players.forEach((o, oid) => {
-          if (o.dead || o.traveling || dist(o.x, o.y, p.x, p.y) > (def.range ?? 9)) return;
+          if (o.dead || o.traveling || this.hostile(id, p, oid, o) || dist(o.x, o.y, p.x, p.y) > (def.range ?? 9)) return;
           const d = dist(o.x, o.y, ax, ay);
           if (d <= 2.2 && d < bestD) { bestD = d; target = [oid, o]; }
         });
@@ -1492,8 +1538,8 @@ export class ZoneRoom extends Room<ZoneState> {
         break;
       }
       case "emberBuff": {
-        this.state.players.forEach((o) => {
-          if (!o.dead && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) {
+        this.state.players.forEach((o, oid) => {
+          if (!o.dead && !this.hostile(id, p, oid, o) && dist(o.x, o.y, p.x, p.y) <= (def.radius ?? 0)) {
             o.emberUntil = this.t + (def.buffS ?? 0);
             o.emberPct = def.dmgPct ?? 0;
             o.ember = true;
@@ -1561,6 +1607,7 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private startDash(p: Player, dx: number, dy: number, def: ActionDef) {
+    if (this.t < p.rootUntil) return; // enraizado: não se desloca (a ação do golpe continua valendo)
     const time = def.dashTime ?? 0.25;
     const speed = (def.dash ?? 0) / time;
     p.dashVx = dx * speed;
@@ -1946,11 +1993,15 @@ export class ZoneRoom extends Room<ZoneState> {
     this.interruptPvp(id, p, "damage"); // qualquer dano (inimigo, projétil, habilidade, área) cancela a canalização do PvP
     const reduction = Math.min(0.8, (this.t < p.buffUntil ? p.buffRed : 0) + p.gear.dr / 100);
     if (src && this.t < p.reflectUntil && p.reflectPct > 0) this.damageEnemy(id, src.id, src.e, Math.max(1, baseDmg * p.reflectPct), true); // Escudo Refletor: parte do golpe volta ao atacante
+    // Escudo Refletor no PvP: parte do golpe volta ao jogador que atacou (sem "by" na chamada: o reflexo não reflete de novo)
+    const attacker = by ? this.state.players.get(by) : undefined;
+    if (by && attacker && by !== id && this.t < p.reflectUntil && p.reflectPct > 0 && !attacker.dead) this.damagePlayer(by, attacker, Math.max(1, baseDmg * p.reflectPct));
     const dmg = Math.max(1, Math.round((baseDmg * (1 - reduction)) / defenseMult(p.level))); // defesa por nível: quem está mais alto leva menos de cada golpe
     p.hp = Math.max(0, p.hp - dmg);
     this.broadcast(Evt.Hit, { k: "p", id, dmg, crit, x: p.x, y: p.y, by });
     if (p.hp <= 0) {
       p.dead = true;
+      p.stunUntil = p.rootUntil = p.pullUntil = 0; // morto: os controles acabam
       p.deadUntil = this.t + RESPAWN_S;
       p.tx = p.x;
       p.ty = p.y;

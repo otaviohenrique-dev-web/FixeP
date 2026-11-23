@@ -1707,7 +1707,7 @@ class WorldScene extends Phaser.Scene {
         shield = 1;
         if (id === this.room.sessionId && this.shieldEnd && this.shieldEnd - performance.now() < 2000) shield = 0.55 + 0.35 * Math.sin(time / 70);
       }
-      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { shield, dead: p.dead, ember: p.ember, reflect: !!p.reflect, level: Number(p.level) || 1, kind: id === this.room.sessionId ? (p.pvp ? "pvp" : "me") : mateOf(p, id) ? "party" : p.pvp ? "pvp" : "ally" });
+      place(`p:${id}`, p.x, p.y, p.face, p.hp, p.maxHp, { shield, dead: p.dead, ember: p.ember, reflect: !!p.reflect, stun: !!p.stunned, root: !!p.rooted, level: Number(p.level) || 1, kind: id === this.room.sessionId ? (p.pvp ? "pvp" : "me") : mateOf(p, id) ? "party" : p.pvp ? "pvp" : "ally" });
     });
     st.enemies.forEach((e: any, id: string) => {
       const key = `e:${id}`;

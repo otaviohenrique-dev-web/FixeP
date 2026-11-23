@@ -40,7 +40,7 @@ const CSS = `
 .ch-btn{display:none;position:absolute;left:0;bottom:calc(100% + 8px);width:44px;height:44px;border-radius:10px;border:2px solid var(--gold-d);padding:0;cursor:pointer;pointer-events:auto;
   background:linear-gradient(180deg,#22304a,#0d1522);color:var(--gold);box-shadow:inset 0 0 0 1px rgba(255,225,160,.2),0 2px 6px rgba(0,0,0,.6);touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .ch-btn svg{display:block;margin:auto}
-@media (min-width:821px) and (max-width:1100px){.ch{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);width:min(380px,calc(100vw - 24px))}}
+@media (min-width:501px) and (max-width:1100px){.ch{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);width:min(380px,calc(100vw - 24px))}} /* abaixo de 1100 px a barra de habilidades ocupa o centro: o chat sobe para ficar acima dela */
 /* celular: o chat sobe acima do arco de botões (que ocupa os 250 px de baixo, à direita) e as falas ganham fundo para ler sobre o mapa */
 @media (pointer:coarse){.ch-btn{display:block}.ch{bottom:calc(max(10px,env(safe-area-inset-bottom)) + 262px);width:min(380px,calc(100vw - 24px))}
   .ch-log{max-height:120px;padding:4px 6px}
