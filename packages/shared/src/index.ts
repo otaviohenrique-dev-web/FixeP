@@ -380,8 +380,8 @@ const CLASS_SPECS: Record<CharClass, ClassSpec> = {
     id: "warrior", name: "Guerreiro", role: "Tanque", maxHp: 120, color: 0xff8a3d,
     resource: { name: "Fúria", icon: "flame", color: 0xe0742a, max: 100, regen: 5, perLevel: 3 },
     actions: {
-      // ataque básico: dano baixo, e cada golpe que acerta cura um pouco (sustento do tanque)
-      attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, offset: 1.0, radius: 1.25, effects: [{ t: "damage", amount: 10 }, { t: "hitHeal", amount: 2 }] },
+      // ataque básico: dano baixo (sem cura por golpe: roubo de vida é atributo de item, ver afixos.ts)
+      attack: { kind: "melee", name: "Golpe", key: "ESPAÇO", cd: 0.55, offset: 1.0, radius: 1.25, effects: [{ t: "damage", amount: 10 }] },
       // Q: avanço com o escudo à frente; quem estiver no caminho leva pouco dano e fica ATORDOADO por pouco; usar cura um pouco
       skill1: { kind: "dashHit", name: "Investida", key: "Q", cd: 7, cost: 25, dash: 4.5, dashTime: 0.25, radius: 1.2, icon: "charge", effects: [{ t: "damage", amount: 10 }, { t: "stun", s: 1.2 }, { t: "selfHeal", amount: 8 }] },
       // W: correntes brotam do chão e ENRAIZAM os inimigos da área, que ainda ficam lentos
@@ -582,6 +582,7 @@ export function classAction(cls: CharClass, a: ActionId, qMode = 0, mods: readon
 }
 
 export * from "./items";
+export * from "./afixos";
 export * from "./balance";
 export * from "./economy";
 export * from "./market";

@@ -24,8 +24,7 @@ const SNAPSHOT: Record<CharClass, { actions: Record<ActionId, ActionDef>; skill1
     "cd": 0.55,
     "offset": 1,
     "radius": 1.25,
-    "dmg": 10,
-    "hitHeal": 2
+    "dmg": 10
    },
    "skill1": {
     "kind": "dashHit",

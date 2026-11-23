@@ -890,7 +890,7 @@ export class ZoneRoom extends Room<ZoneState> {
     drops.forEach((d, i) => {
       const g = new GroundItem();
       const ang = (i / Math.max(1, drops.length)) * Math.PI * 2 + Math.random() * 0.6, rad = drops.length > 1 ? 1.2 + Math.random() * 0.4 : 0; // afastados o bastante para os nomes não se sobrepor
-      g.itemId = d.id; g.qty = d.qty;
+      g.itemId = d.id; g.qty = d.qty; g.af = (d.af ?? []).join(",");
       g.x = clamp(x + Math.cos(ang) * rad, 0, this.zone.w - 1);
       g.y = clamp(y + Math.sin(ang) * rad, 0, this.zone.h - 1);
       g.owner = owner; g.party = party; g.lockS = lockS;
@@ -917,7 +917,7 @@ export class ZoneRoom extends Room<ZoneState> {
       if (add < g.qty) g.qty -= add; else this.state.items.delete(gid);
       return;
     }
-    const left = addItem(p.inv, g.itemId, g.qty);
+    const left = addItem(p.inv, g.itemId, g.qty, g.af ? g.af.split(",") : undefined);
     const got = g.qty - left;
     if (got <= 0) {
       if (!quiet || this.t >= p.fullNoticeAt) { this.notify(id, "Mochila cheia."); p.fullNoticeAt = this.t + 4; }
@@ -1334,6 +1334,11 @@ export class ZoneRoom extends Room<ZoneState> {
     p.rooted = this.t < p.rootUntil;
     if (this.t >= p.healStackUntil) { p.healStacks = 0; p.healStackPct = 0; } // acúmulos de Cura Focada expiraram
     p.healStackS = this.t < p.healStackUntil ? Math.round((p.healStackUntil - this.t) * 10) / 10 : 0; // para a UI mostrar o tempo
+    if (p.gear.af.hpRegen > 0 && p.hp < p.maxHp && !p.dead && !this.healBlocked(id, p)) { // Vitalidade (afixo): regenera o tempo todo
+      p.regenAcc += p.gear.af.hpRegen * dt;
+      const w = Math.floor(p.regenAcc);
+      if (w >= 1) { p.hp = Math.min(p.maxHp, p.hp + w); p.regenAcc -= w; }
+    }
     if (p.hp < p.maxHp && this.t - p.combatAt >= PLAYER_REGEN_DELAY_S && !this.healBlocked(id, p)) { // fora de combate: recupera aos poucos (o servidor decide)
       p.regenAcc += p.maxHp * PLAYER_REGEN_PCT_S * dt;
       const whole = Math.floor(p.regenAcc);
@@ -1428,6 +1433,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private doAction(id: string, p: Player, a: ActionId, ax: number, ay: number) {
     const mods = modificadoresDaEscolha(limparEscolhas(p.variacoes, p.cls as CharClass, p.level)); // variações escolhidas (C2.2)
     const def: ActionDef = effectiveAction(classAction(p.cls as CharClass, a, p.qMode, mods), a, p.gear.kit, p.gear.cdr); // o kit da arma e as botas ajustam a ação
+    if (a === "attack" && p.gear.af.atkSpeed > 0) def.cd *= 1 - p.gear.af.atkSpeed / 100; // Punhos Rápidos (afixo): só o ataque básico
     if (this.t < p.stunUntil) return; // atordoado (PvP ou puxado): não age
     const left = (p.cdUntil[a] ?? 0) - this.t;
     if (left > 0.05) { // em recarga (tolerância de rede)
@@ -1640,7 +1646,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private healPlayer(id: string, p: Player, amount: number, from?: string) {
     const before = p.hp;
-    p.hp = Math.min(p.maxHp, p.hp + amount);
+    p.hp = Math.min(p.maxHp, p.hp + Math.round(amount * (1 + p.gear.af.healPct / 100))); // Bênção (afixo): cura mais
     const healed = p.hp - before;
     if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y, from });
   }
@@ -1765,9 +1771,15 @@ export class ZoneRoom extends Room<ZoneState> {
   private damageEnemy(by: string, eid: string, e: Enemy, baseDmg: number, refl = false) {
     if (e.st === "dead") return;
     if (this.t < e.shredUntil) baseDmg *= 1 + e.shredPct; // armadura quebrada: toda fonte de dano ganha o bônus
+    // afixos de quem bate (o reflexo e o dano de inimigos não usam os afixos de quem está por perto)
+    const attG = refl ? undefined : this.state.players.get(by)?.gear;
+    if (attG) {
+      if (attG.af.execute > 0 && e.hp < e.maxHp * 0.25) baseDmg *= 1 + attG.af.execute / 100; // Execução: inimigo com pouca vida
+      if (attG.af.bossPct > 0 && enemyKind(e.kind).boss) baseDmg *= 1 + attG.af.bossPct / 100; // Caçador de Chefes
+    }
     const crit = !refl && Math.random() < this.critChance(by);
     const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
-    const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult : 1)));
+    const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult + (attG?.af.critDmg ?? 0) / 100 : 1)));
     const shown = Math.min(dmg, e.hp);
     e.hp = Math.max(0, e.hp - dmg);
     e.contrib.set(by, (e.contrib.get(by) ?? 0) + shown); // o dano real define a elegibilidade a XP e loot
@@ -1775,6 +1787,8 @@ export class ZoneRoom extends Room<ZoneState> {
     if (!e.fightStart) { e.fightStart = this.t; e.nextPulse = this.t + (enemyKind(e.kind).boss?.pulseEveryS ?? 0); }
     const att = this.state.players.get(by);
     if (att) { att.combatAt = this.t; this.breakShield(att); }
+    if (attG && att && shown > 0 && attG.af.lifesteal > 0) this.healPlayer(by, att, Math.max(1, Math.round(shown * attG.af.lifesteal / 100))); // Roubo de Vida (proc de afixo)
+    if (attG && e.hp > 0 && attG.af.burnChance > 0 && Math.random() * 100 < attG.af.burnChance) this.burnEnemy(e, by, Math.max(1, Math.round(dmg * 0.2)), 3); // Queimadura ao Acertar (proc de afixo)
     if (!e.targetId && e.st !== "evade") e.targetId = by; // quem bate chama a atenção (inimigo voltando para casa ignora)
     this.broadcast(Evt.Hit, { k: "e", id: eid, dmg, crit, x: e.x, y: e.y, by, refl: refl || undefined });
     if (e.hp > 0) return;
@@ -1828,14 +1842,18 @@ export class ZoneRoom extends Room<ZoneState> {
       const xpEach = Math.round((baseXp * partyXpMult(n)) / n);
       const ironEach = Math.max(1, Math.round((K.boss ? bossIron(e.level) : mobIron(e.level)) / n));
       for (const [pid, pl] of members) {
-        this.addXp(pid, pl, xpEach);
+        const xpMine = Math.round(xpEach * (1 + pl.gear.af.xpPct / 100)); // Sabedoria (afixo)
+        const ironMine = Math.max(1, Math.round(ironEach * (1 + pl.gear.af.goldPct / 100))); // Mão Gananciosa (afixo)
+        this.addXp(pid, pl, xpMine);
+        if (pl.gear.af.hpOnKill > 0) this.healPlayer(pid, pl, pl.gear.af.hpOnKill); // Colheita de Almas (afixo)
+        if (pl.gear.af.manaOnKill > 0) pl.manaF = Math.min(pl.maxMana, pl.manaF + pl.gear.af.manaOnKill); // Essência Drenada (afixo)
         if (!this.abatesRegistrados.has(pl.charId)) {
           this.abatesRegistrados.add(pl.charId);
           void registrarEvento(this.repo.db, "primeiro_abate", { contaId: this.userIds.get(pid), personagemId: pl.charId, dados: { nivel: pl.level, zona: this.zone.id } });
         }
         this.questAbate(pid, pl, e.kind, this.zone.id); // quests: conta o abate (só para quem é elegível, como o XP)
-        this.clients.getById(pid)?.send(Evt.Xp, { amount: xpEach, x: e.x, y: e.y });
-        const iron = addCoins(pl.inv, "iron", ironEach);
+        this.clients.getById(pid)?.send(Evt.Xp, { amount: xpMine, x: e.x, y: e.y });
+        const iron = addCoins(pl.inv, "iron", ironMine);
         if (iron > 0) { pl.invDirty = true; this.sendInv(pid, pl); this.clients.getById(pid)?.send(Evt.Coins, { iron, obols: 0, x: e.x, y: e.y }); }
       }
     }
@@ -2132,6 +2150,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false, src?: { id: string; e: Enemy }) {
     if (this.zone.safe) return; // cidade segura: NINGUÉM leva dano, venha de onde vier (área, armadilha, projétil)
     if (p.shield) return; // bolha de chegada: imune a inimigos, chefes e PvP (também durante o load)
+    if (p.gear.af.dodge > 0 && Math.random() * 100 < p.gear.af.dodge) return; // Passo Fantasma (afixo): esquivou o golpe
     p.combatAt = this.t; // em combate: a regeneração de vida recomeça só depois de um tempo
     p.regenAcc = 0;
     if (by) { const a = this.state.players.get(by); if (a) a.combatAt = this.t; }
@@ -2139,9 +2158,11 @@ export class ZoneRoom extends Room<ZoneState> {
     this.interruptPvp(id, p, "damage"); // qualquer dano (inimigo, projétil, habilidade, área) cancela a canalização do PvP
     const reduction = Math.min(0.8, (this.t < p.buffUntil ? p.buffRed : 0) + p.gear.dr / 100);
     if (src && this.t < p.reflectUntil && p.reflectPct > 0) this.damageEnemy(id, src.id, src.e, Math.max(1, baseDmg * p.reflectPct), true); // Escudo Refletor: parte do golpe volta ao atacante
+    if (src && p.gear.af.reflect > 0) this.damageEnemy(id, src.id, src.e, Math.max(1, baseDmg * p.gear.af.reflect / 100), true); // afixo Espinhos: devolve parte do golpe
     // Escudo Refletor no PvP: parte do golpe volta ao jogador que atacou (sem "by" na chamada: o reflexo não reflete de novo)
     const attacker = by ? this.state.players.get(by) : undefined;
     if (by && attacker && by !== id && this.t < p.reflectUntil && p.reflectPct > 0 && !attacker.dead) this.damagePlayer(by, attacker, Math.max(1, baseDmg * p.reflectPct));
+    if (by && attacker && by !== id && p.gear.af.reflect > 0 && !attacker.dead) this.damagePlayer(by, attacker, Math.max(1, baseDmg * p.gear.af.reflect / 100)); // Espinhos no PvP
     const dmg = Math.max(1, Math.round((baseDmg * (1 - reduction)) / defenseMult(p.level))); // defesa por nível: quem está mais alto leva menos de cada golpe
     p.hp = Math.max(0, p.hp - dmg);
     this.broadcast(Evt.Hit, { k: "p", id, dmg, crit, x: p.x, y: p.y, by });

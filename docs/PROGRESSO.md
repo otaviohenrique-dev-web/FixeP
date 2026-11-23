@@ -54,6 +54,13 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | Poder total (número do personagem) | 🟡 concluído com pendência (2026-11-23) | Função pura `poderTotal` em `packages/shared/src/poder.ts` (dano do ataque básico por segundo × 2, vida efetiva × 0,3, recurso máximo × 0,05), com os stats que o combate usa (kit, crítico, recarga, redução de dano). O servidor calcula e envia `poder` no Player; o cliente mostra no painel da mochila (destaque) e no HUD (chip acima do nível), prévia no tooltip (`ANTES → DEPOIS (±n)`) e anima ao equipar (verde sobe, vermelho cai; respeita reduced-motion). Testes: `test/poder.unit.ts` e `test/poder.mjs` (no `run-all.sh`). Pendência: conferir layout no navegador em 700x340 e 1280x720 (ver PR); a prévia não trata a mão dupla que libera a mão secundária. |
 | Ícones de buffs próprios | ✅ concluído (2026-11-23) | Buffs positivos do próprio personagem aparecem como ícones pequenos abaixo das barras (anel de tempo, segundos e acúmulos; tooltip ao passar o mouse ou com toque longo). Tabela em `packages/shared/src/buffs.ts`; o servidor manda a lista só ao dono (`Evt.Buffs`, `ZoneRoom.syncBuffs`), a cada mudança e de 1 em 1 s com buffs ativos. Cobertos: Chuva (velocidade de ataque), Cura Focada (acúmulos), Escudo Refletor, Guarda (Cura em Área e Luz Divina), Provocação e Brasa do Clérigo. Sem buff de regeneração de mana (não existe no código). Teste `test/buffs.mjs` (17 verificações). Conferido em 700x340 e 1280x720; o rótulo "Escudo ativo" some quando a fileira aparece. |
 
+## Itens e afixos
+
+| Item | Situação | Observação |
+|---|---|---|
+| Afixos de item (atributos de drop) | 🟡 concluído com pendência (2026-11-23) | `packages/shared/src/afixos.ts`: 30 afixos (vida, dano, crítico, esquiva, espinhos, recarga, regeneração, ouro/XP, roubo de vida, queimadura, execução...) com faixa por raridade. Drop de equipamento traz 0 a 3 afixos (comum 0-1, incomum 1, raro 1-2, épico 2, lendário 2-3, mítico 3), sem repetir. Gravado em `inventory_items.af` e `equipment.af` (migração 016). Tooltip lista os afixos na cor da raridade. Pendências: ver PD-15 e PD-16. |
+| Atributos de classe retirados (roubo de vida e queimadura de variação) | ✅ concluído (2026-11-23) | Cura por golpe do Guerreiro (`hitHeal` no golpe básico) saiu; variações `m_bol_chama` e `m_chu_persistente` deixaram de dar queimadura e viraram redução de custo; `w_esc_espinhos` deixou de devolver dano e passou a dar provocação. Mantidos: queimadura da Bola de Fogo, Chuva de Fogo e Meteoro; enraizamento e atordoamento do Mago; cura em área do Clérigo. |
+
 ## Pendências abertas
 
 | ID | Pendência | Criticidade | Detalhe e próximo passo |
@@ -74,5 +81,9 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | PD-11 | XP do nível 3 ao 10 depende dos abates | **Média** | As 17 quests da cadeia dão cerca de 680 de XP no total; o nível 10 pede cerca de 2350 de XP a partir do nível 3. O resto vem dos abates. Falta medir no jogo quanto um abate dá e se a cadeia chega ao nível 10 no tempo esperado (teste de equilíbrio). |
 | PD-12 | Textos da cadeia sem lore | **Baixa** | Textos provisórios, curtos e neutros, até a lore ser escrita. Pendência de conteúdo: trocar os textos quando o documento de lore sair. |
 | PD-13 | Gatilhos das dicas não testados no navegador | **Baixa** | Vida baixa, poção, item no chão, mochila cheia e recurso insuficiente só foram conferidos pela leitura do código; o teste de ponta a ponta cobre a gravação e o reenvio. Próximo passo: provocar cada gatilho no jogo real (ou num teste com `QUEST_TEST`-like). |
+
+| PD-15 | Afixos sem efeito no combate ainda | **Média** | No catálogo, mas só com dados (sem efeito ligado): Sorte do Saque (chance de drop), Vontade de Ferro (controle em você), Perfuração (ignora defesa), Barreira Inicial (escudo ao entrar em combate) e Pés Leves (velocidade de movimento). Próximo passo: ligar cada um no ZoneRoom ou tirar do catálogo. |
+| PD-16 | Mercado e baú não guardam afixos | **Alta** | Um item com afixo que vai para o mercado, ou para o baú, volta SEM os afixos (a tabela de listagem e a do baú ainda não gravam `af`). Próximo passo: gravar `af` nas tabelas `market_listings` e `vault_items` (nova migração) e nos caminhos de venda/compra. |
+| PD-17 | Procs de afixo sem teste de ponta a ponta | **Média** | Roubo de vida, queimadura ao acertar, execução, espinhos e esquiva têm código no `ZoneRoom`, mas só o drop, a persistência e o status são cobertos por `test/afixos.mjs`. Próximo passo: teste que acerta um inimigo com o afixo e confere a cura e a queimadura. |
 
 Regra: pendência **Alta** não passa de marco; **Média** deve ser resolvida até o fim da etapa seguinte; **Baixa** entra quando houver folga.

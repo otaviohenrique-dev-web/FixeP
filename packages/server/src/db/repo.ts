@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, type CharClass, type EquipSlot } from "@frixep/shared";
+import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, migrateItemId, afixosValidos, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 import { emptyVault, type Vault } from "../game/vault.js";
 import type { QuestMap, QuestRt } from "../game/quests.js";
@@ -10,7 +10,7 @@ import type { Db, Tx } from "./index.js";
 export const startZone = () => { const z = Number(process.env.TEST_START_ZONE); return process.env.NODE_ENV !== "production" && Number.isInteger(z) && z > 0 ? z : START_ZONE; };
 export interface VaultRows { items: { slot: number; id: string; qty: number }[]; iron: number; obols: number }
 
-export interface InvRows { items: { slot: number; id: string; qty: number }[]; eq: { slot: string; id: string }[]; iron: number; obols: number }
+export interface InvRows { items: { slot: number; id: string; qty: number; af: string | null }[]; eq: { slot: string; id: string; af: string | null }[]; iron: number; obols: number }
 
 export type { CharClass };
 export interface CharacterRow {
@@ -154,8 +154,8 @@ export class Repo {
 
   async loadInventory(charId: string, cls: CharClass = "warrior"): Promise<Inventory> {
     const inv = emptyInventory();
-    const items = await this.db.query<{ slot: number; item_id: string; qty: number }>(
-      "select slot, item_id, qty from inventory_items where character_id = $1",
+    const items = await this.db.query<{ slot: number; item_id: string; qty: number; af: string | null }>(
+      "select slot, item_id, qty, af from inventory_items where character_id = $1",
       [charId],
     );
     for (const r of items.rows) {
@@ -163,17 +163,20 @@ export class Repo {
       const def = ITEMS[id]; // item removido do jogo é ignorado em vez de quebrar a entrada
       if (!def || r.slot < 0 || r.slot >= INV_SLOTS || inv.slots[r.slot]) continue;
       if (id !== r.item_id) inv.migrated = true;
-      inv.slots[r.slot] = { id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
+      const af = afixosValidos(r.af, def.kind, def.rarity); // itens antigos não têm afixos: a lista vazia vale
+      inv.slots[r.slot] = af.length ? { id, qty: Math.max(1, Math.min(def.stack, r.qty)), af } : { id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
     }
     const w = await this.db.query<{ iron: number; obols: number }>("select iron, obols from characters where id = $1", [charId]);
     inv.iron = Math.max(0, Number(w.rows[0]?.iron) || 0);
     inv.obols = Math.max(0, Number(w.rows[0]?.obols) || 0);
-    const eq = await this.db.query<{ slot: string; item_id: string }>("select slot, item_id from equipment where character_id = $1", [charId]);
+    const eq = await this.db.query<{ slot: string; item_id: string; af: string | null }>("select slot, item_id, af from equipment where character_id = $1", [charId]);
     for (const r of eq.rows) {
       const id = migrateItemId(r.item_id, cls);
       const def = ITEMS[id];
       if (def && (EQUIP_SLOTS as readonly string[]).includes(r.slot) && def.kind === r.slot) {
         inv.equip[r.slot as EquipSlot] = id;
+        const af = afixosValidos(r.af, def.kind, def.rarity);
+        if (af.length) inv.equipAf = { ...(inv.equipAf ?? {}), [r.slot]: af };
         if (id !== r.item_id) inv.migrated = true;
       }
     }
@@ -183,8 +186,8 @@ export class Repo {
   /** Fotografia do que será gravado (copiada na hora, antes de qualquer espera). */
   inventoryRows(inv: Inventory): InvRows {
     return {
-      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty }] : [])),
-      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]! }] : [])),
+      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, af: s.af?.length ? JSON.stringify(s.af) : null }] : [])),
+      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]!, af: inv.equipAf?.[sl]?.length ? JSON.stringify(inv.equipAf[sl]) : null }] : [])),
       iron: inv.iron, obols: inv.obols,
     };
   }
@@ -195,12 +198,12 @@ export class Repo {
     await q("delete from equipment where character_id = $1", [charId]);
     await q("update characters set iron = $2, obols = $3 where id = $1", [charId, r.iron, r.obols]);
     if (r.items.length) {
-      const ph = r.items.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
-      await q(`insert into inventory_items (character_id, slot, item_id, qty) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty])]);
+      const ph = r.items.map((_, i) => `($1, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4}, $${i * 4 + 5})`).join(",");
+      await q(`insert into inventory_items (character_id, slot, item_id, qty, af) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty, x.af])]);
     }
     if (r.eq.length) {
-      const ph = r.eq.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(",");
-      await q(`insert into equipment (character_id, slot, item_id) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id])]);
+      const ph = r.eq.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
+      await q(`insert into equipment (character_id, slot, item_id, af) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id, x.af])]);
     }
   }
 
