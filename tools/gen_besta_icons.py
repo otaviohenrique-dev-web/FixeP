@@ -9,7 +9,7 @@ Uso (na raiz do repositório):  python tools/gen_besta_icons.py      (precisa de
 """
 import os
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -17,6 +17,7 @@ SRC = os.path.join(ROOT, "assets", "source", "besta")
 OUT = os.path.join(ROOT, "assets", "items")
 RARITIES = ["common", "uncommon", "rare", "epic", "legendary", "mythic"]
 SIZE = 48
+ROTACAO = {"common": 32, "uncommon": -32, "rare": 18, "mythic": 28}  # graus; epic e legendary ja vem na diagonal
 # area interna de cada arte (sem a moldura colorida) e limiar do fundo escuro (brilhos fortes pedem limiar maior)
 CROP = {
     "common": ((110, 110, 914, 914), 34),
@@ -46,9 +47,16 @@ def main():
         box = im.getbbox()
         if box:
             im = im.crop(box)
+        # arma comprida e fina: gira na diagonal (como as outras armas) para ocupar o quadrado e aparecer maior
+        if rar in ROTACAO:
+            im = im.rotate(ROTACAO[rar], expand=True, resample=Image.BICUBIC)
+            box = im.getbbox()
+            if box:
+                im = im.crop(box)
         w, h = im.size
-        esc = (SIZE - 4) / max(w, h)
+        esc = (SIZE - 2) / max(w, h)
         im = im.resize((max(1, round(w * esc)), max(1, round(h * esc))), Image.LANCZOS)
+        im = im.filter(ImageFilter.UnsharpMask(radius=1, percent=140, threshold=2))
         small = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
         small.paste(im, ((SIZE - im.width) // 2, (SIZE - im.height) // 2))
         dst = os.path.join(OUT, f"item_besta_{rar}.png")
