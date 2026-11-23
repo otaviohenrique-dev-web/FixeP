@@ -25,6 +25,13 @@ html,body{position:fixed;inset:0;width:100%;height:var(--vh);margin:0;overflow:h
 .gm-item[hidden]{display:none!important}
 .vt-body::-webkit-scrollbar,.ec-list::-webkit-scrollbar,.iv-body::-webkit-scrollbar{width:4px}
 @media (max-height:480px){.vt-head,.ec-head{padding-top:6px;padding-bottom:4px}.gm-card{padding:12px 16px}.gm-item{min-height:40px;margin-top:6px}.gm-who{margin-bottom:8px}}
+/* celular (retrato e paisagem): leiloeiro, comerciante e baú rolam como um só painel. Antes, o cabeçalho, os filtros e o
+   rodapé dividiam a altura curta da tela e a lista (ou o rodapé com a paginação) ficava cortada sem rolagem. */
+@media (max-width:620px),(max-height:500px){
+  .ec-card.mk-card,.ec-card,.vt-card{overflow-y:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  .ec-card>*,.vt-card>*{flex:none!important}
+  .ec-card .ec-list,.vt-card .vt-body{overflow:visible!important;min-height:0}
+}
 `;
 
 function apply() {
