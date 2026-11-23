@@ -6,5 +6,5 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_05_cinzas"],
   "objetivos": [{ "tipo": "abater", "kind": "skeleton", "qtd": 4, "zona": 1 }],
-  "recompensa": { "xp": 23, "ferro": 25, "itens": [{ "id": "{classe}_helmet_common", "qtd": 1 }] }
+  "recompensa": { "xp": 184, "ferro": 25, "itens": [{ "id": "{classe}_helmet_uncommon", "qtd": 1 }, { "id": "mat_ferro_bruto", "qtd": 2 }] }
 }

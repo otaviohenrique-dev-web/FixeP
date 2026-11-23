@@ -6,5 +6,5 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_15_botas"],
   "objetivos": [{ "tipo": "falar", "npc": "merchant" }],
-  "recompensa": { "xp": 89, "ferro": 60, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }] }
+  "recompensa": { "xp": 712, "ferro": 60, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }, { "id": "mat_essencia_arcana", "qtd": 2 }, { "id": "{classe}_helmet_rare", "qtd": 1 }] }
 }

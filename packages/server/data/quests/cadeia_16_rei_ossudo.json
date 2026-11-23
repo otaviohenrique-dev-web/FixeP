@@ -6,5 +6,5 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_15_botas"],
   "objetivos": [{ "tipo": "abater", "kind": "bone_king", "qtd": 1, "zona": 1 }],
-  "recompensa": { "xp": 72, "ferro": 60, "itens": [{ "id": "{classe}_armor_uncommon", "qtd": 1 }] }
+  "recompensa": { "xp": 576, "ferro": 60, "itens": [{ "id": "{classe}_armor_rare", "qtd": 1 }, { "id": "mat_essencia_arcana", "qtd": 2 }] }
 }

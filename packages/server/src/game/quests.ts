@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import {
-  ITEMS, ENEMY_KINDS, ZONES, zoneNpcs, LEVEL_CAP, xpToNext, validarFormatoQuest, objetivoContavel, CLASSE_PLACEHOLDER,
+  ITEMS, ENEMY_KINDS, ZONES, zoneNpcs, LEVEL_CAP, xpToNext, validarFormatoQuest, objetivoContavel, CLASSE_PLACEHOLDER, rarityLiberada,
   type QuestDef, type Objetivo, type EstadoQuest, type QuestEstado, type CharClass, type AcaoUsar,
 } from "@frixep/shared";
 import { addItem, addItemNovo, type Inventory } from "./inventory.js";
@@ -72,6 +72,8 @@ function conferirContraJogo(def: QuestDef, arq: string): void {
   for (const r of def.recompensa.itens) {
     const ids = r.id.includes(CLASSE_PLACEHOLDER) ? CLASSES.map((c) => resolverItem(r.id, c)) : [r.id];
     for (const id of ids) if (!ITEMS[id]) throw new Error(`quest "${arq}": recompensa.itens com id "${id}" inexistente`);
+    // o dev mudou a regra: quest dá material e equipamento verde/raro; épico+ só por craft (ou chefe de nível alto, futuro)
+    for (const id of ids) if (!rarityLiberada(ITEMS[id].rarity)) throw new Error(`quest "${arq}": recompensa.itens com "${id}" é épico ou acima (não sai de quest)`);
   }
 }
 

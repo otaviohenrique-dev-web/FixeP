@@ -8,6 +8,6 @@
   "objetivos": [
     { "tipo": "abater", "kind": "skeleton", "qtd": 1, "zona": 1 }
   ],
-  "recompensa": { "xp": 40, "ferro": 20, "itens": [] },
+  "recompensa": { "xp": 320, "ferro": 20, "itens": [{ "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Vá ao portão do norte, escolha Cinzas e ataque 1 esqueleto que esteja sozinho.", "teclado": "Vá ao portão do norte, escolha Cinzas e ataque 1 esqueleto sozinho (barra de espaço)." }
 }

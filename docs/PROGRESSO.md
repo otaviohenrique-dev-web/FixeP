@@ -66,6 +66,18 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | Atributos de classe retirados (roubo de vida e queimadura de variação) | ✅ concluído (2026-11-23) | Cura por golpe do Guerreiro (`hitHeal` no golpe básico) saiu; variações `m_bol_chama` e `m_chu_persistente` deixaram de dar queimadura e viraram redução de custo; `w_esc_espinhos` deixou de devolver dano e passou a dar provocação. Mantidos: queimadura da Bola de Fogo, Chuva de Fogo e Meteoro; enraizamento e atordoamento do Mago; cura em área do Clérigo. |
 | Afixos em todo equipamento + fim de queimadura/reflexo nas classes (feedback do dono após o #137) | 🟢 concluído (2026-11-23) | **Classes:** queimadura saiu do Mago (Bola de Fogo, Chuva de Fogo, Meteoro): viraram lentidão e enraizamento, com mais dano. Reflexo saiu do Escudo do Guerreiro (agora **Escudo de Aço**, só provoca e reduz dano; o reflexo é o afixo Espinhos). Cura por golpe da Investida saiu (+4 de dano no lugar). Cura do Clérigo fica. **Afixos:** backfill determinístico (semente = personagem + espaço + id; `afixosDaSemente`) para equipamento antigo sem afixo, ao carregar a mochila e o equipamento (`repo.ts`), gravado no próximo salvamento. Loja, recompensa de quest e fusão do ferreiro sorteiam afixos (`addItemNovo`); a fusão preserva os afixos dos itens que sobram. Arma e mão secundária de raridade rara ou acima sorteiam SÓ afixos ofensivos. Afixos sem efeito (PD-15) não saem mais. Testes: `afixos-itens.unit.ts` (novo), `inventory.unit.ts` (backfill), `rebalance.mjs` (lentidão), `balance`/`acoes`/`variacoes` (asserts com justificativa). Pendências: PD-16 (mercado e baú) continua. |
 
+## Economia de XP, drops e comerciante (design definitivo do dono, 2026-11-23)
+
+| Item | Situação | Observação |
+|---|---|---|
+| XP de mob e chefe caiu forte; quest virou a maior fonte de XP | 🟢 concluído (2026-11-23) | `XP_MOB_MULT = 0.03` em `packages/shared/src/index.ts` (`enemyXp`); chefes com `xpMul` 2 (antes 8, 8 e 10). Quest: XP x8 nos 22 JSON. Ver tabela no PR. |
+| Épico, lendário e mítico fora de todas as zonas atuais (mobs e baús) | 🟢 concluído (2026-11-23) | Só saem de craft (outra frente). Ficam reservados a chefe de nível `EPIC_PLUS_MIN_BOSS_LEVEL = 45` (`rarityLiberada` em `zones.ts`, consultado por `pickRarity` em `loot.ts`). Hoje nenhum chefe chega lá. |
+| Verde domina, raro ocasional; baús de chefe com piso raro | 🟢 concluído (2026-11-23) | Pesos por zona em `zones.ts`. Teto de toda zona e da forja: raro. |
+| Materiais de craft `mat_ferro_bruto`, `mat_couro_curtido`, `mat_essencia_arcana` | 🟡 concluído com pendência (2026-11-23) | Itens (kind `material`, empilham 99, não equipam, vendem por 6) e tabela de drop por zona (70% de chance por abate). Ícones: sem arte, usa o desenho provisório. Craft não é desta frente. |
+| Recompensas de quest com material e verde/raro (nunca épico+) | 🟢 concluído (2026-11-23) | Validado em `packages/server/src/game/quests.ts`. |
+| Comerciante só vende comum e poção | 🟢 concluído (2026-11-23) | `SHOP_MAX_RARITY = "common"` em `economy.ts`. |
+| Suítes de integração (servidor de teste) | 🔴 não verificadas aqui | No Windows deste ambiente o servidor de teste morre com `out of memory` (PGlite/V8) antes de rodar as suítes; o CI (Linux) é quem roda `run-all.sh`. |
+
 ## Pendências abertas
 
 | ID | Pendência | Criticidade | Detalhe e próximo passo |
@@ -90,5 +102,6 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | PD-15 | Afixos sem efeito no combate ainda | **Média** | No catálogo, mas só com dados (sem efeito ligado): Sorte do Saque (chance de drop), Vontade de Ferro (controle em você), Perfuração (ignora defesa), Barreira Inicial (escudo ao entrar em combate) e Pés Leves (velocidade de movimento). Desde o feedback do dono, **não são sorteados** (um item não traz linha que não faz nada). Próximo passo: ligar cada um no ZoneRoom ou tirar do catálogo. |
 | PD-16 | Mercado e baú não guardam afixos | **Alta** | Um item com afixo que vai para o mercado, ou para o baú, volta SEM os afixos (a tabela de listagem e a do baú ainda não gravam `af`). Próximo passo: gravar `af` nas tabelas `market_listings` e `vault_items` (nova migração) e nos caminhos de venda/compra. |
 | PD-17 | Procs de afixo sem teste de ponta a ponta | **Média** | Roubo de vida, queimadura ao acertar, execução, espinhos e esquiva têm código no `ZoneRoom`, mas só o drop, a persistência e o status são cobertos por `test/afixos.mjs`. Próximo passo: teste que acerta um inimigo com o afixo e confere a cura e a queimadura. |
+| PD-18 | Materiais de craft sem craft ainda | **Média** | `mat_*` já caem de mobs e quests, mas só servem de ingrediente quando o craft (outra sessão) entrar. Próximo passo: ligar as receitas ao craft e fechar os 3 ícones de `assets/items/item_mat_*.png`. |
 
 Regra: pendência **Alta** não passa de marco; **Média** deve ser resolvida até o fim da etapa seguinte; **Baixa** entra quando houver folga.

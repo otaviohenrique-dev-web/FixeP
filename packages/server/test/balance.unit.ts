@@ -1,6 +1,6 @@
 // Balanceamento das classes (sem servidor): DPS estimado com as constantes REAIS do jogo (nível 1, sem equipamento) e regras do kit novo.
 // Uso (em packages/server): npx tsx test/balance.unit.ts   (a mesma tabela vai no README)
-import { estimateDps, CLASS_DEFS, PLAYABLE_CLASSES, ITEMS, WEAPON_TYPES, classAction, BOSS_CC_RESIST, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, AOE_TARGETS, type CharClass } from "@frixep/shared";
+import { estimateDps, CLASS_DEFS, PLAYABLE_CLASSES, ITEMS, WEAPON_TYPES, classAction, BOSS_CC_RESIST, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, AOE_TARGETS, enemyXp, xpToNext, ZONES, ZONE_IDS, enemyKind, expandSpawns, LEVEL_CAP, type CharClass } from "@frixep/shared";
 
 const results: boolean[] = [];
 const check = (name: string, ok: boolean, detail = "") => {
@@ -88,6 +88,28 @@ check("Q Perfurar: dano médio, atravessa e QUEBRA ARMADURA (bônus de dano rece
 check("W Cilada: dano BAIXO (menor que o do Perfurar) e lentidão considerável e longa", R.skill2.kind === "trap" && R.skill2.dmg! < R.skill1.dmg! && (R.skill2.slowPct ?? 0) >= 40 && (R.skill2.slowS ?? 0) >= 4);
 check("E Chuva: dano significativo e ao acertar acelera o ataque básico", R.skill3.kind === "rain" && R.skill3.dmg! >= 15 && (R.skill3.hasteAtkPct ?? 0) >= 50 && (R.skill3.hasteS ?? 0) >= 3);
 check("R Salva Final segue como a maior fonte de dano em área da classe", R.ultimate.dmg! > Math.max(R.skill1.dmg!, R.skill2.dmg!, R.skill3.dmg!) && R.ultimate.kind === "rain");
+
+// o dev mudou a regra (XP): mob e chefe das zonas iniciais rendem POUCO; quem sobe de nível é a quest (ver quests.unit.ts).
+console.log("\n== XP: mobs e chefes rendem pouco; nível 50 é impossível com as zonas iniciais ==");
+{
+  const xpMob = (lvl: number) => enemyXp(lvl);
+  check("mob de nível 1 dá 1 XP e nível 6 dá 4 (antes 20 e 128)", xpMob(1) === 1 && xpMob(6) === 4, `${xpMob(1)} / ${xpMob(6)}`);
+  check("cada mob das zonas de combate dá menos de 15% do XP do próprio nível", ZONE_IDS.every((z) => expandSpawns(ZONES[z]).every((e) => enemyXp(e.level) < xpToNext(e.level) * 0.15)), `nível 21: ${xpMob(21)} de ${xpToNext(21)}`);
+  check("cada chefe de zona rende menos de metade de um nível do próprio nível (XP x xpMul)", ZONE_IDS.filter((z) => ZONES[z].boss).every((z) => {
+    const b = ZONES[z].boss!;
+    return enemyXp(b.level) * enemyKind(b.kind).boss!.xpMul < xpToNext(b.level) * 0.5;
+  }));
+  // quantas limpezas completas (todos os mobs + todos os chefes das 3 zonas, uma vez) levam do nível 1 ao 50
+  let clear = 0;
+  for (const z of ZONE_IDS.filter((z) => ZONES[z].boss)) {
+    for (const e of expandSpawns(ZONES[z])) clear += enemyXp(e.level);
+    const b = ZONES[z].boss!;
+    clear += enemyXp(b.level) * enemyKind(b.kind).boss!.xpMul;
+  }
+  let toCap = 0;
+  for (let l = 1; l < LEVEL_CAP; l++) toCap += xpToNext(l);
+  check("nível 50 exige mais de 500 limpezas completas das zonas de combate (é impossível num dia)", toCap / clear > 500, `${Math.round(toCap / clear)} limpezas (${clear} XP por limpeza)`);
+}
 
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} verificações passaram`);

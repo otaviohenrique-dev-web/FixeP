@@ -8,6 +8,6 @@
   "objetivos": [
     { "tipo": "equipar", "slot": "armor" }
   ],
-  "recompensa": { "xp": 60, "ferro": 30, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }] },
+  "recompensa": { "xp": 480, "ferro": 30, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }, { "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Abra a mochila, toque na armadura e equipe.", "teclado": "Abra a mochila (tecla I), clique na armadura e equipe." }
 }
