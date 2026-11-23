@@ -28,6 +28,7 @@ import { parties, type Result } from "../game/party.js";
 import { carregarQuests, questsDoServidor, aceitar, progredirAbate, progredirFala, progredirChegada, progredirUso, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
 import type { QuestEvent, QuestDefsEvent, QuestDef, AcaoUsar, DicasVistasEvent } from "@frixep/shared";
 import { dicaValida, dicasValidas } from "@frixep/shared";
+import type { ActiveBuff, BuffsEvent } from "@frixep/shared";
 
 /** Quests carregadas dos JSON em packages/server/data/quests. Se algum estiver errado, o servidor nem sobe (mensagem diz o arquivo). */
 const DEFS = carregarQuests(questsDoServidor());
@@ -1317,6 +1318,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (p.shield && this.t >= p.shieldUntil) { if (p.shieldPending) this.startShield(id, p); else p.shield = false; } // fim da bolha (ou fim da espera sem aviso do cliente)
     p.buff = this.t < p.buffUntil;
     p.ember = this.t < p.emberUntil;
+    this.syncBuffs(id, p);
     p.reflect = this.t < p.reflectUntil;
     p.stunned = this.t < p.stunUntil;
     p.rooted = this.t < p.rootUntil;
@@ -1462,6 +1464,7 @@ export class ZoneRoom extends Room<ZoneState> {
         p.buffUntil = this.t + (def.buffS ?? 0);
         p.buffRed = def.reduction ?? 0;
         p.buff = true;
+        p.provokeUntil = this.t + (def.tauntS ?? 0); // provocação do próprio Guerreiro (buff na UI)
         if (def.kind === "reflectBuff") { p.reflectUntil = p.buffUntil; p.reflectPct = def.reflect ?? 0; p.reflect = true; }
         this.state.enemies.forEach((e) => {
           if (e.st !== "dead" && dist(e.x, e.y, p.x, p.y) <= (def.tauntRadius ?? 0)) {
@@ -1872,6 +1875,30 @@ export class ZoneRoom extends Room<ZoneState> {
     const active = this.t < o.buffUntil;
     o.buffRed = Math.max(active ? o.buffRed : 0, pct / 100);
     o.buffUntil = Math.max(active ? o.buffUntil : 0, this.t + s);
+    o.guardUntil = Math.max(o.guardUntil, this.t + s); // só para a UI de buffs
+  }
+
+  /** Buffs positivos ativos deste jogador (para o próprio dono ver os ícones). Escudo da chegada e esquiva ficam de fora (já têm seus próprios avisos). */
+  private buffList(p: Player): ActiveBuff[] {
+    const out: ActiveBuff[] = [];
+    const left = (u: number) => Math.round((u - this.t) * 10) / 10;
+    if (this.t < p.hasteUntil) out.push({ id: "haste", ate: left(p.hasteUntil) });
+    if (this.t < p.healStackUntil && p.healStacks > 0) out.push({ id: "heal_stacks", ate: left(p.healStackUntil), stacks: p.healStacks });
+    if (this.t < p.reflectUntil) out.push({ id: "reflect", ate: left(p.reflectUntil) });
+    if (this.t < p.guardUntil) out.push({ id: "guard", ate: left(p.guardUntil) });
+    if (this.t < p.provokeUntil) out.push({ id: "provoke", ate: left(p.provokeUntil) });
+    if (this.t < p.emberUntil) out.push({ id: "ember", ate: left(p.emberUntil) });
+    return out;
+  }
+
+  /** Manda ao dono a lista de buffs quando ela muda (ou de 1 em 1 s enquanto houver algum, para o tempo não desviar). */
+  private syncBuffs(id: string, p: Player) {
+    const list = this.buffList(p);
+    const sig = list.map((b) => `${b.id}:${b.stacks ?? ""}`).join("|");
+    if (sig === p.buffSig && (list.length === 0 || this.t - p.buffSentAt < 1)) return;
+    p.buffSig = sig;
+    p.buffSentAt = this.t;
+    this.clients.getById(id)?.send(Evt.Buffs, { list } satisfies BuffsEvent);
   }
 
   // ------------------------------------------------------------------ IA do esqueleto

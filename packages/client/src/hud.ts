@@ -1,6 +1,7 @@
-import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, AUTO_POT_MAX, AUTO_POT_STEP, ITEMS, skillTooltip, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
+import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier, CLASS_DEFS, PVP_CHANNEL_S, POTION_COOLDOWN_S, AUTO_POT_MAX, AUTO_POT_STEP, ITEMS, skillTooltip, type ActiveBuff, type SkillTooltipData, type ActionDef, type ActionId, type CharClass, type ResourceDef } from "@frixep/shared";
 
 import { skillImage, skillCategory } from "./skill-art";
+import { mountBuffs, type BuffStrip } from "./buffs";
 
 /**
  * HUD do combate em DOM (visual original do FrixeP: molduras quadradas de cantos suaves, ouro velho sobre azul-noite).
@@ -43,6 +44,8 @@ export interface Hud {
   setPortrait(source: CanvasImageSource | null, crop?: { x: number; y: number; w: number; h: number }): void;
   setDead(secondsLeft: number | null, place?: string): void;
   setBuff(on: boolean, label?: string): void;
+  /** buffs próprios vindos do servidor (Evt.Buffs): fileira de ícones com tempo restante e acúmulos */
+  setBuffs(list: ActiveBuff[]): void;
   /** liga o layout de toque: botões no canto direito, ao alcance do polegar */
   setTouch(on: boolean): void;
   /** estado do PvP vindo do servidor: `on` = está no modo; `chan` 0 nenhuma, 1 entrando, 2 saindo */
@@ -289,6 +292,7 @@ export function mountHud(opts: HudOptions): Hud {
         <div class="hd-meter hd-hp"><span class="ic" style="color:#ff5a64">${ICON.heart}</span><div class="hd-track"><div class="hd-hlag"></div><div class="hd-fill hd-hpf" style="transform:scaleX(0)"></div><div class="hd-txt hd-hp-t">—</div></div></div>
         <div class="hd-meter hd-tr"><div class="hd-thin"><div class="hd-fill"></div></div><span class="hd-tt"></span></div>
         <div class="hd-meter hd-rs"><span class="ic" style="color:${resColor}">${ICON[res.icon] ?? ""}</span><div class="hd-track"><div class="hd-fill" style="background:linear-gradient(180deg,${resColor},color-mix(in srgb,${resColor} 45%,#000))"></div><div class="hd-txt hd-rs-t"></div></div></div>
+        <div class="hd-buffs"></div>
         <div class="hd-buff">Escudo ativo</div>
         <div class="hd-shd"></div>
       </div>
@@ -329,6 +333,7 @@ export function mountHud(opts: HudOptions): Hud {
   let hpRatio = -1;
   const rsFill = q(".hd-rs .hd-fill");
   const rsTxt = q(".hd-rs-t");
+  const buffStrip = mountBuffs(q(".hd-buffs")); // buffs próprios (ícones com tempo), abaixo das barras
   const buff = q(".hd-buff");
   const lvTxt = q(".hd-lv");
   const xpFill = q(".hd-xp i");
@@ -698,5 +703,6 @@ export function mountHud(opts: HudOptions): Hud {
       if (on) buff.textContent = label;
       buff.classList.toggle("on", on);
     },
+    setBuffs(list) { buffStrip.set(list); },
   };
 }
