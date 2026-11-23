@@ -107,6 +107,8 @@ run_case 2995 "LOOT_TEST=1 LOOT_LOCK_S=3 ENEMY_LEASH_TEST=9 TEST_START_ZONE=1" t
 # Grupo (convites e ausência encurtados) e chegada nas Cinzas.
 run_case 2996 "PARTY_TEST=1 TEST_START_ZONE=1 API_RATE_MULT=100" test/party.mjs "PARTY_TEST=1"
 run_case 2996 "TEST_START_ZONE=1" test/chegada.mjs ""
+# Buffs próprios (ícones do HUD): Escudo Refletor, Guarda e acúmulos da Cura Focada aparecem e somem no tempo certo.
+run_case 2991 "LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/buffs.mjs ""
 # Moderação (C0.6): a primeira conta criada no servidor de teste vira admin (ADMIN_TEST_FIRST_GUEST=1, só não-produção).
 run_case 2997 "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/moderacao.mjs ""
 # Quests (C1.1): aceitar, progredir, entregar e persistir. QUEST_TEST=1 libera o atalho de abates de teste (nunca em produção).

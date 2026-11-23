@@ -70,6 +70,10 @@ export class Player extends Schema {
   hurtAt = -1e9; // último dano RECEBIDO (o PvP só canaliza depois de PVP_NO_DAMAGE_S sem apanhar)
   healStackUntil = 0; // fim dos acúmulos de Cura Focada (relógio da simulação); depois zera
   healStackPct = 0; // +% por acúmulo nas curas do Clérigo neste jogador (vem do efeito "stacks")
+  guardUntil = 0; // escudo leve da cura (Cura em Área / Luz Divina) até este instante: só para a UI (a mitigação usa buffUntil)
+  provokeUntil = 0; // Provocação do Guerreiro (Escudo Refletor) até este instante: só para a UI de buffs
+  buffSig = ""; // assinatura da lista de buffs já enviada ao dono (muda = manda já)
+  buffSentAt = -1e9; // último envio da lista de buffs (com buffs ativos, manda de 1 em 1 s para o tempo ficar certo)
   deadUntil = 0;
   marketBusy = false; // uma operação do mercado está gravando: a mochila não muda por outros caminhos até acabar
   trading = false; // numa troca: a mochila fica travada (nada se move) até fechar a janela

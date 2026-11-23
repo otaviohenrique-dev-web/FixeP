@@ -84,6 +84,7 @@ export const Evt = {
   ActDenied: "act_denied", // { a }: o servidor não executou a ação (recurso, recarga, atordoado...): o cliente devolve a recarga que mostrou
   TravelDenied: "travel_denied", // {}: o servidor recusou a travessia (em combate): o cliente tira a tela de load que mostrou ao pisar no portão
   Shield: "shield", // { ms }: a bolha de chegada começou a contar (só para o dono; o cliente mostra o tempo restante)
+  Buffs: "buffs", // BuffsEvent { list }: buffs positivos ativos do próprio jogador (só para o dono; ver buffs.ts)
   WorldMap: "world_map", // {}: o jogador pisou no portão da cidade: o cliente abre o mapa-mundo (escolher a zona); a escolha volta em Msg.Travel { to }
   Travel: "travel", // { zone }: travessia aprovada; o cliente sai da sala e entra na da nova zona
   Pong: "pong", // resposta ao ping, só para quem perguntou
@@ -587,3 +588,4 @@ export * from "./zones";
 export * from "./vault";
 export * from "./skilltips";
 export * from "./variacoes";
+export * from "./buffs";

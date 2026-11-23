@@ -36,7 +36,7 @@ import { mountVariacoes, type VariacoesUi } from "./variacoes";
 import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
-import type { DicasVistasEvent } from "@frixep/shared";
+import type { DicasVistasEvent, ActiveBuff } from "@frixep/shared";
 import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
@@ -500,6 +500,7 @@ class WorldScene extends Phaser.Scene {
       window.clearTimeout(this.travelWatch);
       if (this.busy && this.loader.visible) { this.busy = false; void this.loader.hide(0); }
     });
+    room.onMessage(Evt.Buffs, (m: { list: ActiveBuff[] }) => this.hud.setBuffs(Array.isArray(m?.list) ? m.list : [])); // buffs próprios: ícones com o tempo restante
     room.onMessage(Evt.Shield, (m: { ms: number }) => { this.shieldEnd = performance.now() + (Number(m?.ms) || 0); }); // a bolha começou a contar (a tela de load já acabou)
     room.onLeave((code) => {
       if (this.leaving || room !== this.room) return;
