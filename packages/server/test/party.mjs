@@ -200,8 +200,44 @@ check("o XP do abate é DIVIDIDO no grupo: 20 x 1,25 (bônus de 2 membros) / 2 =
 check("quem está por perto, fora do grupo e sem dano relevante NÃO ganha XP", Z.ev.xp.length === 0, `Z ${Z.ev.xp}`);
 await Promise.all([X, Y, Z].map((p) => p.room.leave()));
 
-console.log("\n== PvP: membros do grupo não se ferem ==");
-const [P1, P2, P3] = await Promise.all([spawn("warrior"), spawn("warrior"), spawn("warrior")]);
+console.log("\n== PvP: só na Arena Sangrenta (zona 5); fora dela é recusado ==");
+{
+  const Q = await spawn("warrior"); // nasce nas Cinzas (zona 1), onde o PvP não existe
+  Q.room.send("pvp", { on: true });
+  await sleep(500);
+  check("fora da arena o pedido de PvP é recusado (com aviso) e a flag não liga", !Q.me().pvp && Q.said("Arena"), JSON.stringify(Q.ev.notices));
+  await Q.room.leave();
+}
+
+console.log("\n== PvP: membros do grupo não se ferem (dentro da arena) ==");
+// personagens levados à Arena Sangrenta: portal da zona 1 até a cidade, portão até o mapa-mundo, zona 5
+async function toArena(acc) {
+  const z1 = await new Client(WS).joinOrCreate("zone", { token: acc.token });
+  await new Promise((r) => (z1.state?.players ? r() : z1.onStateChange.once(r)));
+  let travel = null;
+  z1.onMessage("travel", (m) => (travel = m));
+  z1.onMessage("*", () => {});
+  z1.send("move_to", { x: 4, y: 28 }); // portal da zona 1 que leva à cidade
+  await until(() => travel, 20000);
+  await z1.leave(true);
+  await sleep(300);
+  const city = await new Client(WS).joinOrCreate("zone4", { token: acc.token });
+  await new Promise((r) => (city.state?.players ? r() : city.onStateChange.once(r)));
+  let gate = false, arena = null;
+  city.onMessage("world_map", () => (gate = true));
+  city.onMessage("travel", (m) => (arena = m));
+  city.onMessage("*", () => {});
+  city.send("move_to", { x: 24, y: 2 }); // portão de Brasalume
+  await until(() => gate, 14000);
+  city.send("travel", { to: 5 });
+  await until(() => arena, 5000);
+  await city.leave(true);
+  await sleep(300);
+}
+const arenaAccs = [await account("warrior"), await account("warrior"), await account("warrior")];
+await Promise.all(arenaAccs.map(toArena));
+const [P1, P2, P3] = await Promise.all(arenaAccs.map((a) => enter(a, "zone5")));
+check("os três estão na arena (zona 5)", [P1, P2, P3].every((p) => p.room.state.zoneId === 5));
 await group(P1, P2, 2);
 for (const p of [P1, P2, P3]) p.room.send("pvp", { on: true });
 check("os três entram no PvP", await until(() => [P1, P2, P3].every((p) => p.me().pvp), 6500));
@@ -209,8 +245,11 @@ await sleep(300);
 const h2 = P2.me().hp, h1 = P1.me().hp;
 for (let i = 0; i < 3; i++) { P1.room.send("act", { a: "skill1", ax: P2.me().x, ay: P2.me().y }); P1.room.send("act", { a: "attack", ax: P2.me().x, ay: P2.me().y }); await sleep(700); }
 check("P1 (em PvP) não fere o colega de grupo P2 (Golpe e Giro)", P2.me().hp === h2 && !P2.ev.hits.some((h) => h.k === "p" && h.id === P2.room.sessionId), `hp ${h2} -> ${P2.me().hp}`);
+// P1 saiu do lugar com a Investida (skill1): P3 anda até ele antes de atacar (alcance corpo a corpo)
+P3.room.send("move_to", { x: P1.me().x - 1, y: P1.me().y });
+await until(() => Math.hypot(P3.me().x - P1.me().x, P3.me().y - P1.me().y) < 1.5, 4000);
 P3.room.send("act", { a: "attack", ax: P1.me().x, ay: P1.me().y });
-check("mas um jogador de fora do grupo em PvP continua ferindo (controle)", await until(() => P1.me().hp < h1, 2000), `hp ${h1} -> ${P1.me().hp}`);
+check("mas um jogador de fora do grupo em PvP continua ferindo (controle)", await until(() => P1.me().hp < h1, 2000), `hp ${h1} -> ${P1.me().hp}; P3 (${P3.me().x}, ${P3.me().y}) P1 (${P1.me().x}, ${P1.me().y}) eventos de dano de P3: ${P3.ev.hits.length}`);
 await Promise.all([P1, P2, P3].map((p) => p.room.leave()));
 
 console.log("\n== Grupo entre zonas, ausência e chat ==");
