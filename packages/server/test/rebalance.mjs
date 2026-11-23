@@ -79,8 +79,7 @@ console.log("\n== 2. Guerreiro: provocar (E) ==");
 
 // 3) Mago: a Bola de Fogo LENTIFICA o inimigo atingido (controle básico) e o lento acaba depois de 3 s.
 // A queimadura saiu da classe (é o afixo "Queimadura ao Acertar", de item): o Mago não queima mais.
-console.log("
-== 3. Mago: lentidão da Bola de Fogo ==");
+console.log("\n== 3. Mago: lentidão da Bola de Fogo ==");
 {
   const M = await spawn("mage");
   await arrive(M, 24, 16); // e1 (30,16) a 6 tiles: dentro do alcance da Bola (10)

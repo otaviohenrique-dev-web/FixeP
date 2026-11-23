@@ -26,6 +26,12 @@ export interface CharacterRow {
 }
 
 /** Normaliza o nome para a chave de unicidade: sem acento, sem maiúsculas, espaços colapsados. */
+/** Afixos como texto para o banco: equipamento sempre com lista ("[]" = sem afixos); potion e outros = null. */
+const afixosGravados = (id: string, af: string[] | undefined): string | null => {
+  if (!KINDS_EQUIPAVEIS.includes(ITEMS[id]?.kind)) return af?.length ? JSON.stringify(af) : null;
+  return JSON.stringify(af ?? []);
+};
+
 export const nameKey = (name: string) =>
   name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -194,8 +200,10 @@ export class Repo {
   /** Fotografia do que será gravado (copiada na hora, antes de qualquer espera). */
   inventoryRows(inv: Inventory): InvRows {
     return {
-      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, af: s.af?.length ? JSON.stringify(s.af) : null }] : [])),
-      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]!, af: inv.equipAf?.[sl]?.length ? JSON.stringify(inv.equipAf[sl]) : null }] : [])),
+      // equipamento grava SEMPRE a lista (vazia = "sem afixos", já passou pelo sistema); null fica só para itens antigos,
+      // que o carregamento completa com o backfill. Assim um item sem afixo não ganha afixos a cada carregamento.
+      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, af: afixosGravados(s.id, s.af) }] : [])),
+      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]!, af: afixosGravados(inv.equip[sl]!, inv.equipAf?.[sl]) }] : [])),
       iron: inv.iron, obols: inv.obols,
     };
   }

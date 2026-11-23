@@ -35,7 +35,7 @@ import type { ActiveBuff, BuffsEvent } from "@frixep/shared";
 const DEFS = carregarQuests(questsDoServidor());
 import { deposit, withdraw, moveInVault, moveCoins, vaultSnapshot, type Vault } from "../game/vault.js";
 
-interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string>; shredPct?: number; shredS?: number; burnDmg?: number; burnS?: number }
+interface Proj { id: string; owner: string; x: number; y: number; dx: number; dy: number; speed: number; left: number; radius: number; dmg: number; pierce: boolean; blast: number; hit: Set<string>; shredPct?: number; shredS?: number; burnDmg?: number; burnS?: number; slowPct?: number; slowS?: number }
 interface Trap { id: string; owner: string; x: number; y: number; r: number; dmg: number; armAt: number; expireAt: number; slowPct?: number; slowS?: number }
 interface Trade { a: string; b: string; offer: Record<string, TradeOffer>; ready: Record<string, boolean>; rev: number; seq: Record<string, number> }
 interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Inventory; quests: QuestMap }
@@ -1524,7 +1524,7 @@ export class ZoneRoom extends Room<ZoneState> {
         const sx = p.x + dx * 0.6, sy = p.y + dy * 0.6;
         const look = def.kind === "blast" ? "fire" : def.pierce ? "pierce" : p.cls === "mage" ? "arcane" : p.cls === "cleric" ? "bolt" : "arrow";
         const blast = def.kind === "blast" ? def.blast ?? 2 : 0;
-        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, blast, hit: new Set(), shredPct: def.shredPct, shredS: def.shredS, burnDmg: def.burnPct ? Math.max(1, Math.round((dmg * def.burnPct) / 100)) : undefined, burnS: def.burnS });
+        this.projs.push({ id: pid, owner: id, x: sx, y: sy, dx, dy, speed: def.speed ?? 12, left: def.range ?? 8, radius: def.radius ?? 0.4, dmg, pierce: !!def.pierce, blast, hit: new Set(), shredPct: def.shredPct, shredS: def.shredS, burnDmg: def.burnPct ? Math.max(1, Math.round((dmg * def.burnPct) / 100)) : undefined, burnS: def.burnS, slowPct: def.slowPct, slowS: def.slowS });
         this.broadcast(Evt.Proj, { id: pid, x: sx, y: sy, dir: p.face, speed: def.speed ?? 12, range: def.range ?? 8, look, blast: blast || undefined });
         break;
       }
@@ -1720,7 +1720,7 @@ export class ZoneRoom extends Room<ZoneState> {
       for (const [, eid, e] of cands) {
         pr.hit.add(eid);
         if (e instanceof Player) this.damagePvp(pr.owner, eid, e, pr.dmg);
-        else { this.damageEnemy(pr.owner, eid, e, pr.dmg); if (pr.shredPct) this.shredEnemy(e, pr.shredPct, pr.shredS ?? 5); if (pr.burnDmg) this.burnEnemy(e, pr.owner, pr.burnDmg, pr.burnS ?? 0); }
+        else { this.damageEnemy(pr.owner, eid, e, pr.dmg); if (pr.shredPct) this.shredEnemy(e, pr.shredPct, pr.shredS ?? 5); if (pr.burnDmg) this.burnEnemy(e, pr.owner, pr.burnDmg, pr.burnS ?? 0); if (pr.slowPct) this.slowEnemy(e, pr.slowPct, pr.slowS ?? 3); }
         if (!pr.pierce) { ended = true; break; } // flecha comum para no primeiro alvo
       }
       pr.x = nx;
@@ -1739,6 +1739,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.hitEnemies(pr.owner, pr.dmg, (e) => {
       const hit = dist(e.x, e.y, pr.x, pr.y) <= pr.blast + enemyKind(e.kind).radius;
       if (hit && pr.burnDmg) this.burnEnemy(e, pr.owner, pr.burnDmg, pr.burnS ?? 0);
+      if (hit && pr.slowPct) this.slowEnemy(e, pr.slowPct, pr.slowS ?? 3); // Bola de Fogo: lentidão na área da explosão
       return hit;
     });
     this.hitPlayers(pr.owner, pr.dmg, (o) => dist(o.x, o.y, pr.x, pr.y) <= pr.blast + PLAYER_RADIUS);
