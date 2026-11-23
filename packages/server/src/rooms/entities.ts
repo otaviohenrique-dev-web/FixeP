@@ -25,6 +25,7 @@ export class Player extends Schema {
   @type("number") autoPotAt = 0; // auto-poção: bebe sozinho com a vida até este % (0 = desligada; passo 5, máximo 90)
   @type("number") mana = 0; // recurso da classe (inteiro, para a HUD)
   @type("number") maxMana = 0;
+  @type("number") poder = 0; // poder total (shared/poder.ts): o servidor calcula; o cliente mostra e só previsualiza
   @type("number") level = 1;
   @type("number") xp = 0;
   @type("boolean") pvp = false; // modo PvP ativo (só entre quem também está nele)

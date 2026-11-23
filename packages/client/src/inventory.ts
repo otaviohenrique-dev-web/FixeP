@@ -1,5 +1,6 @@
 import { isTypingTarget } from "./keys";
 import { silhouetteSvg } from "./silhouette";
+import { animatePoder, previewPoderDelta } from "./poder";
 import { bindItemTip, hideItemTip, setItemTipContext, compareStats, type ItemTipData } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
@@ -9,6 +10,8 @@ import {
 /** Mochila + equipamento (DOM). O servidor decide tudo: aqui só mostramos e pedimos. */
 export interface InventoryUi {
   setSnapshot(s: InventorySnapshot): void;
+  /** poder total oficial (vem do servidor): anima a mudança no painel de status */
+  setPoder(n: number): void;
   toggle(): void;
   isOpen(): boolean;
   firstPotionSlot(): number;
@@ -34,6 +37,9 @@ const CSS = `
 .iv-body{display:grid;grid-template-columns:272px 1fr;gap:14px}
 @media (max-width:640px){.iv-body{grid-template-columns:1fr}.iv-card{padding:12px}}
 .iv-left{display:flex;flex-direction:column;gap:6px;align-items:center}
+.iv-poder{display:flex;flex-direction:column;align-items:center;gap:2px;margin:4px 0 2px;padding:6px 8px;border-radius:8px;background:linear-gradient(180deg,rgba(20,30,46,.7),rgba(8,12,20,.7));border:1px solid rgba(201,168,90,.35)}
+.iv-poder .iv-pl{font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.22em;color:#c9b07a;text-transform:uppercase}
+.iv-poder .pw-n{font:800 30px/1 Georgia,serif;color:#f3d77a;text-shadow:0 2px 6px #000}
 .iv-stats{white-space:pre-line}
 .iv-wallet{display:flex;gap:14px;align-items:center;margin:0 0 8px;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9}
 .iv-wallet span{display:flex;align-items:center;gap:5px}
@@ -197,7 +203,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     <div class="iv-card" role="dialog" aria-modal="true" aria-label="Mochila">
       <div class="iv-head"><div class="iv-id"><div class="iv-medal"><canvas width="47" height="47" aria-hidden="true"></canvas></div><h2 class="iv-title">Mochila</h2></div><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
       <div class="iv-body">
-        <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><p class="iv-stats"></p></div>
+        <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><div class="iv-poder pw-host" aria-label="Poder total"><span class="iv-pl">Poder</span><b class="pw-n">0</b></div><p class="iv-stats"></p></div>
         <div><div class="iv-wallet" aria-label="Moedas"></div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
       </div>
     </div>`;
@@ -212,6 +218,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const gridEl = back.querySelector<HTMLElement>(".iv-grid")!;
   const detEl = back.querySelector<HTMLElement>(".iv-det")!;
   const walletEl = back.querySelector<HTMLElement>(".iv-wallet")!;
+  const poderBox = back.querySelector<HTMLElement>(".iv-poder")!;
+  const poderNum = poderBox.querySelector<HTMLElement>(".pw-n")!;
+  let poderNow = 0;
+  let poderShown: number | null = null;
 
   let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null }, iron: 0, obols: 0 };
   let sel: { kind: "slot"; i: number } | { kind: "equip"; s: EquipSlot } | null = null;
@@ -244,7 +254,14 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const equippedDef = (k: EquipSlot): ItemDef | null => (snap.equip[k] ? ITEMS[snap.equip[k]!] ?? null : null);
 
   // ---- dica flutuante (mouse e toque): a ficha fica em itemtip.ts, igual em todo lugar
-  setItemTipContext({ getClass: () => opts.getClass(), getLevel: () => opts.getLevel() });
+  setItemTipContext({
+    getClass: () => opts.getClass(),
+    getLevel: () => opts.getLevel(),
+    previewPoder: (d) => {
+      const delta = previewPoderDelta(opts.getClass(), opts.getLevel(), snap.equip, d);
+      return delta === null ? null : { now: poderNow, delta };
+    },
+  });
   const hideTip = hideItemTip;
   const attachTip = (b: HTMLElement, get: () => ItemTipData) => bindItemTip(b, get);
 
@@ -498,6 +515,11 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
 
   render();
   return {
+    setPoder(n) {
+      animatePoder(poderNum, poderShown, n, poderBox);
+      poderShown = n;
+      poderNow = n;
+    },
     setSnapshot(s) {
       snap = s;
       // se o item selecionado mudou de lugar ou sumiu, limpa a seleção

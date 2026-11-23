@@ -1,3 +1,4 @@
+import { fmtDelta } from "./poder";
 import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
 /**
  * Dica de item: a MESMA ficha em todo lugar (mochila, trocas, mercado, baú).
@@ -8,7 +9,12 @@ import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, t
  */
 
 export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string }
-export interface ItemTipCtx { getClass(): CharClass; getLevel(): number }
+export interface ItemTipCtx {
+  getClass(): CharClass;
+  getLevel(): number;
+  /** prévia do poder total ao equipar este item (no slot dele): poder atual e a mudança (0 = igual) */
+  previewPoder?(d: ItemDef): { now: number; delta: number } | null;
+}
 
 /** Uma linha de atributo: valor efetivo do item, rótulo, unidade e se "mais" é melhor. */
 interface StatRow { label: string; unit: string; value: number; up: boolean }
@@ -117,6 +123,15 @@ function build(data: ItemTipData): void {
     }
     t.append(row);
   });
+  const pv = ctx.previewPoder?.(d);
+  if (pv) {
+    const r = document.createElement("div"); r.className = "row";
+    const l = document.createElement("span"); l.textContent = "Poder total";
+    const v = document.createElement("span");
+    v.className = !pv.delta ? "eq" : pv.delta > 0 ? "up" : "dn";
+    v.textContent = pv.delta ? `${pv.now} → ${pv.now + pv.delta} (${fmtDelta(pv.delta)})` : `${pv.now} (= )`;
+    r.append(l, v); t.append(r);
+  }
   if (d.heal) { const r = document.createElement("div"); r.textContent = `Cura ${d.heal} de vida`; t.append(r); }
   const wtd = d.wtype ? WEAPON_TYPES[d.wtype] : null;
   if (wtd) { const r = document.createElement("div"); r.className = "eq"; r.textContent = wtd.name; t.append(r); }

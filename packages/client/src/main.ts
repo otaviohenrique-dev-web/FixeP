@@ -173,7 +173,7 @@ class WorldScene extends Phaser.Scene {
   private leaving = false; // saída voluntária (menu/sair): não tenta reconectar
   private stats!: ReturnType<typeof mountStats>;
   private chatUi!: ChatUi;
-  private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "", ap: -1 as number };
+  private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "", ap: -1 as number, poder: -1 };
   private travelWatch = 0;
   private gateBlock = false; // a travessia foi recusada (em combate): não mostra a tela de load de novo enquanto o jogador continuar em cima do portão
   private enterSeq = 0;
@@ -288,7 +288,7 @@ class WorldScene extends Phaser.Scene {
     T.mark("mundo");
     // 3) câmera exatamente sobre o personagem (sem deslizar), no zoom certo, antes de revelar
     this.centerCameraOnMe();
-    this.hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "", ap: -1 };
+    this.hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "", ap: -1, poder: -1 };
     await new Promise<void>((r) => { requestAnimationFrame(() => r()); setTimeout(r, 120); }); // 1 quadro já desenhado com a câmera no lugar (o timeout cobre aba em segundo plano)
     this.cameras.main.setLerp(0.1, 0.1); // a partir daqui o seguimento volta a ser suave
     this.zoneBanner(zone.name);
@@ -1738,6 +1738,7 @@ class WorldScene extends Phaser.Scene {
     if (!me.dead && me.maxHp > 0 && me.hp / me.maxHp < 0.3) this.dicas.gatilho("vida_baixa"); // dica de vida baixa, uma vez por personagem (C1.6)
       const pg = `${me.level}|${me.xp}`;
       if (H.prog !== pg) { H.prog = pg; this.hud.setProgress(me.level, me.xp, xpToNext(me.level)); }
+      if (H.poder !== me.poder) { H.poder = me.poder; this.hud.setPoder(me.poder); this.inv.setPoder(me.poder); } // poder total: oficial do servidor; anima ao equipar
       this.updateBubbles(time);
       if (me.dead) {
         if (!this.deadUntil) this.deadUntil = time + RESPAWN_S * 1000;

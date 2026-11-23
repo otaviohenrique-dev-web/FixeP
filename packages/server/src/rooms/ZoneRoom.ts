@@ -4,7 +4,7 @@ import {
   TICK_RATE, MAX_CLIENTS_PER_ZONE, CHAT_MAX_LEN, TRADE_CHAT_MAX_LEN, ZONES, ZONE_IDS, WORLD_GATE, zoneRoomName, enemyKind, type ZoneDef, type PortalDef,
   CLASS_DEFS, type ClassDef, type CharClass, MOVE_SPEED, RESPAWN_S, SHARE_RADIUS,
   PLAYER_RADIUS, PVP_CHANNEL_S, PVP_NO_DAMAGE_S, QMODE_SWAP_S, BOSS_CC_RESIST, classAction, CRIT, DAMAGE_VARIANCE, clamp, partyXpMult,
-  LEVEL_CAP, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, defenseMult, HEAL_BLOCK_AFTER_HIT_S, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex, clampAutoPot, autoPotDispara,
+  LEVEL_CAP, poderTotal, statsDoPersonagem, xpToNext, enemyHp, enemyDmg, enemyXp, maxHpFor, maxManaFor, dmgMult, defenseMult, HEAL_BLOCK_AFTER_HIT_S, ITEMS, POTION_COOLDOWN_S, effectiveAction, rarityIndex, clampAutoPot, autoPotDispara,
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
@@ -617,6 +617,7 @@ export class ZoneRoom extends Room<ZoneState> {
     p.maxMana = maxManaFor(this.classOf(p).id, p.level) + p.gear.mana;
     p.manaF = fill ? p.maxMana : Math.min(p.manaF, p.maxMana);
     p.mana = Math.floor(p.manaF);
+    p.poder = poderTotal(statsDoPersonagem(this.classOf(p).id, p.level, p.gear)); // poder total: o servidor decide; o cliente só mostra
   }
 
   private notifyOk(id: string, text: string) {
