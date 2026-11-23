@@ -78,7 +78,7 @@ run_case() {
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
 for file in test/acoes.unit.ts test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
-            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts; do
+            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts test/crafting.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"
   if npx tsx "$file"; then echo "OK  $file"; else echo "FALHA  $file"; FAILS+=("$file"); fi
@@ -122,6 +122,8 @@ run_case 2988 "VARIACAO_TEST_LEVEL=10 API_RATE_MULT=100" test/variacoes.mjs "VAR
 run_case 2987 "VARIACAO_TEST_LEVEL=10 API_RATE_MULT=100 TEST_START_ZONE=1" test/variacoes.mjs "VARIACAO_MODO=zona"
 # Afixos de item (atributos de drop): o drop de teste traz "afiado" (arma) e "vigor" (armadura); equipar aplica, e sobrevive a sair e voltar.
 run_case 2993 "LOOT_TEST=1 AFIXO_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/afixos.mjs ""
+# Craft na Ferreira (aba Craftar): ingredientes e Tostões gastos por inteiro, Óbolo só do épico+, mochila cheia e falta não consomem nada; nível 30 para o épico.
+run_case 2985 "ECON_TEST=1 CRAFT_TEST=1 VARIACAO_TEST_LEVEL=30 API_RATE_MULT=100" test/craft.mjs ""
 # PvP só na Arena Sangrenta (zona 5): dano entre jogadores só lá, sem fogo amigo de grupo, morte renasce na arena sem perda.
 run_case 2989 "API_RATE_MULT=100" test/pvp.mjs ""
 

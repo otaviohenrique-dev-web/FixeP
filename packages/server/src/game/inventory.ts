@@ -79,7 +79,7 @@ export function equipFromSlot(inv: Inventory, idx: unknown, level: number, cls: 
   const stack = inv.slots[idx];
   if (!stack) return { ok: false, error: "Espaço vazio." };
   const def = ITEMS[stack.id];
-  if (!def || def.kind === "potion") return { ok: false, error: "Esse item não pode ser equipado." };
+  if (!def || !(EQUIP_SLOTS as readonly string[]).includes(def.kind)) return { ok: false, error: "Esse item não pode ser equipado." };
   const slot = def.kind as EquipSlot;
   if (def.cls && def.cls !== cls) return { ok: false, error: `Só ${CLASS_DEFS[def.cls].name} pode usar.` };
   if (level < def.minLevel) return { ok: false, error: `Requer nível ${def.minLevel}.` };

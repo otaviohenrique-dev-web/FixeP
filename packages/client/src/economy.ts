@@ -5,7 +5,7 @@ import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  TRADE_CHAT_MAX_LEN, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
+  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
 } from "@frixep/shared";
 
 /**
@@ -106,6 +106,14 @@ const CSS = `
 .ec-offer .ec-chip{cursor:pointer;color:inherit}
 .ec-grid .ec-chip{width:auto;height:auto;aspect-ratio:1;cursor:pointer;color:inherit}
 .ec-grid .ec-chip[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 10px rgba(255,170,80,.4)}
+.ec-seg{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 6px}
+.ec-seg .ec-tab{flex:0 0 auto;min-width:86px;padding:0 10px;min-height:34px}
+.ec-craft-lbl{padding:6px 14px 0;font:700 10px/1.2 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#7fa6cc}
+.ec-req{display:flex;align-items:center;gap:8px;margin:0 14px;padding:4px 8px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.18);font:700 12px/1.2 "Cinzel",Georgia,serif;color:#dbeaff}
+.ec-req img{width:24px;height:24px;image-rendering:pixelated;flex:none}
+.ec-req span{flex:1;min-width:0}
+.ec-req b{font-weight:700}
+.ec-req.ok b{color:#7dd68a}.ec-req.no b{color:#ff9d8a}
 .ec-coinrow{display:flex;align-items:center;gap:6px;font:700 11px/1 "Cinzel",Georgia,serif}
 .ec-coinrow input{width:92px;min-height:30px;box-sizing:border-box;padding:0 6px;border-radius:5px;border:1px solid rgba(160,200,240,.3);background:rgba(6,12,20,.9);color:#fff;font:700 12px/1 "Cinzel",Georgia,serif}
 .ec-invite{position:fixed;left:50%;bottom:calc(max(96px,env(safe-area-inset-bottom)) + 64px);transform:translateX(-50%);z-index:24;display:none;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;padding:10px 14px;border-radius:8px;max-width:calc(100vw - 24px);
@@ -194,6 +202,9 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   let tab: "buy" | "sell" = "buy";
   const picked = new Set<number>(); // ferreira: espaços escolhidos
   const confirmSell = new Set<number>(); // venda de item raro: pede um segundo clique
+  let smithTab: "merge" | "craft" = "merge"; // ferreira: fundir ou craftar
+  // craft (aba Craftar): escolha atual; as famílias guardam a última escolha de cada tipo
+  const craftSel: { tipo: "arma" | "peca"; peca: PecaCraft; raridade: Rarity; arma: string; sec: string } = { tipo: "arma", peca: "armor", raridade: "common", arma: "", sec: "" };
 
   const market = mountMarket({ send: opts.send, toast: opts.toast, getClass: opts.getClass });
   const closeNpc = () => { back.classList.remove("open"); market.close(); npc = null; picked.clear(); confirmSell.clear(); };
@@ -210,7 +221,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   function openShop(n: NpcDef) {
     if (tradeOpen) return;
     market.close();
-    npc = n; tab = "buy"; picked.clear(); confirmSell.clear();
+    npc = n; tab = "buy"; smithTab = "merge"; picked.clear(); confirmSell.clear();
     back.classList.add("open");
     renderNpc();
   }
@@ -314,7 +325,20 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   }
 
   function renderSmith(n: NpcDef) {
-    card.append(head(`${n.name} · ${n.title}`, `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`, closeNpc), balance());
+    const craft = smithTab === "craft";
+    card.append(head(`${n.name} · ${n.title}`, craft ? "Cria arma ou peça de set com ingredientes e moedas. Épico para cima pede Óbolos de Sangue." : `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`, closeNpc), balance());
+    const tabs = el("div", "ec-tabs");
+    tabs.setAttribute("role", "tablist");
+    for (const [k, label] of [["merge", "Fundir"], ["craft", "Craftar"]] as const) {
+      const b = el("button", "ec-tab", label);
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(smithTab === k));
+      b.onclick = () => { smithTab = k; picked.clear(); renderNpc(); };
+      tabs.append(b);
+    }
+    card.append(tabs);
+    if (craft) { renderCraft(n); return; }
     const cap = zoneRarityCap(opts.getZone());
     // só equipamentos da mochila; depois da primeira escolha, só os compatíveis
     const first = [...picked][0];
@@ -358,6 +382,97 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     go.onclick = () => { opts.send(Msg.SmithMerge, { npc: n.id, slots: [...picked] }); picked.clear(); };
     foot.append(note, go);
     card.append(foot);
+  }
+
+  /** aba Craftar da ferreira: escolhe tipo, família, raridade; mostra ingredientes e moedas (verde = tem, vermelho = falta) e o progresso do set */
+  function renderCraft(n: NpcDef) {
+    const cls = opts.getClass();
+    const armas = familiasArma(cls), secs = familiasSecundaria(cls);
+    if (!craftSel.arma) craftSel.arma = armas[0];
+    if (!craftSel.sec) craftSel.sec = secs[0] ?? "";
+    const list = el("div", "ec-list");
+    list.style.paddingTop = "6px";
+    const seg = <T extends string>(opcoes: [T, string][], atual: T, pick: (v: T) => void) => {
+      const w = el("div", "ec-seg");
+      w.setAttribute("role", "tablist");
+      for (const [v, label] of opcoes) {
+        const b = el("button", "ec-tab", label);
+        b.type = "button";
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", String(atual === v));
+        b.onclick = () => { pick(v); renderNpc(); };
+        w.append(b);
+      }
+      return w;
+    };
+    const lbl = (t: string) => el("div", "ec-craft-lbl", t);
+    list.append(lbl("Tipo"), seg<"arma" | "peca">([["arma", "Arma"], ["peca", "Peça de set"]], craftSel.tipo, (v) => { craftSel.tipo = v; }));
+    if (craftSel.tipo === "arma") {
+      list.append(lbl("Arma da sua classe"), seg(armas.map((f) => [f, nomeFamilia(f)] as [string, string]), craftSel.arma, (v) => { craftSel.arma = v; }));
+    } else {
+      list.append(lbl("Peça"), seg(PECAS_CRAFT.map((p) => [p, PECA_NOME[p]] as [PecaCraft, string]), craftSel.peca, (v) => { craftSel.peca = v; }));
+      if (craftSel.peca === "secundaria") list.append(lbl("Mão secundária"), seg(secs.map((f) => [f, nomeFamilia(f)] as [string, string]), craftSel.sec, (v) => { craftSel.sec = v; }));
+    }
+    list.append(lbl("Raridade"), seg(RARITIES.map((r) => [r, RARITY_NAME[r]] as [Rarity, string]), craftSel.raridade, (v) => { craftSel.raridade = v; }));
+
+    const pecaSet = craftSel.tipo === "peca" && craftSel.peca !== "secundaria";
+    const r: Receita | null = craftSel.tipo === "arma"
+      ? receitaArma(craftSel.arma, craftSel.raridade)
+      : receitaPeca(craftSel.peca, craftSel.raridade, cls, craftSel.peca === "secundaria" ? craftSel.sec : undefined);
+    const foot = el("div", "ec-foot");
+    const note = el("p", "ec-note");
+    const go = el("button", "ec-btn go", "Craftar");
+    go.type = "button";
+    go.disabled = true;
+    if (!r) {
+      list.append(el("div", "ec-empty", "Não há receita para essa escolha."));
+      note.textContent = "Escolha outra família ou raridade.";
+      note.classList.add("bad");
+    } else {
+      const item = ITEMS[r.item];
+      list.append(lbl(`Custo de ${item.name}`));
+      const have = (id: string) => snap.inv.reduce((t, st) => t + (st?.id === id ? st.qty : 0), 0);
+      const reqs: [string, HTMLElement | null, number, number][] = [
+        ...Object.entries(r.mats).map(([id, need]) => [id, itemImg(id, "ec-ic"), have(id), need] as [string, HTMLElement, number, number]),
+        [COIN_IRON.id, coinImg("iron"), snap.iron, r.tostoes],
+        ...(r.obolos ? [[COIN_OBOL.id, coinImg("obols"), snap.obols, r.obolos] as [string, HTMLElement, number, number]] : []),
+      ];
+      for (const [id, img, tem, precisa] of reqs) {
+        const ok = tem >= precisa;
+        const row = el("div", "ec-req " + (ok ? "ok" : "no"));
+        const nome = el("span", "", nomeIngrediente(id));
+        const q = el("b", "", `${num(tem)} / ${num(precisa)}`);
+        row.append(img ?? el("span"), nome, q);
+        list.append(row);
+      }
+      list.append(el("p", "ec-note", `Nível ${r.minLevel} · ${RARITY_NAME[r.raridade]} · ${item.desc}`));
+      if (pecaSet) {
+        const owned = (id: string) => snap.inv.some((st) => st?.id === id) || Object.values(snap.equip).includes(id);
+        const pr = progressoSet(cls, craftSel.raridade, owned);
+        list.append(lbl(`Set ${RARITY_NAME[craftSel.raridade]} de ${CLASS_DEFS[cls].name}: ${pr.tem} de ${pr.total} peças`));
+        for (const p of pr.pecas) {
+          const row = el("div", "ec-req " + (p.tem ? "ok" : "no"));
+          row.append(el("span", "", p.nome), el("b", "", p.tem ? "tem" : "falta"));
+          list.append(row);
+        }
+      }
+      const faltas = faltasReceita(r, have, snap.iron, snap.obols);
+      if (opts.getLevel() < r.minLevel) {
+        note.textContent = `Requer nível ${r.minLevel} (você está no ${opts.getLevel()}).`;
+        note.classList.add("bad");
+      } else if (faltas.length) {
+        note.textContent = "Faltam: " + faltas.map((f) => nomeIngrediente(f.id)).join(", ") + ".";
+        note.classList.add("bad");
+      } else {
+        note.textContent = "Pronto. O item sai com afixos sorteados; a receita é sempre a mesma.";
+        go.disabled = false;
+      }
+      go.onclick = () => {
+        opts.send(Msg.Craft, { npc: n.id, tipo: craftSel.tipo, familia: craftSel.tipo === "arma" ? craftSel.arma : craftSel.peca === "secundaria" ? craftSel.sec : undefined, peca: craftSel.tipo === "peca" ? craftSel.peca : undefined, raridade: craftSel.raridade });
+      };
+    }
+    foot.append(note, go);
+    card.append(list, foot);
   }
 
   // ---- troca entre jogadores

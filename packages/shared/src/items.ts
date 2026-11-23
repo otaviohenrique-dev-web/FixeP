@@ -7,7 +7,8 @@ import { afixoStats, afixosValidos, emptyAfixoStats, type AfixoStats } from "./a
  * Qualquer classe pode DROPAR item de qualquer classe, mas só a classe do item pode EQUIPAR (e só então valem os bônus).
  * Quase tudo é gerado por tabelas (famílias x raridades): o id de um item é `<familia>_<raridade>` (ex.: "montante_epic").
  */
-export type ItemKind = "weapon" | "offhand" | "helmet" | "armor" | "boots" | "cape" | "potion";
+/** "material": ingrediente de craft (ver crafting.ts). Não equipa, não é poção. */
+export type ItemKind = "weapon" | "offhand" | "helmet" | "armor" | "boots" | "cape" | "potion" | "material";
 /**
  * Os 8 níveis de raridade (lista definitiva, 2026-11-21):
  * inferior/lixo (cinza), comum (branco), incomum (verde), raro (azul), épico (roxo), lendário (laranja/dourado),

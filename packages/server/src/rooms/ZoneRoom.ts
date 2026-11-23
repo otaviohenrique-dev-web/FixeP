@@ -24,6 +24,7 @@ import { isAdmin, parseComandoAdmin, type ComandoAdmin, sancaoEmCache, guardarSa
 import { Market } from "../game/market.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, sortInventory, type Inventory } from "../game/inventory.js";
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
+import { craftItem } from "../game/craft.js";
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
 import { carregarQuests, questsDoServidor, aceitar, progredirAbate, progredirFala, progredirChegada, progredirUso, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
@@ -197,6 +198,8 @@ export class ZoneRoom extends Room<ZoneState> {
       if (r.success) { client.send(Evt.Loot, { id: r.id, qty: 1 }); return { ok: true, msg: `A fusão deu certo: ${ITEMS[r.id].name}! (−${r.fee} Tostões)` }; }
       return { ok: true, msg: `A fusão falhou (${Math.round(r.chance * 100)}% de chance): ${ITEMS[r.lost!].name} se perdeu. (−${r.fee} Tostões)` };
     }));
+    // craft na Ferreira (aba Craftar): o servidor confere NPC, nível, ingredientes, moedas e espaço; tudo ou nada
+    this.onMessage(Msg.Craft, (client, p: { npc?: unknown; tipo?: unknown; familia?: unknown; peca?: unknown; raridade?: unknown }) => this.econOp(client, p?.npc, "smith", (pl) => craftItem(pl.inv, pl.cls as CharClass, pl.level, p)));
     // troca entre jogadores (janela com confirmação dos dois lados)
     this.onMessage(Msg.TradeInvite, (client, p: { name?: unknown }) => this.tradeInvite(client, p?.name));
     this.onMessage(Msg.TradeAccept, (client) => this.tradeAccept(client));
@@ -1004,6 +1007,7 @@ export class ZoneRoom extends Room<ZoneState> {
       i.iron = 50000; i.obols = 2;
       for (const k of ["espada_1m_common", "arco_curto_common", "cetro_common", "varinha_common", "warrior_armor_common", "warrior_armor_common", "warrior_armor_common", "warrior_armor_rare", "warrior_helmet_epic"]) addItem(i, k, 1);
       addItem(i, "pocao_de_vida", 5);
+      if (process.env.CRAFT_TEST === "1") for (const m of ["mat_ferro_bruto", "mat_couro_curtido", "mat_essencia_arcana"]) for (let k = 0; k < 2; k++) addItem(i, m, 50); // CRAFT_TEST=1 (só testes): ingredientes para o craft
       pl.invDirty = true;
     }
     if (auth.inventory.migrated) { pl.invDirty = true; auth.inventory.migrated = false; } // itens antigos traduzidos: grava no próximo salvamento

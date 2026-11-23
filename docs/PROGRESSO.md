@@ -38,6 +38,22 @@ Legenda: ✅ concluído · 🟡 concluído com pendência · ⬜ a fazer. Critic
 | C2.2 Variações por habilidade | ✅ concluído (2026-11-23) | 3 variações por habilidade (Q, W, E, R) x 4 classes = 48, em `packages/shared/src/variacoes.ts` (modificadores sobre a base, textos em `VARIACAO_TEXT` no `skilltips.ts`). Desbloqueio: Q no nível 10, W no 20, E no 30, R no 40; uma escolha por habilidade (ou a base). Troca livre e sem custo só na cidade; o servidor confere nível, classe, slot e zona (`ZoneRoom.escolherVariacao`, mensagem `variacao`). Gravada em `characters.variacoes` (migração 015, JSON), volta ao entrar/reconectar e vai no estado do jogador. Painel em lista no cliente (`packages/client/src/variacoes.ts`, tecla V ou botão "Variações"). Testes: `test/variacoes.unit.ts` (catálogo, dano dentro de ±25%, regra de nível) e `test/variacoes.mjs` (cidade: nível, classe, persistência, Flecha Veloz libera o 2º uso em 3 s; zona de combate: recusada), registrados em `run-all.sh`. Pendência: a interface de cidade/zona no painel não foi conferida no navegador embutido (a tela do jogo não carregou no teste). Clérigo: a variação do Q vale só com a Cura em Área (qMode 0). |
 | C2.R Rebalance de Guerreiro, Clérigo e Mago (design do dono) | ✅ implementado (2026-11-22), aguardando CI | Dados em `CLASS_SPECS`; efeitos novos: `selfHeal`, `hitHeal`, `mana`, `guard` (aliados -% de dano), `stacks` (acúmulos da Cura Focada, até 3, +10% cada, 8 s), `burn` (queimadura: % do dano por s; renova, não acumula; chefes resistem) e `cleanse`. Campos no schema: `Player.healStacks/healStackS`, `Enemy.burning`. Provocar (Escudo Refletor) já existia e foi reforçado (raio 7, 4 s). Tabela antes/depois no PR. Testes: `test/rebalance.mjs` (novo), `balance.unit.ts` e `acoes.unit.ts` (números atualizados com motivo). |
 
+## Craft
+
+| Item | Situação | Observação |
+|---|---|---|
+| CRAFT na Ferreira (aba Craftar) | 🟡 implementado, verificação de servidor pendente (2026-11-23) | Receitas puras em `packages/shared/src/crafting.ts`. **Armas:** uma receita para todas (3 ingredientes = base × multiplicador da raridade, mais Tostões; Óbolos a partir do épico). **Peças de set e secundárias:** outra receita padrão, igual para todas (um set = 4 peças de set da classe na mesma raridade). Servidor: `Msg.Craft` em `game/craft.ts` (tudo ou nada, espaço e nível conferidos, afixos sorteados, `rng` injetável). Cliente: aba Craftar com progresso do set. Testes: `crafting.unit.ts` (37 asserts) e `craft.mjs` (ponta a ponta, em `run-all.sh`, com `CRAFT_TEST=1`). Ingredientes `mat_ferro_bruto`, `mat_couro_curtido`, `mat_essencia_arcana` (kind `material`) são declarados em `crafting.ts` e só entram em `ITEMS` se ainda não existirem. |
+
+**Tabela de receitas (fórmula única)**
+
+| Tipo | Ferro Bruto | Couro Curtido | Essência Arcana | Tostões | Óbolos de Sangue |
+|---|---|---|---|---|---|
+| Arma (comum → mítico) | 3 × M | 2 × M | 2 × M | 40 × M | 0, 0, 0, 2, 4, 8 |
+| Peça de set / secundária | 2 × M | 2 × M | 1 × M | 25 × M | 0, 0, 0, 1, 2, 4 |
+| Set (4 peças) | 8 × M | 8 × M | 4 × M | 100 × M | 0, 0, 0, 4, 8, 16 |
+
+M = multiplicador por raridade: comum 1, incomum 2, raro 4, épico 7, lendário 11, mítico 16. Os Óbolos não multiplicam (são uma tabela por raridade). Nível mínimo = o do item.
+
 ## Arte
 
 | Card | Situação | Observação |
