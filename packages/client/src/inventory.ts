@@ -106,7 +106,9 @@ const CSS = `
 .iv-gain-rays{position:absolute;left:50%;top:50%;width:560px;height:560px;margin:-280px 0 0 -280px;opacity:.3;background:repeating-conic-gradient(from 0deg,#3dff7a 0 6deg,transparent 6deg 18deg);-webkit-mask-image:radial-gradient(circle,#000 20%,transparent 70%);mask-image:radial-gradient(circle,#000 20%,transparent 70%);animation:iv-gain-spin 6s linear infinite}
 .iv-gain-in{position:relative;animation:iv-gain-pop .5s cubic-bezier(.2,1.4,.4,1) both,iv-gain-out .5s ease-in 2.7s forwards}
 .iv-gain .g-lbl{display:block;font-size:clamp(12px,2.4vw,15px);font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:#f3d77a;text-shadow:0 2px 0 #000}
-.iv-gain .g-pw{display:block;font-size:clamp(48px,11vw,92px);font-weight:800;line-height:1.05;color:#7dff9b;text-shadow:0 0 22px rgba(61,255,122,.85),0 0 4px #000,0 4px 0 #000;margin:6px 0 10px}
+.iv-gain .g-pw{display:flex;justify-content:center;align-items:baseline;gap:.25em;flex-wrap:wrap;margin:6px 0 10px;font-weight:800;line-height:1.05}
+.iv-gain .g-tot{font-size:clamp(30px,6.5vw,52px);color:#f3d77a;text-shadow:0 0 14px rgba(243,215,122,.55),0 0 4px #000,0 3px 0 #000}
+.iv-gain .g-up{font-size:clamp(48px,11vw,92px);color:#7dff9b;text-shadow:0 0 22px rgba(61,255,122,.85),0 0 4px #000,0 4px 0 #000}
 .iv-gain .g-row{display:block;font-size:clamp(17px,3.6vw,24px);font-weight:700;line-height:1.5;color:#7dd68a;text-shadow:0 2px 0 #000,0 0 12px rgba(61,255,122,.5)}
 .iv-gain .g-row i{font-style:normal;color:#e9f7ec;font-weight:600;margin-right:8px}
 @keyframes iv-gain-pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
@@ -193,10 +195,10 @@ const METRICAS: { label(c: CharClass): string; pre: string; un: string; sempre: 
   { label: () => "Regeneração", pre: "+", un: "/s", sempre: false, val: (g) => g.regen },
 ];
 
-/** festa de atributos: ao equipar, um banner no MEIO da tela (PC e celular) mostra o ganho de poder e dos atributos, contando até o valor novo */
+/** festa de atributos: ao equipar, um banner no MEIO da tela (PC e celular) mostra o poder total (à esquerda) e o ganho (à direita), contando até o valor novo */
 let gainEl: HTMLDivElement | null = null;
 let gainTimer = 0;
-function showGain(poderUp: number, rows: { label: string; pre: string; un: string; up: number }[]): void {
+function showGain(poder: { de: number; para: number } | null, rows: { label: string; pre: string; un: string; up: number }[]): void {
   gainEl?.remove();
   window.clearTimeout(gainTimer);
   const el = document.createElement("div");
@@ -208,14 +210,20 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
   box.className = "iv-gain-in";
   const lbl = document.createElement("span");
   lbl.className = "g-lbl";
-  lbl.textContent = poderUp > 0 ? "Seu personagem ficou mais forte" : "Atributos melhorados";
+  lbl.textContent = poder ? "Seu personagem ficou mais forte" : "Atributos melhorados";
   box.append(lbl);
-  const contas: { node: HTMLElement; to: number; delay: number; pre: string; un: string }[] = [];
-  if (poderUp > 0) {
+  const contas: { node: HTMLElement; from: number; to: number; delay: number; pre: string; un: string }[] = [];
+  if (poder) {
     const head = document.createElement("span");
     head.className = "g-pw";
-    contas.push({ node: head, to: poderUp, delay: 0, pre: "PODER +", un: "" });
+    const total = document.createElement("span");
+    total.className = "g-tot";
+    const ganho = document.createElement("span");
+    ganho.className = "g-up";
+    head.append(total, ganho);
     box.append(head);
+    contas.push({ node: total, from: poder.de, to: poder.para, delay: 0, pre: "", un: "" });
+    contas.push({ node: ganho, from: 0, to: poder.para - poder.de, delay: 0, pre: "+", un: "" });
   }
   rows.forEach((r, i) => {
     const row = document.createElement("span");
@@ -225,7 +233,7 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
     const num = document.createElement("span");
     row.append(name, num);
     box.append(row);
-    contas.push({ node: num, to: r.up, delay: 140 * (i + (poderUp > 0 ? 1 : 0)), pre: r.pre === "−" ? "+" : r.pre, un: r.un });
+    contas.push({ node: num, from: 0, to: r.up, delay: 140 * (i + (poder ? 1 : 0)), pre: r.pre === "−" ? "+" : r.pre, un: r.un });
   });
   el.append(rays, box);
   document.body.append(el);
@@ -236,10 +244,11 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
   } else {
     const t0 = performance.now();
     for (const c of contas) {
-      c.node.textContent = `${c.pre}0${c.un}`;
+      c.node.textContent = `${c.pre}${c.from}${c.un}`;
       const step = (now: number) => {
         const k = Math.min(1, Math.max(0, (now - t0 - c.delay) / 700));
-        c.node.textContent = `${c.pre}${Math.round(c.to * (1 - Math.pow(1 - k, 3)))}${c.un}`;
+        const v = Math.round(c.from + (c.to - c.from) * (1 - Math.pow(1 - k, 3)));
+        c.node.textContent = `${c.pre}${v}${c.un}`;
         if (k < 1) requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
@@ -644,8 +653,8 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       if (gearAntes) {
         const rows = METRICAS.map((m) => ({ label: m.label(opts.getClass()), pre: m.pre, un: m.un, up: m.val(gear) - m.val(gearAntes!) }))
           .filter((r) => r.up > 0);
-        const poderUp = poderDe(gear) - poderDe(gearAntes);
-        if (rows.length || poderUp > 0) showGain(poderUp, rows);
+        const de = poderDe(gearAntes), para = poderDe(gear);
+        if (rows.length || para > de) showGain(para > de ? { de, para } : null, rows);
       }
       gearAntes = gear;
       // se o item selecionado mudou de lugar ou sumiu, limpa a seleção
