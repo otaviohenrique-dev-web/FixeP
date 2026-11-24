@@ -3,6 +3,7 @@ import {
   EQUIP_SLOT_NAME, CLASS_DEFS, itemValue, listingFee, suggestedPrice,
   type InventorySnapshot, type ItemDef, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type MarketFilter, type MyListing, type MarketCurrency, type CharClass, type ItemKind, type Rarity,
 } from "@frixep/shared";
+import { bindItemTip } from "./itemtip";
 
 /**
  * Janela do leiloeiro (mercado dos jogadores), em DOM. O servidor decide tudo (taxa, custódia, limites, quem comprou primeiro):
@@ -120,6 +121,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
   const browse = () => send(Msg.MarketBrowse, { filter });
   const askMine = () => send(Msg.MarketMy);
   const browseSoon = () => { clearTimeout(browseTimer); browseTimer = setTimeout(browse, 250); };
+  const equippedOf = (kind: string): ItemDef | null => { const id = (snap.equip as Record<string, string | null>)[kind]; return id ? ITEMS[id] ?? null : null; };
 
   function open(n: NpcDef) {
     npc = n; tab = "buy"; listSlot = -1; busy = false; page = null; mine = null;
@@ -216,7 +218,12 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
       b.disabled = l.mine || poor || busy;
       b.onclick = () => { busy = true; send(Msg.MarketBuy, { id: l.id }); render(); };
       act.append(pr, b);
-      row.append(iconBox(l.itemId, l.qty), info, act);
+      // ficha completa do item (atributos, classe, nível) antes de comprar; compara com o equipado do mesmo tipo
+      const ic = iconBox(l.itemId, l.qty);
+      const tipData = () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null });
+      bindItemTip(ic, tipData);
+      bindItemTip(info, tipData);
+      row.append(ic, info, act);
       list.append(row);
     }
     card.append(f, list);
