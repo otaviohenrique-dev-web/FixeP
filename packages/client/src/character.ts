@@ -1,4 +1,4 @@
-import { CLASS_DEFS, NAME_MAX, NAME_MIN, PLAYABLE_CLASSES, type CharClass, type CharacterInfo } from "@frixep/shared";
+import { CLASS_DEFS, MAX_CHARACTERS_PER_ACCOUNT, NAME_MAX, NAME_MIN, PLAYABLE_CLASSES, type CharClass, type CharacterInfo } from "@frixep/shared";
 import { apiUrl, logout } from "./auth";
 import { mountScreen } from "./login";
 
@@ -30,7 +30,7 @@ function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 }
 
-/** Garante que a conta tem personagem: se não tiver, mostra a criação. Devolve o personagem. */
+/** Garante que a conta tem personagem para entrar: sem nenhum, mostra a criação; com alguns, a seleção (até o máximo por conta). */
 export async function ensureCharacter(token: string): Promise<CharacterInfo> {
   for (;;) {
     let res: Response | null = null;
@@ -40,11 +40,39 @@ export async function ensureCharacter(token: string): Promise<CharacterInfo> {
 
     if (res?.status === 401) { logout(); return new Promise(() => {}); } // sessão inválida: volta ao login
     if (res?.ok) {
-      const { character } = (await res.json()) as { character: CharacterInfo | null };
-      return character ?? (await createScreen(token));
+      const { characters, max } = (await res.json()) as { characters: CharacterInfo[]; max: number };
+      if (!characters?.length) return createScreen(token);
+      return selectScreen(token, characters, max || MAX_CHARACTERS_PER_ACCOUNT);
     }
     await retryScreen(); // servidor indisponível: o jogador decide tentar de novo
   }
+}
+
+const escHtml = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** Lista os personagens da conta (um botão por slot ocupado) e, se houver vaga, o botão de criar. */
+function selectScreen(token: string, lista: CharacterInfo[], max: number): Promise<CharacterInfo> {
+  return new Promise((resolve) => {
+    const style = document.createElement("style");
+    style.textContent = CSS;
+    document.head.append(style);
+
+    const s = mountScreen("Seus Portadores", "Escolha quem vai entrar no mundo.");
+    const sair = () => { s.destroy(); style.remove(); };
+    lista.forEach((c, i) => {
+      const classe = CLASS_DEFS[c.class]?.name ?? c.class;
+      s.button(`${escHtml(c.name)} · ${escHtml(classe)} · nível ${c.level}`, "&#10022;", i === 0, () => { sair(); resolve(c); });
+    });
+    if (lista.length < max) {
+      s.button(`Criar personagem (${lista.length} de ${max})`, "+", false, () => { sair(); void createScreen(token).then(resolve); });
+    }
+    const out = document.createElement("button");
+    out.type = "button";
+    out.className = "fc-link";
+    out.textContent = "Voltar ao login";
+    out.onclick = () => logout();
+    s.panel.insertBefore(out, s.msg);
+  });
 }
 
 function retryScreen(): Promise<void> {

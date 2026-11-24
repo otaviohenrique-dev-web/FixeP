@@ -582,7 +582,9 @@ export const defenseMult = (level: number) => 1 + PLAYER_DEFENSE_PER_LEVEL * (Ma
 export const PLAYABLE_CLASSES: readonly CharClass[] = ["warrior", "archer", "cleric", "mage"];
 export const NAME_MIN = 3;
 export const NAME_MAX = 16;
-export interface CharacterInfo { name: string; class: CharClass; level: number; xp: number; zone?: number }
+/** personagens por conta: a tela de seleção mostra até este número de slots */
+export const MAX_CHARACTERS_PER_ACCOUNT = 4;
+export interface CharacterInfo { id: string; name: string; class: CharClass; level: number; xp: number; zone?: number }
 export interface TravelEvent { zone: number }
 
 /** A ação como a classe a tem agora: o Clérigo troca o Q conforme a escolha (0 = cura em área, 1 = cura focada). */

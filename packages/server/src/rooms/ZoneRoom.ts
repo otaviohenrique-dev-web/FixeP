@@ -985,7 +985,7 @@ export class ZoneRoom extends Room<ZoneState> {
     return process.env.NODE_ENV !== "production" && Number.isFinite(o) && o > 0 ? o : base;
   }
 
-  async onAuth(_client: Client, options: { token?: string }): Promise<JoinAuth> {
+  async onAuth(_client: Client, options: { token?: string; charId?: string }): Promise<JoinAuth> {
     let user: AuthUser;
     try {
       user = await verifySession(options?.token);
@@ -996,8 +996,9 @@ export class ZoneRoom extends Room<ZoneState> {
     const sancao = await this.repo.getSancao(user.id);
     guardarSancao(user.id, { silenciadoAte: sancao.silenciadoAte, banido: sancao.banido });
     if (sancao.banido) throw new ServerError(403, "Esta conta está banida do FrixeP.");
-    const character = await this.repo.getCharacter(user.id);
-    if (!character) throw new ServerError(403, "crie um personagem antes de entrar");
+    const charId = typeof options?.charId === "string" ? options.charId : undefined; // o personagem escolhido na tela de seleção
+    const character = await this.repo.getCharacter(user.id, charId);
+    if (!character) throw new ServerError(403, charId ? "personagem não encontrado nesta conta" : "crie um personagem antes de entrar");
     const inventory = await this.repo.loadInventory(character.id, character.class);
     // o personagem só entra na sala da zona em que está (a zona é gravada pelo servidor): ninguém "teletransporta" pedindo outra sala
     if ((character.zone ?? START_ZONE) !== this.zone.id) throw new ServerError(403, "zona errada");

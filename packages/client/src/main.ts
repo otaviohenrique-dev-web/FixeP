@@ -236,11 +236,12 @@ class WorldScene extends Phaser.Scene {
     const T = timeline(`${why} → ${zone.name}`);
     if (why === "travel" && this.travelT0) T.t0 = this.travelT0; // na viagem o cronômetro já começou no portal
     const token = (this.sys.settings.data as { token: string }).token;
+    const charId = (this.sys.settings.data as { charId?: string }).charId; // personagem escolhido na seleção
     const gone = this.room; // sala anterior (já saindo)
     // 1) começa a entrar na sala JÁ: roda junto do desenho do mapa e da arte
     const joinP: Promise<Room | null> = (async () => { // a sala nova às vezes recusa de primeira (a sessão antiga ainda não soltou o personagem): tenta de novo
       for (let i = 0; i < 3; i++) {
-        try { return await new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token, load: true }); } catch { await new Promise((r) => setTimeout(r, 400 + i * 500)); }
+        try { return await new Client(wsUrl).joinOrCreate(zoneRoomName(zone.id), { token, load: true, charId }); } catch { await new Promise((r) => setTimeout(r, 400 + i * 500)); }
       }
       return null;
     })();
@@ -1771,7 +1772,7 @@ new Phaser.Game({
       window.addEventListener("resize", fit);
       window.addEventListener("orientationchange", () => setTimeout(fit, 200));
       window.visualViewport?.addEventListener("resize", fit);
-      game.scene.add("world", WorldScene, true, { token, zone: character.zone ?? START_ZONE, loader });
+      game.scene.add("world", WorldScene, true, { token, charId: character.id, zone: character.zone ?? START_ZONE, loader });
     },
   },
 });

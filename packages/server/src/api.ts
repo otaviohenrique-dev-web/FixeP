@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { PLAYABLE_CLASSES, START_ZONE, type CharClass } from "@frixep/shared";
+import { PLAYABLE_CLASSES, START_ZONE, MAX_CHARACTERS_PER_ACCOUNT, type CharClass } from "@frixep/shared";
 import { verifySession, type AuthUser } from "./auth.js";
 import { registrarEvento } from "./telemetria.js";
 import { Repo, validateName } from "./db/repo.js";
@@ -37,8 +37,8 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-const shape = (c: { name: string; class: string; level: number; xp: number; zone?: number } | null) =>
-  c ? { name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? START_ZONE } : null;
+const shape = (c: { id: string; name: string; class: string; level: number; xp: number; zone?: number }) =>
+  ({ id: c.id, name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? START_ZONE });
 
 export function apiRouter(repo: Repo): Router {
   const r = Router();
@@ -47,7 +47,8 @@ export function apiRouter(repo: Repo): Router {
     try {
       // token de uma conta que não existe (ex.: emitido antes da F2): sessão inválida => volta ao login
       if (!(await repo.accountExists(req.user!.id))) return res.status(401).json({ error: "Sessão expirada." });
-      res.json({ account: { name: req.user!.name }, character: shape(await repo.getCharacter(req.user!.id)) });
+      const personagens = await repo.listCharacters(req.user!.id);
+      res.json({ account: { name: req.user!.name }, characters: personagens.map(shape), max: MAX_CHARACTERS_PER_ACCOUNT });
     } catch (e) {
       console.error("[api] /me:", (e as Error).message);
       res.status(500).json({ error: "Erro interno." });
@@ -63,7 +64,7 @@ export function apiRouter(repo: Repo): Router {
       if (!(await repo.accountExists(req.user!.id))) return res.status(401).json({ error: "Sessão expirada." });
       const out = await repo.createCharacter(req.user!.id, v.name, cls);
       if (!out.ok) {
-        return res.status(409).json({ error: out.error === "name_taken" ? "Esse nome já está em uso." : "Você já tem um personagem." });
+        return res.status(409).json({ error: out.error === "name_taken" ? "Esse nome já está em uso." : `Sua conta já tem o máximo de ${MAX_CHARACTERS_PER_ACCOUNT} personagens.` });
       }
       void registrarEvento(repo.db, "criacao_personagem", { contaId: req.user!.id, personagemId: out.character.id, dados: { classe: cls } });
       res.status(201).json({ character: shape(out.character) });
