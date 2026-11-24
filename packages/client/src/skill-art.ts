@@ -4,7 +4,10 @@
  */
 
 /** caminho da imagem da habilidade, ou undefined se o nome não tem arte */
+const ALIAS: Record<string, string> = { "Escudo de Aço": "escudo_refletor" }; // habilidades cuja arte tem outro nome de arquivo
+
 export function skillImage(name: string): string | undefined {
+  if (ALIAS[name]) return `/assets/ui/skills/skill_${ALIAS[name]}.png`;
   const slug = name
     .normalize("NFD").replace(/[̀-ͯ]/g, "") // tira acentos
     .toLowerCase().trim().replace(/\s+/g, "_");
