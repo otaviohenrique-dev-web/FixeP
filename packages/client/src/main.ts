@@ -1318,11 +1318,11 @@ class WorldScene extends Phaser.Scene {
     // (a esquiva e as ações sem alcance não mirram no foco: a esquiva vai para onde o polegar/mouse aponta, não para cima do inimigo)
     // No computador as habilidades (exceto o ataque básico) NÃO grudam no foco: vão para onde o ponteiro aponta (o alcance é limitado pelo servidor/prévia).
     // No toque, o toque curto mira o alvo travado; segurar e arrastar escolhe o ponto livremente (aimGrid).
-    const focus = this.reach(a) > 0 && (this.touchMode || a === "attack") ? this.targets().find((t) => t.key === this.lockKey) : undefined;
+    const focus = this.reach(a) > 0 && this.touchMode ? this.targets().find((t) => t.key === this.lockKey) : undefined;
     if (focus) return { x: focus.x, y: focus.y };
     if (!this.touchMode) {
       // ataque básico no teclado sem foco: mira no inimigo do alcance (como no toque), não no ponteiro nem na última direção
-      if (a === "attack") { const t = this.assistTarget(a); if (t) return { x: t.x, y: t.y }; }
+      // PC: tudo é livre, sem foco automático; o ataque também vai para o ponteiro
       const p = this.input.activePointer;
       p.updateWorldPoint(this.cameras.main);
       return toGrid(p.worldX, p.worldY);
@@ -1582,7 +1582,7 @@ class WorldScene extends Phaser.Scene {
     const me = this.me();
     if (!me || me.dead || !this.room || this.busy) return;
     // ataque básico com o alvo travado fora do alcance: anda até ele e ataca ao chegar (o joystick cancela)
-    if (a === "attack" && this.lockKey) {
+    if (a === "attack" && this.lockKey && this.touchMode) {
       const t = this.targets().find((q) => q.key === this.lockKey);
       const reach = this.reach("attack");
       if (t && reach > 0 && Math.hypot(t.x - me.x, t.y - me.y) > reach) { this.chase = { key: this.lockKey }; this.chaseMoveAt = 0; return; }
