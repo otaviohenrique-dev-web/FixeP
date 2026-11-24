@@ -46,6 +46,10 @@ export interface MarketPage { items: MarketListing[]; page: number; pages: numbe
 export type MyListingStatus = "active" | "sold" | "expired";
 export interface MyListing { id: string; itemId: string; qty: number; price: number; currency: MarketCurrency; fee: number; status: MyListingStatus; expiresAt: number; buyer?: string }
 export interface MarketMineEvent { listings: MyListing[]; open: number; max: number }
+/** Uma listagem na janela de preços: só o necessário para comparar (sem dados privados do vendedor além do nome). */
+export interface MarketPriceRow { id: string; qty: number; price: number; currency: MarketCurrency; unit: number; seller: string; mine: boolean }
+/** Resposta a MarketPrices: as 30 listagens mais baratas (por unidade) e o mais caro, da moeda pedida. */
+export interface MarketPricesEvent { itemId: string; currency: MarketCurrency; rows: MarketPriceRow[]; total: number; cheapest: number | null; dearest: number | null }
 export interface MarketDoneEvent { ok: boolean; text: string; kind: "list" | "buy" | "cancel" | "claim" }
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();

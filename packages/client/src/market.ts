@@ -1,7 +1,7 @@
 import {
-  ITEMS, Msg, RARITY_COLOR, RARITY_NAME, RARITIES, COIN_IRON, COIN_OBOL, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_FEE_PCT, MARKET_DAYS, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MARKET_SORTS, MARKET_SORT_NAME, MARKET_MAX_ACTIVE,
+  ITEMS, Msg, RARITY_COLOR, RARITY_NAME, RARITIES, COIN_IRON, COIN_OBOL, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_FEE_PCT, MARKET_DAYS, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MARKET_SORTS, MARKET_SORT_NAME, MARKET_MAX_ACTIVE, priceHeadline, sortByUnitPrice,
   EQUIP_SLOT_NAME, CLASS_DEFS, itemValue, listingFee, suggestedPrice,
-  type InventorySnapshot, type ItemDef, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type MarketFilter, type MyListing, type MarketCurrency, type CharClass, type ItemKind, type Rarity,
+  type InventorySnapshot, type ItemDef, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type MarketFilter, type MarketPricesEvent, type MyListing, type MarketCurrency, type CharClass, type ItemKind, type Rarity,
 } from "@frixep/shared";
 import { bindItemTip } from "./itemtip";
 
@@ -17,6 +17,7 @@ export interface MarketUi {
   setPage(p: MarketPage): void;
   setMine(m: MarketMineEvent): void;
   setDone(d: MarketDoneEvent): void;
+  setPrices(p: MarketPricesEvent): void;
 }
 
 const CSS = `
@@ -52,6 +53,16 @@ const CSS = `
 .mk-chip.act{background:rgba(125,214,138,.15);color:#9fe0a8}.mk-chip.sold{background:rgba(255,200,90,.15);color:#ffd08a}.mk-chip.exp{background:rgba(255,110,90,.15);color:#ffb3a6}
 .mk-hint{margin:0;padding:0 14px 8px;font:400 12px/1.45 Georgia,serif;color:#9fc0e0}
 @media (max-width:620px){.mk-row{grid-template-columns:40px 1fr}.mk-act{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center}.mk-ic{width:40px;height:40px}}
+.mk-prices{flex:1 1 100%;min-width:0;display:flex;flex-direction:column;gap:5px;padding:6px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2)}
+.mk-ph{font:700 12px/1.35 "Cinzel",Georgia,serif;color:#ffd08a}
+.mk-pl{display:flex;flex-direction:column;gap:3px;max-height:150px;overflow:auto}
+.mk-pline{display:grid;grid-template-columns:40px 1fr auto;gap:6px;align-items:center;min-height:30px;padding:3px 6px;border-radius:4px;border:1px solid rgba(160,200,240,.15);background:rgba(14,22,34,.6);color:#e6eef9;font:400 12px/1.2 Georgia,serif;text-align:left;cursor:pointer}
+.mk-pline:hover,.mk-pline:focus-visible{border-color:#ffd2a3;outline:none}
+.mk-pline.mine{border-color:rgba(255,170,90,.45)}
+.mk-pline span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mk-pline .mk-pu{font:700 12px/1 "Cinzel",Georgia,serif;color:#9fe0a8}
+.mk-pnote{font:400 11px/1.3 Georgia,serif;color:#9fc0e0}
+@media (max-width:620px){.mk-pline{grid-template-columns:34px 1fr auto}}
 `;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] => {
@@ -74,7 +85,7 @@ function brief(d: ItemDef): string {
   if (d.mana) o.push(`+${d.mana} rec.`);
   if (d.regen) o.push(`+${d.regen}/s`);
   if (d.heal) o.push(`cura ${d.heal}`);
-  const where = d.kind === "potion" ? "Poção" : EQUIP_SLOT_NAME[d.kind as keyof typeof EQUIP_SLOT_NAME];
+  const where = d.kind === "potion" ? "Poção" : d.kind === "material" ? "Material" : EQUIP_SLOT_NAME[d.kind as keyof typeof EQUIP_SLOT_NAME];
   return `${RARITY_NAME[d.rarity]} · ${where}${d.cls ? " · " + CLASS_DEFS[d.cls].name : ""} · nv ${d.minLevel}${o.length ? " · " + o.join(" · ") : ""}`;
 }
 function timeLeft(ms: number): string {
@@ -115,11 +126,15 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
   let busy = false; // esperando a resposta do servidor a uma ação (evita clique duplo)
   let tick: ReturnType<typeof setInterval> | undefined;
   let browseTimer: ReturnType<typeof setTimeout> | undefined;
+  let priceTick: ReturnType<typeof setInterval> | undefined; // atualiza a janela de preços enquanto o formulário está aberto
+  // formulário de venda aberto: item, moeda, quantidade atual e como preencher o preço ao tocar numa linha
+  let formCtx: { itemId: string; cur: () => MarketCurrency; qty: () => number; panel: HTMLElement; fill: (unit: number) => void } | null = null;
 
-  const close = () => { back.classList.remove("open"); npc = null; clearInterval(tick); clearTimeout(browseTimer); busy = false; };
+  const close = () => { back.classList.remove("open"); npc = null; clearInterval(tick); clearInterval(priceTick); clearTimeout(browseTimer); busy = false; formCtx = null; };
   const send = (type: string, extra: Record<string, unknown> = {}) => { if (npc) opts.send(type, { npc: npc.id, ...extra }); };
   const browse = () => send(Msg.MarketBrowse, { filter });
   const askMine = () => send(Msg.MarketMy);
+  const askPrices = () => { if (formCtx) send(Msg.MarketPrices, { itemId: formCtx.itemId, currency: formCtx.cur() }); };
   const browseSoon = () => { clearTimeout(browseTimer); browseTimer = setTimeout(browse, 250); };
   const equippedOf = (kind: string): ItemDef | null => { const id = (snap.equip as Record<string, string | null>)[kind]; return id ? ITEMS[id] ?? null : null; };
 
@@ -129,6 +144,8 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     browse(); askMine();
     clearInterval(tick);
     tick = setInterval(() => { if (tab !== "sell" && !card.contains(document.activeElement as Node) ) render(); }, 30_000); // atualiza "expira em"
+    clearInterval(priceTick);
+    priceTick = setInterval(() => { if (tab === "sell") askPrices(); }, 15_000);
     render();
   }
   back.onclick = (e) => { if (e.target === back) close(); };
@@ -136,6 +153,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
   // ---------------------------------------------------------------- estrutura
   function render() {
     if (!npc) return;
+    if (tab !== "sell") formCtx = null;
     // não refaz a tela enquanto o jogador digita num campo (perderia o foco)
     const ae = document.activeElement as HTMLInputElement | null;
     const keep = ae && card.contains(ae) && ae.dataset.k ? { k: ae.dataset.k, at: ae.selectionStart } : null;
@@ -241,6 +259,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
 
   // ---------------------------------------------------------------- vender
   function renderSell() {
+    formCtx = null;
     card.append(el("p", "mk-hint", `Escolha um item da mochila e defina o preço total em Tostões ou em Óbolos de Sangue (a moeda rara: boa para itens míticos e lendários). Ele sai da mochila e fica guardado até vender, vencer (${MARKET_DAYS} dias) ou você cancelar. Máx. ${MARKET_MAX_ACTIVE} listagens ativas.`));
     const list = el("div", "ec-list");
     let any = false;
@@ -274,6 +293,11 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     let price = suggestedPrice(id, max);
     const sum = el("div", "sum");
     const go = el("button", "ec-btn go", "Pôr à venda"); go.type = "button";
+    const pricePanel = el("div", "mk-prices");
+    pricePanel.setAttribute("aria-live", "polite");
+    pricePanel.append(el("div", "mk-ph", "Consultando preços…"));
+    let askTimer: ReturnType<typeof setTimeout> | undefined;
+    const askSoon = () => { clearTimeout(askTimer); askTimer = setTimeout(askPrices, 300); };
     const paint = () => {
       const lim = MARKET_PRICE[cur], cn = MARKET_CURRENCY_NAME[cur];
       const have = cur === "obols" ? snap.obols : snap.iron;
@@ -288,7 +312,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     if (max > 1) {
       const lq = el("label", "", "Qtd.");
       const iq = el("input", "q"); iq.type = "number"; iq.min = "1"; iq.max = String(max); iq.value = String(max); iq.dataset.k = "lq";
-      iq.oninput = () => { qty = Math.max(1, Math.min(max, Math.floor(Number(iq.value) || 1))); paint(); };
+      iq.oninput = () => { qty = Math.max(1, Math.min(max, Math.floor(Number(iq.value) || 1))); paint(); askSoon(); };
       lq.append(iq);
       form.append(lq);
     }
@@ -299,11 +323,14 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     const lp = el("label", "", "Preço");
     const ip = el("input"); ip.type = "number"; ip.min = String(MARKET_PRICE.iron.min); ip.max = String(MARKET_PRICE.iron.max); ip.value = String(price); ip.dataset.k = "lp"; ip.inputMode = "numeric";
     ip.oninput = () => { price = Math.floor(Number(ip.value)); paint(); };
-    sc.onchange = () => { cur = sc.value as MarketCurrency; price = cur === "obols" ? 1 : suggestedPrice(id, qty); ip.value = String(price); ip.min = String(MARKET_PRICE[cur].min); ip.max = String(MARKET_PRICE[cur].max); paint(); };
+    sc.onchange = () => { cur = sc.value as MarketCurrency; price = cur === "obols" ? 1 : suggestedPrice(id, qty); ip.value = String(price); ip.min = String(MARKET_PRICE[cur].min); ip.max = String(MARKET_PRICE[cur].max); paint(); askPrices(); };
     lp.append(ip);
-    form.append(lc, lp, sum, go);
+    form.append(lc, lp, sum, go, pricePanel);
     go.onclick = () => { if (go.disabled) return; busy = true; send(Msg.MarketList, { slot, qty, price, currency: cur }); paint(); };
+    // tocar numa linha da janela: preço = preço por unidade x quantidade escolhida (o servidor confere o resto)
+    formCtx = { itemId: id, cur: () => cur, qty: () => qty, panel: pricePanel, fill: (unit) => { price = Math.max(0, Math.round(unit * qty)); ip.value = String(price); paint(); } };
     paint();
+    askPrices();
     return form;
   }
 
@@ -360,6 +387,26 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     setSnapshot(s) { snap = s; if (npc) render(); },
     setPage(p) { page = p; if (p.page !== filter.page) filter = { ...filter, page: p.page }; if (npc) render(); },
     setMine(m) { mine = m; if (npc) render(); },
+    setPrices(p) {
+      const c = formCtx;
+      if (!c || c.itemId !== p.itemId || c.cur() !== p.currency) return; // resposta de outro item ou moeda: ignora
+      const cn = MARKET_CURRENCY_NAME[p.currency];
+      const f = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+      c.panel.replaceChildren(el("div", "mk-ph", priceHeadline(p, cn)));
+      if (!p.rows.length) return;
+      const list = el("div", "mk-pl");
+      for (const r of sortByUnitPrice(p.rows, p.currency)) {
+        const line = el("button", "mk-pline" + (r.row.mine ? " mine" : ""));
+        line.type = "button";
+        line.title = `Usar ${f(r.unit)} ${cn} por unidade (x ${c.qty()}) no preço`;
+        line.setAttribute("aria-label", `${r.qty} por ${num(r.price)} ${cn}, ${f(r.unit)} por unidade, vendedor ${r.row.seller}`);
+        line.append(el("span", "", `x${r.qty}`), el("span", "", `${num(r.price)} · ${r.row.seller}${r.row.mine ? " (você)" : ""}`), el("span", "mk-pu", `${f(r.unit)}/un`));
+        line.onclick = () => c.fill(r.unit);
+        list.append(line);
+      }
+      c.panel.append(list);
+      if (p.total > p.rows.length) c.panel.append(el("div", "mk-pnote", `+ ${num(p.total - p.rows.length)} listagens mais caras não mostradas.`));
+    },
     setDone(d) {
       busy = false;
       opts.toast(d.text, d.ok ? "#9fe0a8" : "#ffb3a6");
