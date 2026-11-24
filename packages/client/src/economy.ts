@@ -5,7 +5,7 @@ import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, GEMAS, GEMA_BY_ID, espacosDe, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
+  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, GEMAS, GEMA_BY_ID, espacosDe, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketPricesEvent, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
 } from "@frixep/shared";
 
 /**
@@ -28,6 +28,7 @@ export interface EconomyUi {
   /** abre o diálogo de confirmação de quebrar o item do espaço `slot` */
   confirmBreak(slot: number): void;
   setMarketPage(p: MarketPage): void;
+  setMarketPrices(p: MarketPricesEvent): void;
   setMarketMine(m: MarketMineEvent): void;
   setMarketDone(d: MarketDoneEvent): void;
   /** quests (C1.2): estado e definições vindos do servidor, e recusas/avisos para a caixa do NPC */
@@ -918,6 +919,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     tradeChat,
     confirmBreak,
     setMarketPage: (p) => market.setPage(p),
+    setMarketPrices: (p) => market.setPrices(p),
     setMarketMine: (m) => market.setMine(m),
     setMarketDone: (d) => market.setDone(d),
   };

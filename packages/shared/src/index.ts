@@ -5,6 +5,7 @@ export * from "./diario";
 export * from "./dicas";
 export * from "./poder";
 export * from "./sets";
+export * from "./mercado_precos";
 // Simulação em grade ortogonal (servidor). Isométrico é só projeção no cliente.
 // MAP_W/MAP_H/SPAWN são os da zona 1; cada zona tem os seus em ZONES (zones.ts).
 export const MAP_W = 40;
@@ -63,6 +64,7 @@ export const Msg = {
   MarketList: "market_list", // { npc, slot, qty, price, currency: "iron" | "obols" }: põe um item da mochila à venda (cobra a taxa de listagem)
   MarketBuy: "market_buy", // { npc, id }: compra uma listagem
   MarketCancel: "market_cancel", // { npc, id }: cancela uma listagem ativa (o item volta; a taxa não)
+  MarketPrices: "market_prices", // { npc, itemId, currency }: pede as listagens ativas de um item (Evt.MarketPrices), para comparar preços ao listar
   MarketClaim: "market_claim", // { npc, id }: recolhe o dinheiro de uma venda ou o item de uma listagem vencida; id "all" recolhe tudo
   Ready: "ready", // {}: o cliente terminou de carregar a zona e o jogador já pode agir: só então começa a contar a bolha de chegada
   Variacao: "variacao", // { slot, id }: escolhe a variação de uma habilidade (id null = volta à base); só na cidade e a partir do nível do slot (C2.2)
@@ -118,6 +120,7 @@ export const Evt = {
   Vault: "vault", // VaultSnapshot: o conteúdo do baú pessoal (só para o dono, depois de abrir ou de qualquer operação)
   MarketPage: "market_page", // MarketPage: resposta a MarketBrowse
   MarketMine: "market_mine", // MarketMineEvent: minhas listagens e vendas
+  MarketPrices: "market_prices_result", // MarketPricesEvent: resposta a MarketPrices
   MarketDone: "market_done", // MarketDoneEvent: resultado de listar, comprar, cancelar ou recolher
   Quests: "quest_estado", // QuestEvent: estado completo das quests do personagem (ao entrar e a cada mudança)
   QuestDefs: "quest_defs", // QuestDefsEvent: definições das quests (nome, texto, objetivos, recompensa); vai ao pedir quest_sync
