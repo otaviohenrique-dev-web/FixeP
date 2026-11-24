@@ -96,6 +96,7 @@ run_case 2992 "ECON_TEST=1 LOOT_TEST=1 MARKET_TTL_S=4" test/economy.mjs ""
 run_case 2992 "ECON_TEST=1 LOOT_TEST=1 MARKET_TTL_S=4" test/market.mjs ""
 run_case 2992 "ECON_TEST=1" test/cidade.mjs ""
 run_case 2992 "ECON_TEST=1 TEST_START_ZONE=1 API_RATE_MULT=100" test/autopocao.mjs ""
+run_case 2986 "ECON_TEST=1 TEST_START_ZONE=1 API_RATE_MULT=100" test/autopocao-disparo.mjs ""
 # Classes e inventário com loot garantido.
 # DANO_FIXO_TEST=1: sem crítico nem variação de dano (os testes de números exatos não sorteiam; ver PD-01/PD-02).
 for file in test/inventory.mjs test/classes.mjs test/mago.mjs test/guerreiro.mjs test/curandeiro.mjs test/rebalance.mjs test/poder.mjs; do
