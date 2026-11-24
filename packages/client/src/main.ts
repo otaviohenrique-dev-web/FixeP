@@ -179,29 +179,20 @@ class WorldScene extends Phaser.Scene {
   private stats!: ReturnType<typeof mountStats>;
   private chatUi!: ChatUi;
   private hudLast = { pvp: "", mana: "", prog: "", buff: "", q: -1, hp: "", ap: -1 as number, poder: -1 };
-  private travelWatch = 0;
-  private gateBlock = false; // a travessia foi recusada (em combate): não mostra a tela de load de novo enquanto o jogador continuar em cima do portão
   private enterSeq = 0;
   private entering = false;
   private travelT0 = 0;
   private floatFree = new Map<string, Phaser.GameObjects.Text[]>(); // balões de dano/XP reaproveitados (criar Text a cada golpe é caro)
   private floatUsed = 0;
 
-  /** tela de load na hora (ao pisar no portal, antes mesmo de o servidor responder) e bloqueio de entradas */
+  /** tela de load: só depois que o servidor aprova a travessia (Evt.Travel); bloqueia novas entradas enquanto carrega */
   private beginTravel(zoneId: number, verb = "Viajando para") {
-    window.clearTimeout(this.travelWatch);
     if (this.busy && this.loader.visible) return;
     const z = ZONES[zoneId] ?? ZONES[START_ZONE];
     this.busy = true;
     this.travelT0 = performance.now();
     this.loader.progress(0.05);
     this.loader.show({ zone: z.name, theme: z.theme, verb });
-  }
-
-  /** o servidor não respondeu à travessia (recusou sem avisar, mensagem perdida): solta o jogador em vez de deixar o load preso */
-  private armTravelWatch(ms = 6000) {
-    window.clearTimeout(this.travelWatch);
-    this.travelWatch = window.setTimeout(() => { if (!this.entering) { this.busy = false; void this.loader.hide(0); } }, ms);
   }
 
   /** travessia aprovada pelo servidor: sai da sala antiga e entra na da nova zona em paralelo ao fade (mesmo token, sem recarregar) */
@@ -299,7 +290,6 @@ class WorldScene extends Phaser.Scene {
     this.zoneBanner(zone.name);
     this.busy = false;
     this.leaving = false;
-    window.clearTimeout(this.travelWatch);
     await this.loader.hide(why === "boot" ? 250 : 450);
     if (seq === this.enterSeq && this.room === room) room.send(Msg.Ready, {}); // a tela já sumiu e o jogador controla o personagem: começa a contar a bolha de chegada
     T.mark("pronto");
@@ -383,7 +373,7 @@ class WorldScene extends Phaser.Scene {
       aplicar: (slot) => this.room?.send(Msg.LoadoutAplicar, { slot }),
       renomear: (slot, nome) => this.room?.send(Msg.LoadoutNome, { slot, nome }),
     });
-    this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.armTravelWatch(); this.room.send(Msg.Travel, { to }); });
+    this.worldMap = mountWorldMap((to) => { this.room.send(Msg.Travel, { to }); }); // o load só aparece quando o servidor aprova (Evt.Travel)
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
       send: (text) => {
@@ -522,10 +512,8 @@ class WorldScene extends Phaser.Scene {
     room.onMessage(Evt.WorldMap, () => { if (!this.busy && !this.entering) this.worldMap.open(); });
     room.onMessage(Evt.Travel, (m: TravelEvent) => this.travelTo(m.zone, room));
     room.onMessage(Evt.ActDenied, (m: { a: ActionId }) => this.hud.clearCd(m.a)); // o servidor não fez a ação: devolve a recarga do botão
-    room.onMessage(Evt.TravelDenied, () => { // recusado (em combate): tira o load que apareceu ao pisar no portão e devolve o controle na hora
+    room.onMessage(Evt.TravelDenied, () => { // recusado (em combate): não houve load; só o aviso discreto do servidor
       if (this.entering) return;
-      this.gateBlock = true;
-      window.clearTimeout(this.travelWatch);
       if (this.busy && this.loader.visible) { this.busy = false; void this.loader.hide(0); }
     });
     room.onMessage(Evt.Buffs, (m: { list: ActiveBuff[] }) => this.hud.setBuffs(Array.isArray(m?.list) ? m.list : [])); // buffs próprios: ícones com o tempo restante
@@ -679,21 +667,6 @@ class WorldScene extends Phaser.Scene {
       if (!v || time > b.until) { b.t.destroy(); this.bubbles.delete(id); continue; }
       b.t.setScale(this.uiScale).setPosition(v.obj.x, v.obj.y - v.headY - 34 * this.uiScale).setVisible(v.obj.visible).setAlpha(Math.min(1, (b.until - time) / 600));
     }
-  }
-
-  /** pisou num portal (posição do servidor): mostra a tela de load na hora, sem esperar a resposta da travessia */
-  private watchPortals() {
-    const me = this.me();
-    if (this.busy || this.entering || !me || me.dead) return;
-    let on: (typeof ZONES)[number]["portals"][number] | null = null;
-    for (const p of ZONES[this.zoneId]?.portals ?? []) {
-      if (p.to === WORLD_GATE) continue; // o portão abre o mapa-mundo (servidor avisa)
-      if (Math.hypot(me.x - p.x, me.y - p.y) <= p.r) { on = p; break; }
-    }
-    if (!on) { this.gateBlock = false; return; }
-    if (this.gateBlock) return;
-    this.beginTravel(on.to);
-    this.armTravelWatch(); // o servidor não confirmou: libera
   }
 
   /** define o limiar da auto-poção (0 = desligada): o servidor limita, grava e bebe; o cliente só pede e mostra o valor que vier do servidor */
@@ -1605,7 +1578,6 @@ class WorldScene extends Phaser.Scene {
     const st = this.state;
     if (!st?.players || !st?.enemies) return;
     if (!this.busy) this.driveJoystick(time);
-    this.watchPortals();
     timed("chao", () => this.ground?.update(time, this.room.sessionId, String(this.me()?.party ?? "")));
     if (!SEM_DESENHOS) timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
     const meNow = this.me();
