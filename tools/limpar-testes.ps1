@@ -4,9 +4,9 @@
 .DESCRIPTION
   Nunca mexe no servidor de produção (pasta FrixeP-servidor) nem em processos recentes (padrão: menos de 20 min).
   Sem -Matar só LISTA (modo seguro). Uso:
-    .\tools\limpar-testes.ps1              # só mostra
-    .\tools\limpar-testes.ps1 -Matar       # encerra os esquecidos
-    .\tools\limpar-testes.ps1 -Matar -MinMinutos 5
+    powershell -ExecutionPolicy Bypass -File tools\limpar-testes.ps1              # só mostra
+    powershell -ExecutionPolicy Bypass -File tools\limpar-testes.ps1 -Matar       # encerra os esquecidos
+    powershell -ExecutionPolicy Bypass -File tools\limpar-testes.ps1 -Matar -MinMinutos 5
 #>
 param([switch]$Matar, [int]$MinMinutos = 20)
 
