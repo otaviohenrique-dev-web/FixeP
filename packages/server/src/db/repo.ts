@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, KINDS_EQUIPAVEIS, migrateItemId, afixosValidos, afixosDaSemente, type CharClass, type EquipSlot } from "@frixep/shared";
+import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, KINDS_EQUIPAVEIS, MAX_CHARACTERS_PER_ACCOUNT, migrateItemId, afixosValidos, afixosDaSemente, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 import { emptyVault, type Vault } from "../game/vault.js";
 import type { QuestMap, QuestRt } from "../game/quests.js";
@@ -113,17 +113,27 @@ export class Repo {
     return rows.map((r) => ({ id: Number(r.id), nome: r.nome, motivo: r.motivo, criado_em: r.criado_em }));
   }
 
-  async getCharacter(accountId: string): Promise<CharacterRow | null> {
+  /** personagem da conta: o pedido por id (só se for da conta) ou, sem id, o mais antigo (quem não escolhe entra no primeiro) */
+  async getCharacter(accountId: string, charId?: string): Promise<CharacterRow | null> {
     const { rows } = await this.db.query<CharacterRow>(
-      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts from characters where account_id = $1 order by created_at limit 1",
-      [accountId],
+      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts from characters where account_id = $1 and ($2::text is null or id::text = $2) order by created_at limit 1",
+      [accountId, charId ?? null],
     );
     return rows[0] ?? null;
   }
 
-  /** 1 personagem por conta no MVP (o banco já aceita vários; a regra fica aqui). */
+  /** todos os personagens da conta, do mais antigo para o mais novo (a tela de seleção) */
+  async listCharacters(accountId: string): Promise<CharacterRow[]> {
+    const { rows } = await this.db.query<CharacterRow>(
+      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts from characters where account_id = $1 order by created_at",
+      [accountId],
+    );
+    return rows;
+  }
+
+  /** até MAX_CHARACTERS_PER_ACCOUNT personagens por conta (a regra fica aqui, com a conta travada na contagem). */
   async createCharacter(accountId: string, name: string, cls: CharClass): Promise<
-    { ok: true; character: CharacterRow } | { ok: false; error: "has_character" | "name_taken" }
+    { ok: true; character: CharacterRow } | { ok: false; error: "full" | "name_taken" }
   > {
     try {
       return await this.db.tx(async ({ query: q }) => {
@@ -131,7 +141,7 @@ export class Repo {
         // (o PGlite local é serial e não mostra a corrida; no Postgres com várias conexões ela existiria)
         await q("select pg_advisory_xact_lock(hashtext($1))", [`char:${accountId}`]);
         const n =(await q<{ n: string }>("select count(*)::text as n from characters where account_id = $1", [accountId])).rows[0].n;
-        if (Number(n) > 0) return { ok: false as const, error: "has_character" as const };
+        if (Number(n) >= MAX_CHARACTERS_PER_ACCOUNT) return { ok: false as const, error: "full" as const };
         const id = randomUUID();
         const zone = startZone();
         await q("insert into characters (id, account_id, name, name_key, class, zone) values ($1, $2, $3, $4, $5, $6)", [id, accountId, name, nameKey(name), cls, zone]);

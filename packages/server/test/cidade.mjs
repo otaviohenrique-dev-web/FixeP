@@ -17,7 +17,7 @@ async function account(cls = "warrior") {
   if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
   return { token, name };
 }
-const zoneApi = async (acc) => (await (await fetch(`${HTTP}/api/me`, { headers: { Authorization: `Bearer ${acc.token}` } })).json()).character.zone;
+const zoneApi = async (acc) => (await (await fetch(`${HTTP}/api/me`, { headers: { Authorization: `Bearer ${acc.token}` } })).json()).characters[0].zone;
 
 async function enter(acc, room = "zone4") {
   const r = await new Client(WS).joinOrCreate(room, { token: acc.token });

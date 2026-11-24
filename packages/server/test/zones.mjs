@@ -16,7 +16,7 @@ const { token } = await (await fetch(`${HTTP}/auth/guest`, { method: "POST" })).
 const name = "Zn" + Math.random().toString(10).slice(2, 8);
 const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
 if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
-const zoneApi = async () => (await (await fetch(`${HTTP}/api/me`, { headers: { Authorization: `Bearer ${token}` } })).json()).character.zone;
+const zoneApi = async () => (await (await fetch(`${HTTP}/api/me`, { headers: { Authorization: `Bearer ${token}` } })).json()).characters[0].zone;
 
 async function join(room, tk = token) {
   const r = await new Client(WS).joinOrCreate(room, { token: tk });

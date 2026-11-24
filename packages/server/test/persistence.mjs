@@ -30,7 +30,7 @@ console.log("\n== 1. Sem personagem ==");
 const tk = await guest();
 let r = await api(tk, "/me");
 let body = await r.json();
-check("conta nova não tem personagem", r.ok && body.character === null);
+check("conta nova não tem personagem", r.ok && body.characters.length === 0);
 check("entrar na sala sem personagem é recusado", (await joinOk(tk)) === null);
 check("/me sem token → 401", (await api(null, "/me")).status === 401);
 check("/me com token falso → 401", (await api("lixo", "/me")).status === 401);
@@ -57,7 +57,7 @@ for (const [label, payload] of bad) {
   check(`recusa: ${label}`, res.status === 400, `status ${res.status}`);
 }
 const meAfterBad = await (await api(tk, "/me")).json();
-check("nenhuma tentativa inválida criou personagem", meAfterBad.character === null);
+check("nenhuma tentativa inválida criou personagem", meAfterBad.characters.length === 0);
 
 console.log("\n== 3. Criação e unicidade ==");
 const base = rnd();
@@ -66,21 +66,24 @@ r = await api(tk, "/character", { name, class: "warrior" });
 body = await r.json();
 check("criação válida → 201", r.status === 201 && body.character?.name === name && body.character.level === 1 && body.character.xp === 0, JSON.stringify(body.character));
 r = await api(tk, "/character", { name: `Outro${rnd()}`, class: "warrior" });
-check("segundo personagem na mesma conta → 409", r.status === 409);
+check("segundo personagem na mesma conta → 201 (até 4 por conta)", r.status === 201);
+for (let i = 0; i < 2; i++) await api(tk, "/character", { name: `Mais${i}${rnd()}`, class: "archer" });
+r = await api(tk, "/character", { name: `Quinto${rnd()}`, class: "warrior" });
+check("quinto personagem da conta → 409 (máximo de 4)", r.status === 409);
 const tk2 = await guest();
 r = await api(tk2, "/character", { name: `ze${base}`, class: "warrior" }); // sem acento e minúsculo
 check("nome repetido (ignora maiúsculas e acentos) → 409", r.status === 409);
 r = await api(tk2, "/character", { name: `  ${name.toUpperCase()}  `, class: "warrior" });
 check("nome repetido com espaços/caixa alta → 409", r.status === 409);
 body = await (await api(tk, "/me")).json();
-check("/me devolve o personagem criado", body.character?.name === name);
+check("/me devolve os 4 personagens da conta", body.characters.length === 4 && body.characters.some((c) => c.name === name));
 
 console.log("\n== 3a. As três classes são jogáveis ==");
 for (const cls of ["warrior", "archer", "cleric"]) {
   const t = await guest();
   const res = await api(t, "/character", { name: `Cls${cls.slice(0, 3)}${rnd()}`, class: cls });
   const me2 = await (await api(t, "/me")).json();
-  check(`criar personagem da classe ${cls} → 201 e a classe fica salva`, res.status === 201 && me2.character?.class === cls, `status ${res.status}, classe ${me2.character?.class}`);
+  check(`criar personagem da classe ${cls} → 201 e a classe fica salva`, res.status === 201 && me2.characters?.[0]?.class === cls, `status ${res.status}, classe ${me2.characters?.[0]?.class}`);
 }
 
 console.log("\n== 3b. Corrida: pedidos simultâneos ==");
@@ -88,7 +91,7 @@ console.log("\n== 3b. Corrida: pedidos simultâneos ==");
   const tkR = await guest();
   const outs = await Promise.all(Array.from({ length: 12 }, (_, i) => api(tkR, "/character", { name: `Race${i}${rnd()}`, class: "warrior" })));
   const created = outs.filter((o) => o.status === 201).length;
-  check("12 criações simultâneas na mesma conta geram exatamente 1 personagem", created === 1, `${created} criados`);
+  check("12 criações simultâneas na mesma conta geram exatamente 4 personagens (o máximo)", created === 4, `${created} criados`);
 }
 
 console.log("\n== 4. Entrar no jogo e ganhar XP ==");
@@ -113,10 +116,29 @@ check("matar um esqueleto dá XP no servidor (≥ 1: enemyXp do nível 1)", e1.s
   room.leave();
   await sleep(800);
   body = await (await api(tk, "/me")).json();
-  check("o progresso foi salvo no banco ao sair", body.character?.xp === xpNow && body.character?.level === lvNow, `banco: nível ${body.character?.level} xp ${body.character?.xp}`);
+  const salvo = body.characters.find((c) => c.name === name);
+  check("o progresso foi salvo no banco ao sair", salvo?.xp === xpNow && salvo?.level === lvNow, `banco: nível ${salvo?.level} xp ${salvo?.xp}`);
   room = await joinOk(tk);
   check("ao voltar, o jogador retoma o XP salvo", room && room.state.players.get(room.sessionId)?.xp === xpNow, `xp ${room?.state.players.get(room.sessionId)?.xp}`);
   room?.leave();
+}
+
+console.log("\n== 5. Escolher o personagem ao entrar ==");
+{
+  const tkE = await guest();
+  await api(tkE, "/character", { name: `Esc${rnd()}`, class: "warrior" });
+  const b = await (await api(tkE, "/character", { name: `Esd${rnd()}`, class: "archer" })).json();
+  const rb = await new Client(WS).joinOrCreate("zone", { token: tkE, charId: b.character.id });
+  await new Promise((r) => (rb.state?.players ? r() : rb.onStateChange.once(r)));
+  const pb = rb.state.players.get(rb.sessionId);
+  check("entra com o personagem escolhido (charId)", pb?.cls === "archer" && pb?.name === b.character.name, `nome ${pb?.name} classe ${pb?.cls}`);
+  rb.leave();
+  await sleep(800);
+  const alheio = await new Client(WS).joinOrCreate("zone", { token: tkE, charId: "00000000-0000-0000-0000-000000000000" }).then(() => true, () => false);
+  check("personagem que não é da conta → recusado", alheio === false);
+  const semEscolha = await joinOk(tkE);
+  check("sem escolha entra no mais antigo (guerreiro)", semEscolha?.state.players.get(semEscolha.sessionId)?.cls === "warrior");
+  semEscolha?.leave();
 }
 
 const failed = results.filter((x) => !x.ok);
