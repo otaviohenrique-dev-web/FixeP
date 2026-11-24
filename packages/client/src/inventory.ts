@@ -3,7 +3,7 @@ import { silhouetteSvg } from "./silhouette";
 import { animatePoder, previewPoderDelta } from "./poder";
 import { bindItemTip, bindDoubleTap, COARSE, hideItemTip, setItemTipContext, compareStats, type ItemTipData } from "./itemtip";
 import {
-  ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, type CharClass,
+  ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, statsDoPersonagem, poderTotal, type GearBonuses, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
 } from "@frixep/shared";
 
@@ -99,6 +99,16 @@ const CSS = `
 .iv-tip hr{border:0;border-top:1px solid rgba(160,200,240,.18);margin:5px 0}
 .iv-tip .bad{color:#ff9d8a}
 .iv-stats{font:400 12px/1.5 Georgia,serif;color:#9fc0e0;margin:6px 0 0;text-align:center}
+.iv-stats .st-r{display:block}
+.iv-stats .st-up{color:#7dd68a;font-weight:700}
+.iv-stats .st-dn{color:#ff8f7e;font-weight:700}
+.iv-gain{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:26;pointer-events:none;text-align:center;font-family:"Cinzel",Georgia,serif;opacity:0;transition:opacity .45s ease}
+.iv-gain.on{opacity:1}
+.iv-gain .g-pw{display:block;font:800 36px/1 Georgia,serif;color:#7dd68a;text-shadow:0 0 16px rgba(61,255,122,.7),0 2px 4px #000;margin-bottom:8px}
+.iv-gain .g-pw small{display:block;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.3em;color:#c9b07a;margin-bottom:6px;text-transform:uppercase;text-shadow:0 1px 3px #000}
+.iv-gain .g-row{display:block;font:700 15px/1.55 Georgia,serif;color:#7dd68a;text-shadow:0 1px 3px #000,0 0 10px rgba(61,255,122,.35)}
+.iv-gain .g-row i{font-style:normal;color:#d9efe0;font-weight:400;margin-right:6px}
+@media (prefers-reduced-motion:reduce){.iv-gain{transition:none}}
 .iv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .iv-slot{position:relative;aspect-ratio:1;border-radius:5px;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;--rc:rgba(160,200,240,.2);
   background:radial-gradient(circle at 50% 35%,rgba(20,30,46,.9),rgba(5,9,15,.9));border:1.5px solid var(--rc);transition:border-color .15s,transform .12s}
@@ -168,6 +178,72 @@ function statLines(d: ItemDef): string[] {
   return o;
 }
 
+/** atributos do personagem no painel (quanto maior, melhor). `sempre`: aparece mesmo zerado */
+const METRICAS: { label(c: CharClass): string; pre: string; un: string; sempre: boolean; val(g: GearBonuses): number }[] = [
+  { label: () => "Poder", pre: "+", un: "%", sempre: true, val: (g) => g.dmgPct },
+  { label: () => "Vida", pre: "+", un: "", sempre: true, val: (g) => g.hp },
+  { label: () => "Crítico", pre: "+", un: "%", sempre: false, val: (g) => g.crit + (g.kit.crit ?? 0) },
+  { label: () => "Dano recebido", pre: "−", un: "%", sempre: false, val: (g) => g.dr },
+  { label: () => "Recarga", pre: "−", un: "%", sempre: false, val: (g) => g.cdr },
+  { label: (c) => `${CLASS_DEFS[c].resource.name} máx.`, pre: "+", un: "", sempre: false, val: (g) => g.mana },
+  { label: () => "Regeneração", pre: "+", un: "/s", sempre: false, val: (g) => g.regen },
+];
+
+/** festa de atributos: ao equipar, o que subiu aparece no meio da tela e conta até o valor novo (só o positivo) */
+let gainEl: HTMLDivElement | null = null;
+let gainTimer = 0;
+function showGain(poderUp: number, rows: { label: string; pre: string; un: string; up: number }[]): void {
+  gainEl?.remove();
+  window.clearTimeout(gainTimer);
+  const el = document.createElement("div");
+  el.className = "iv-gain";
+  el.setAttribute("aria-hidden", "true");
+  const contas: { node: HTMLElement; to: number; delay: number; pre: string; un: string }[] = [];
+  if (poderUp > 0) {
+    const head = document.createElement("span");
+    head.className = "g-pw";
+    const small = document.createElement("small");
+    small.textContent = "Poder total";
+    const num = document.createElement("span");
+    head.append(small, num);
+    el.append(head);
+    contas.push({ node: num, to: poderUp, delay: 0, pre: "+", un: "" });
+  }
+  rows.forEach((r, i) => {
+    const row = document.createElement("span");
+    row.className = "g-row";
+    const i2 = document.createElement("i");
+    i2.textContent = r.label;
+    const num = document.createElement("span");
+    row.append(i2, num);
+    el.append(row);
+    contas.push({ node: num, to: r.up, delay: 140 * (i + (poderUp > 0 ? 1 : 0)), pre: r.pre === "−" ? "+" : r.pre, un: r.un });
+  });
+  document.body.append(el);
+  gainEl = el;
+  const reduzido = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+  if (reduzido) {
+    for (const c of contas) c.node.textContent = `${c.pre}${c.to}${c.un}`;
+  } else {
+    const t0 = performance.now();
+    for (const c of contas) {
+      c.node.textContent = `${c.pre}0${c.un}`;
+      const step = (now: number) => {
+        const k = Math.min(1, Math.max(0, (now - t0 - c.delay) / 700));
+        c.node.textContent = `${c.pre}${Math.round(c.to * (1 - Math.pow(1 - k, 3)))}${c.un}`;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+  }
+  requestAnimationFrame(() => el.classList.add("on"));
+  gainTimer = window.setTimeout(() => {
+    el.classList.remove("on");
+    window.setTimeout(() => el.remove(), 500);
+    if (gainEl === el) gainEl = null;
+  }, 2300);
+}
+
 /** 0 = sem brilho; épico pulsa leve, lendário médio, mítico forte */
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
 const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
@@ -224,6 +300,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const poderNum = poderBox.querySelector<HTMLElement>(".pw-n")!;
   let poderNow = 0;
   let poderShown: number | null = null;
+  let gearAntes: GearBonuses | null = null; // bônus do último inventário recebido (para a festa de atributos)
 
   let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null }, iron: 0, obols: 0 };
   let sel: { kind: "slot"; i: number } | { kind: "equip"; s: EquipSlot } | null = null;
@@ -365,6 +442,46 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     return b;
   }
 
+  /** bônus do equipamento (com afixos), do mesmo jeito que o servidor calcula */
+  const gearOf = (equip: Record<EquipSlot, string | null>, af: Partial<Record<EquipSlot, string[]>>) => gearBonuses(equip, opts.getClass(), af);
+  const poderDe = (g: GearBonuses) => poderTotal(statsDoPersonagem(opts.getClass(), opts.getLevel(), g));
+
+  /** atributos do personagem; com um item da mochila selecionado, ▲ verde / ▼ vermelho mostram a mudança ao equipá-lo */
+  function renderStats(now: GearBonuses) {
+    let novo: GearBonuses | null = null;
+    if (sel?.kind === "slot" && snap.inv[sel.i]) {
+      const d = ITEMS[snap.inv[sel.i]!.id];
+      const slot = d?.kind as EquipSlot;
+      if (d && d.kind !== "potion" && slot in snap.equip) {
+        novo = gearOf({ ...snap.equip, [slot]: d.id }, { ...(snap.equipAf ?? {}), [slot]: snap.inv[sel.i]!.af ?? [] });
+      }
+    }
+    const cls = opts.getClass();
+    statsEl.replaceChildren();
+    for (const m of METRICAS) {
+      const v = m.val(now);
+      const dv = novo ? m.val(novo) - v : 0;
+      if (!m.sempre && !v && !(novo && m.val(novo))) continue;
+      const row = document.createElement("span");
+      row.className = "st-r";
+      row.textContent = v ? `${m.label(cls)} ${m.pre}${v}${m.un}` : m.label(cls);
+      if (dv) {
+        const b = document.createElement("b");
+        b.className = dv > 0 ? "st-up" : "st-dn";
+        b.textContent = ` ${dv > 0 ? "▲" : "▼"} ${dv > 0 ? "+" : "−"}${Math.abs(dv)}${m.un}`;
+        row.append(b);
+      }
+      statsEl.append(row);
+    }
+    const wd = snap.equip.weapon ? ITEMS[snap.equip.weapon] : null;
+    if (wd?.wtype) {
+      const k = document.createElement("span");
+      k.className = "st-r";
+      k.textContent = `Kit: ${WEAPON_TYPES[wd.wtype].name}`;
+      statsEl.append(k);
+    }
+  }
+
   function renderWallet() {
     walletEl.replaceChildren();
     for (const [c, n, color] of [[COIN_IRON, snap.iron, "#e6eef9"], [COIN_OBOL, snap.obols, COIN_OBOL.color]] as const) {
@@ -390,17 +507,8 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     for (const ph of PLACEHOLDERS) (ph.acc ? accEl : dollEl).append(placeholderSlot(ph));
     for (const s of EQUIP_SLOTS) dollEl.append(equipSlot(s));
     dollEl.append(potionSlot());
-    // bônus totais do que está equipado
-    const g = gearBonuses(snap.equip, opts.getClass());
-    const lines = [`Poder +${g.dmgPct}%`, `Vida +${g.hp}`];
-    if (g.crit + (g.kit.crit ?? 0)) lines.push(`Crítico +${g.crit + (g.kit.crit ?? 0)}%`);
-    if (g.dr) lines.push(`Dano recebido −${g.dr}%`);
-    if (g.cdr) lines.push(`Recarga −${g.cdr}%`);
-    if (g.mana) lines.push(`${CLASS_DEFS[opts.getClass()].resource.name} máx. +${g.mana}`);
-    if (g.regen) lines.push(`Regeneração +${g.regen}/s`);
-    const wd = snap.equip.weapon ? ITEMS[snap.equip.weapon] : null;
-    if (wd?.wtype) lines.push(`Kit: ${WEAPON_TYPES[wd.wtype].name}`);
-    statsEl.textContent = lines.join("\n");
+    // bônus totais do que está equipado (e, com um item da mochila selecionado, a mudança ao equipá-lo)
+    renderStats(gearOf(snap.equip, snap.equipAf ?? {}));
     // espaços
     gridEl.innerHTML = "";
     snap.inv.forEach((st, i) => {
@@ -524,6 +632,15 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     },
     setSnapshot(s) {
       snap = s;
+      // equipar algo que dá atributo: a festa de números (a primeira leitura só guarda o ponto de partida)
+      const gear = gearOf(snap.equip, snap.equipAf ?? {});
+      if (gearAntes) {
+        const rows = METRICAS.map((m) => ({ label: m.label(opts.getClass()), pre: m.pre, un: m.un, up: m.val(gear) - m.val(gearAntes!) }))
+          .filter((r) => r.up > 0);
+        const poderUp = poderDe(gear) - poderDe(gearAntes);
+        if (rows.length || poderUp > 0) showGain(poderUp, rows);
+      }
+      gearAntes = gear;
       // se o item selecionado mudou de lugar ou sumiu, limpa a seleção
       if (sel?.kind === "slot" && !snap.inv[sel.i]) sel = null;
       if (sel?.kind === "equip" && !snap.equip[sel.s]) sel = null;
