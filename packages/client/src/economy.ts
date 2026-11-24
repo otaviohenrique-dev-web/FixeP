@@ -37,7 +37,7 @@ export interface EconomyUi {
 }
 
 const CSS = `
-.ec-wallet{position:fixed;top:max(14px,env(safe-area-inset-top));right:118px;z-index:20;display:flex;gap:10px;align-items:center;height:44px;padding:0 12px;border-radius:22px;
+.ec-wallet{position:fixed;top:max(14px,env(safe-area-inset-top));right:170px;z-index:20;display:flex;gap:10px;align-items:center;height:44px;padding:0 12px;border-radius:22px;
   background:rgba(8,16,28,.7);border:1px solid rgba(160,200,240,.3);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font:700 13px/1 "Cinzel",Georgia,serif;color:#e6eef9;pointer-events:none}
 .ec-wallet span{display:flex;align-items:center;gap:4px}
 .ec-wallet img,.ec-coin{width:20px;height:20px;image-rendering:pixelated;flex:none}

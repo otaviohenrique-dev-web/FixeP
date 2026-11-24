@@ -53,10 +53,12 @@ body.mob .hd.touch .hd-chan{bottom:calc(${SAFE_B} + 190px*var(--hs));left:50%;wi
 body.mob .hd.touch .hd-tm-low{right:calc(100% + 6px);bottom:4px}
 body.mob .hd.touch .hd-tm-near{right:calc(100% + 6px);bottom:40px}
 /* ---------- canto superior direito: menu, bolsa, carteira (menores e translúcidos) ---------- */
-body.mob .gm-btn,body.mob .iv-btn{top:${SAFE_T};width:calc(36px*var(--hs));height:calc(36px*var(--hs));opacity:.85;backdrop-filter:none;-webkit-backdrop-filter:none}
-body.mob .gm-btn svg,body.mob .iv-btn svg{width:calc(18px*var(--hs));height:calc(18px*var(--hs))}
+body.mob .gm-btn,body.mob .iv-btn,body.mob .ut-btn{top:${SAFE_T};width:calc(36px*var(--hs));height:calc(36px*var(--hs));opacity:.85;backdrop-filter:none;-webkit-backdrop-filter:none}
+body.mob .gm-btn svg,body.mob .iv-btn svg,body.mob .ut-btn svg{width:calc(18px*var(--hs));height:calc(18px*var(--hs))}
 body.mob .gm-btn{right:${SAFE_R}}
 body.mob .iv-btn{right:calc(max(8px,env(safe-area-inset-right)) + 42px*var(--hs))}
+body.mob .ut-btn{right:calc(max(8px,env(safe-area-inset-right)) + 84px*var(--hs))}
+body.mob .ut-pop{top:calc(${SAFE_T} + 42px*var(--hs));right:${SAFE_R}}
 body.mob .ec-wallet{top:calc(${SAFE_T} + 42px*var(--hs));right:${SAFE_R};height:calc(22px*var(--hs));padding:0 8px;gap:8px;font-size:calc(11px*var(--hs));opacity:.8;backdrop-filter:none;-webkit-backdrop-filter:none}
 body.mob .ec-wallet img,body.mob .ec-wallet .ec-coin{width:calc(14px*var(--hs));height:calc(14px*var(--hs))}
 /* métricas (FPS/ping/online): canto direito, logo abaixo da carteira, em linhas curtas; longe da barra de habilidades e do joystick */
