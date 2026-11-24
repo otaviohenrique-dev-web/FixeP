@@ -605,3 +605,4 @@ export * from "./talentos";
 export * from "./loadouts";
 export * from "./buffs";
 export * from "./crafting";
+export * from "./simulacao";

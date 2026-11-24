@@ -42,6 +42,7 @@
     "test:autopocao": "node test/autopocao.mjs",
     "test:variacoes:unit": "tsx test/variacoes.unit.ts",
     "test:loadouts:unit": "tsx test/loadouts.unit.ts",
+    "test:simulacao:unit": "tsx test/simulacao.unit.ts",
     "test:variacoes": "node test/variacoes.mjs",
     "test:dicas": "node test/dicas.mjs",
     "test:ci": "bash test/run-all.sh"
