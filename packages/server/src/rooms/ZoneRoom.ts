@@ -10,7 +10,7 @@ import {
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
   START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
   VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
-  limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId,
+  limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId, aplicarSets,
   limparLoadouts, validarLoadout, sanitizarNomeLoadout, loadoutNomePadrao, LOADOUT_SLOTS, LOADOUT_COMBAT_LOCK_S, type Loadouts,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
@@ -647,7 +647,8 @@ export class ZoneRoom extends Room<ZoneState> {
   /** vida máxima e dano dependem do nível E do equipamento */
   private refreshStats(p: Player, fill = false) {
     // talentos (C2.3) somam aos bônus do equipamento: vida, dano, recurso, recarga, cura, redução e crítico
-    p.gear = aplicarTalentos(bonuses(p.inv, this.classOf(p).id), limparTalentos(p.talentos, this.classOf(p).id, p.level), this.classOf(p).id);
+    // conjuntos (C3.4) somam por último: 2 ou 4 peças do mesmo conjunto equipadas agora (tirar uma desliga)
+    p.gear = aplicarSets(aplicarTalentos(bonuses(p.inv, this.classOf(p).id), limparTalentos(p.talentos, this.classOf(p).id, p.level), this.classOf(p).id), p.inv.equip, this.classOf(p).id);
     const wId = p.inv.equip.weapon;
     p.weaponRarity = (wId ? ITEMS[wId]?.rarity : undefined) ?? "";
     p.maxHp = maxHpFor(this.classOf(p).id, p.level, p.gear.hp);

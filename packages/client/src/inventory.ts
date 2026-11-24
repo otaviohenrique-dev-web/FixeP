@@ -3,7 +3,7 @@ import { silhouetteSvg } from "./silhouette";
 import { animatePoder, previewPoderDelta } from "./poder";
 import { bindItemTip, bindDoubleTap, COARSE, hideItemTip, setItemTipContext, compareStats, type ItemTipData } from "./itemtip";
 import {
-  ITEMS, INV_SLOTS, Msg, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, statsDoPersonagem, poderTotal, type GearBonuses, type CharClass,
+  ITEMS, INV_SLOTS, Msg, setAtivo, setBonusLinhas, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, statsDoPersonagem, poderTotal, type GearBonuses, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
 } from "@frixep/shared";
 
@@ -343,6 +343,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   setItemTipContext({
     getClass: () => opts.getClass(),
     getLevel: () => opts.getLevel(),
+    getEquip: () => snap.equip,
     previewPoder: (d) => {
       const delta = previewPoderDelta(opts.getClass(), opts.getLevel(), snap.equip, d);
       return delta === null ? null : { now: poderNow, delta };
@@ -486,6 +487,21 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       k.className = "st-r";
       k.textContent = `Kit: ${WEAPON_TYPES[wd.wtype].name}`;
       statsEl.append(k);
+    }
+    // conjunto ativo (C3.4): nome, peças (n/4) e os bônus; o que está ligado agora fica em destaque
+    const cj = setAtivo(snap.equip, cls);
+    if (cj && cj.n > 0) {
+      const h = document.createElement("span");
+      h.className = "st-r";
+      h.textContent = `${cj.set.nome} (${cj.n}/4)`;
+      statsEl.append(h);
+      for (const [n, b] of [[2, cj.set.b2], [4, cj.set.b4]] as const) {
+        const l = document.createElement("span");
+        l.className = "st-r";
+        l.style.opacity = cj.bonus === b ? "1" : "0.5";
+        l.textContent = `${cj.bonus === b ? "▸ " : ""}${n} peças: ${setBonusLinhas(b).join(", ")}`;
+        statsEl.append(l);
+      }
     }
   }
 

@@ -4,6 +4,7 @@ export * from "./quests";
 export * from "./diario";
 export * from "./dicas";
 export * from "./poder";
+export * from "./sets";
 // Simulação em grade ortogonal (servidor). Isométrico é só projeção no cliente.
 // MAP_W/MAP_H/SPAWN são os da zona 1; cada zona tem os seus em ZONES (zones.ts).
 export const MAP_W = 40;
