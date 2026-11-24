@@ -27,6 +27,7 @@ const CSS = `
 .ut-btn .ut-dot,.tl-plus .ut-dot{top:-3px;right:-3px}
 .ut-dot[hidden]{display:none}
 .ut-dot.inline{position:static;display:inline-block;flex:none;margin-left:8px;vertical-align:middle}
+.ut-dot.inline[hidden]{display:none}
 @keyframes utPulse{0%{box-shadow:0 0 0 0 rgba(61,255,122,.75)}70%{box-shadow:0 0 0 9px rgba(61,255,122,0)}100%{box-shadow:0 0 0 0 rgba(61,255,122,0)}}
 @media (prefers-reduced-motion:reduce){.ut-dot{animation:none;box-shadow:0 0 6px 2px rgba(61,255,122,.6)}}
 .ut-pop{position:fixed;z-index:22;top:calc(max(14px,env(safe-area-inset-top)) + 52px);right:14px;display:none;flex-direction:column;gap:6px;min-width:190px;padding:10px;border-radius:8px;
