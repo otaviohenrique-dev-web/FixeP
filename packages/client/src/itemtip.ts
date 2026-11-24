@@ -8,7 +8,7 @@ import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, a
  * ▲ é melhor, ▼ é pior e = é igual. Para recarga e custo, valor menor é melhor.
  */
 
-export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string; af?: string[] } // af: afixos do item (cor da raridade)
+export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string; af?: string[]; rf?: number } // rf: nível de refino (+N) // af: afixos do item (cor da raridade)
 export interface ItemTipCtx {
   getClass(): CharClass;
   getLevel(): number;
@@ -104,7 +104,7 @@ function build(data: ItemTipData): void {
   const d = data.def;
   t.replaceChildren();
   t.style.setProperty("--rc", RARITY_COLOR[d.rarity]);
-  const h = document.createElement("h4"); h.textContent = d.name; h.style.color = RARITY_COLOR[d.rarity];
+  const h = document.createElement("h4"); h.textContent = d.name + (data.rf ? " +" + data.rf : ""); h.style.color = RARITY_COLOR[d.rarity];
   const sm = document.createElement("small");
   const tipo = d.kind === "material" ? "Material de craft" : EQUIP_SLOT_NAME[d.kind as EquipSlot];
   sm.textContent = `${RARITY_NAME[d.rarity]}${d.kind !== "potion" ? ` · ${tipo}` : ""}${d.hands ? ` · ${d.hands === 2 ? "duas mãos" : "uma mão"}` : ""}`;

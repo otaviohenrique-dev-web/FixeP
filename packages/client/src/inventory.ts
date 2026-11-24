@@ -425,7 +425,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       b.ondragstart = (e) => startDrag(e, { from: "equip", s });
       b.ondragend = endDrag;
       bindDoubleTap(b, `e${s}`, () => opts.send(Msg.InvUnequip, { slot: s }));
-      attachTip(b, () => ({ def, af: snap.equipAf?.[s], extra: "Duplo clique: desequipar" }));
+      attachTip(b, () => ({ def, af: snap.equipAf?.[s], rf: snap.equipRf?.[s], extra: "Duplo clique: desequipar" }));
     } else b.insertAdjacentHTML("afterbegin", ICONS[s]);
     b.onclick = () => { sel = def ? { kind: "equip", s } : null; confirmDrop = false; render(); };
     b.ondragover = (e) => { if (drag?.from === "slot" && dragDef()?.kind === s) e.preventDefault(); };
@@ -462,7 +462,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   }
 
   /** bônus do equipamento (com afixos), do mesmo jeito que o servidor calcula */
-  const gearOf = (equip: Record<EquipSlot, string | null>, af: Partial<Record<EquipSlot, string[]>>) => gearBonuses(equip, opts.getClass(), af);
+  const gearOf = (equip: Record<EquipSlot, string | null>, af: Partial<Record<EquipSlot, string[]>>, rf: Partial<Record<EquipSlot, number>> = snap.equipRf ?? {}) => gearBonuses(equip, opts.getClass(), af, rf);
   const poderDe = (g: GearBonuses) => poderTotal(statsDoPersonagem(opts.getClass(), opts.getLevel(), g));
 
   /** atributos do personagem; com um item da mochila selecionado, ▲ verde / ▼ vermelho mostram a mudança ao equipá-lo */
@@ -472,7 +472,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       const d = ITEMS[snap.inv[sel.i]!.id];
       const slot = d?.kind as EquipSlot;
       if (d && d.kind !== "potion" && slot in snap.equip) {
-        novo = gearOf({ ...snap.equip, [slot]: d.id }, { ...(snap.equipAf ?? {}), [slot]: snap.inv[sel.i]!.af ?? [] });
+        novo = gearOf({ ...snap.equip, [slot]: d.id }, { ...(snap.equipAf ?? {}), [slot]: snap.inv[sel.i]!.af ?? [] }, { ...(snap.equipRf ?? {}), [slot]: snap.inv[sel.i]!.rf ?? 0 });
       }
     }
     const cls = opts.getClass();
@@ -562,7 +562,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
         b.ondragstart = (e) => startDrag(e, { from: "slot", i });
         b.ondragend = endDrag;
         bindDoubleTap(b, `s${i}`, () => { if (def.kind === "potion") opts.send(Msg.InvUse, { slot: i }); else opts.send(Msg.InvEquip, { slot: i }); });
-        attachTip(b, () => ({ def, af: st.af, cmp: def.kind !== "potion" ? equippedDef(def.kind as EquipSlot) : null }));
+        attachTip(b, () => ({ def, af: st.af, rf: st.rf, cmp: def.kind !== "potion" ? equippedDef(def.kind as EquipSlot) : null }));
       }
       b.onclick = () => { sel = def ? { kind: "slot", i } : null; confirmDrop = false; render(); };
       gridEl.append(b);
