@@ -136,7 +136,9 @@ export function mountQuests(opts: {
     for (const d of liberadas) body.append(questBlock(d));
     if (bloqueada) {
       const falta = bloqueada.preRequisitos.find((p) => !entregue(p)) ?? "";
-      body.append(el("p", "qst-aviso", `Complete a missão «${nomeQuest(falta)}» primeiro.`));
+      const dono = defs.get(falta)?.npc; // diz com quem a missão que falta é pega
+      const quem = dono && dono !== npc.id ? ` (fale com ${nomeNpcPorId(dono, Object.values(ZONE_NPCS).flat())})` : "";
+      body.append(el("p", "qst-aviso", `Complete a missão «${nomeQuest(falta)}» primeiro${quem}.`));
     }
     if (!liberadas.length && !bloqueada) body.append(el("p", "qst-q", todasDoNpc(npc.id).length ? "Você concluiu as missões deste NPC. Veja no Diário, em Entregues." : "Nenhuma missão por aqui."));
     card.append(body);
@@ -144,12 +146,10 @@ export function mountQuests(opts: {
     if (msg.text) card.append(el("p", "qst-msg" + (msg.ok ? " ok" : " bad"), msg.text));
 
     const foot = el("div", "qst-foot");
-    if (npc.kind !== "auctioneer") {
-      const shop = el("button", "qst-btn", npc.kind === "smith" ? "Ferraria" : "Comércio");
-      shop.type = "button";
-      shop.onclick = () => { const n = npc!; close(); opts.onTrade(n); };
-      foot.append(shop);
-    }
+    const shop = el("button", "qst-btn", npc.kind === "smith" ? "Ferraria" : npc.kind === "auctioneer" ? "Leilão" : "Comércio");
+    shop.type = "button";
+    shop.onclick = () => { const n = npc!; close(); opts.onTrade(n); };
+    foot.append(shop);
     const fechar = el("button", "qst-btn", "Fechar");
     fechar.type = "button";
     fechar.onclick = close;
