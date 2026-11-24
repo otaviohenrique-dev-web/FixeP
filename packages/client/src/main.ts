@@ -37,6 +37,8 @@ import { mountVariacoes, type VariacoesUi } from "./variacoes";
 import { mountTalentos, type TalentosUi } from "./talentos";
 import { mountBuilds, type BuildsUi } from "./builds";
 import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
+import { limparTalentos, pontosLivres, podeSubirTalento, talentosDaClasse, VARIACAO_SLOTS, VARIACAO_NIVEL } from "@frixep/shared";
+import { mountUtilidades } from "./utilidades";
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
 import type { DicasVistasEvent, ActiveBuff } from "@frixep/shared";
@@ -344,10 +346,7 @@ class WorldScene extends Phaser.Scene {
       // painéis que saíram da tela principal: abrem pelo menu (as teclas J e V continuam valendo)
       acoes: [
         { label: "Diário", run: () => this.diario.toggle() },
-        { label: "Variações", run: () => this.variacoes.toggle() },
-        { label: "Talentos", run: () => this.talentos.toggle() },
-        { label: "Builds", run: () => this.builds.toggle() },
-      ],
+      ], // Talentos, Variações e Builds ficam no botão "Habilidades" (ao lado do menu), com o ponto verde de pendência
     });
     mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
@@ -374,6 +373,7 @@ class WorldScene extends Phaser.Scene {
       aplicar: (slot) => this.room?.send(Msg.LoadoutAplicar, { slot }),
       renomear: (slot, nome) => this.room?.send(Msg.LoadoutNome, { slot, nome }),
     });
+    this.montarUtilidades();
     this.worldMap = mountWorldMap((to) => { this.room.send(Msg.Travel, { to }); }); // o load só aparece quando o servidor aprova (Evt.Travel)
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
@@ -1542,6 +1542,36 @@ class WorldScene extends Phaser.Scene {
         this.selG.lineStyle(3, col, 0.9 * alpha).strokeEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k).fillStyle(col, 0.12 * alpha).fillEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k);
       }
     }
+  }
+
+  /** botão "Habilidades" (Talentos, Variações, Builds) com o ponto verde pulsante de pendências; "visto" fica salvo neste navegador por personagem */
+  private montarUtilidades() {
+    const chave = (k: string) => `frixep.ut.${k}.${this.me()?.name ?? ""}`;
+    const lido = (k: string): number => { try { return Number(localStorage.getItem(chave(k)) || 0); } catch { return 0; } };
+    const grava = (k: string, v: number) => { try { localStorage.setItem(chave(k), String(v)); } catch { /* sem armazenamento */ } };
+    const nivel = () => Number(this.me()?.level) || 1;
+    const nVariacoes = () => VARIACAO_SLOTS.filter((s) => nivel() >= VARIACAO_NIVEL[s]).length;
+    mountUtilidades([
+      {
+        label: "Talentos", tecla: "T", run: () => this.talentos.toggle(), aberto: () => this.talentos.isOpen(),
+        pendente: () => { // ponto livre E algum talento que dá para subir agora
+          const me = this.me();
+          if (!me) return false;
+          const esc = limparTalentos(String(me.talentos ?? "{}"), this.cls, nivel());
+          return pontosLivres(esc, this.cls, nivel()) > 0 && talentosDaClasse(this.cls).some((t) => podeSubirTalento(esc, this.cls, nivel(), t.id).ok);
+        },
+      },
+      {
+        label: "Variações", tecla: "V", run: () => this.variacoes.toggle(), aberto: () => this.variacoes.isOpen(),
+        pendente: () => nVariacoes() > lido("va"), // variação nova liberada que o jogador ainda não viu
+        visto: () => grava("va", nVariacoes()),
+      },
+      {
+        label: "Builds", tecla: "B", run: () => this.builds.toggle(), aberto: () => this.builds.isOpen(),
+        pendente: () => nivel() >= 6 && lido("bd") === 0, // builds guardam variações e talentos: aparece junto com os talentos, até abrir uma vez
+        visto: () => grava("bd", 1),
+      },
+    ]);
   }
 
   private savedQMode(): 0 | 1 { try { return localStorage.getItem("frixep.qmode") === "1" ? 1 : 0; } catch { return 0; } }
