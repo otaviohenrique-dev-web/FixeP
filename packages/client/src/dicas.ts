@@ -35,7 +35,7 @@ export const TEXTO_DICA: Record<DicaId, { toque: string; teclado: string }> = {
 const TEMPO_S = 8;
 
 const CSS = `
-.dica{position:fixed;z-index:16;top:calc(max(6px,env(safe-area-inset-top)) + 48px);right:10px;max-width:min(260px,calc(100vw - 24px));
+.dica{position:fixed;z-index:16;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);left:50%;transform:translateX(-50%);width:max-content;max-width:min(300px,calc(100vw - 24px));
   padding:7px 34px 7px 11px;border-radius:7px;pointer-events:auto;
   font:600 12px/1.35 "Cinzel",Georgia,serif;color:#f4e6b8;
   background:linear-gradient(180deg,rgba(20,34,52,.93),rgba(6,12,20,.93));border:1px solid rgba(120,200,255,.5);box-shadow:0 6px 18px rgba(0,0,0,.55)}

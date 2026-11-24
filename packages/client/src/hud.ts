@@ -447,7 +447,7 @@ export function mountHud(opts: HudOptions): Hud {
     const cat = skillCategory(def.name);
     b.className = `hd-btn hd-a-${a}` + (a === "attack" ? " big" : "") + (a === "ultimate" ? " ult" : "") + (art ? " hasart" : def.icon ? " hasic" : "") + (cat ? ` cat-${cat}` : "");
     b.setAttribute("aria-label", `${def.name} (${def.key})${cost ? `, custa ${cost} de ${res.name}` : ""}`);
-    b.innerHTML = `<span class="hd-key">${def.key}</span>${art ? `<span class="hd-art"><img src="${art}" alt="" draggable="false"></span>` : def.icon ? `<span class="hd-ic">${ICON[def.icon] ?? ""}</span>` : ""}<span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
+    b.innerHTML = `<span class="hd-key">${def.key}</span>${art ? `<span class="hd-art"><img src="${art}" alt="" draggable="false" onerror="this.style.display='none'"></span>` : def.icon ? `<span class="hd-ic">${ICON[def.icon] ?? ""}</span>` : ""}<span class="hd-sn">${def.name}</span>${cost ? `<span class="hd-cost" style="color:${resColor}">${cost}</span>` : ""}<span class="hd-cd"></span><span class="hd-cdn"></span>`;
     // pointerdown: resposta imediata no toque, sem esperar o "click"
     // toque: dispara ao soltar (um toque longo abre o balão em vez de disparar); mouse: dispara ao apertar
     pressable(b, () => trigger(a), () => tipHtml(skillTooltip(defs[a], res.name)), a);

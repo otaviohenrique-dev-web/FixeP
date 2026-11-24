@@ -209,13 +209,13 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   const market = mountMarket({ send: opts.send, toast: opts.toast, getClass: opts.getClass });
   const closeNpc = () => { back.classList.remove("open"); market.close(); npc = null; picked.clear(); confirmSell.clear(); };
   // caixa de quests do NPC (C1.2): abre antes do comércio quando o NPC dá ou recebe quest; "Comércio" dentro dela abre a loja
-  const quest = mountQuests({ send: opts.send, getLevel: opts.getLevel, onTrade: (n) => openShop(n) });
+  const quest = mountQuests({ send: opts.send, getLevel: opts.getLevel, onTrade: (n) => { if (n.kind === "auctioneer") { closeNpc(); market.open(n); } else openShop(n); } });
   function openNpc(n: NpcDef) {
     if (tradeOpen) return;
     opts.onNpc?.(n);
     opts.send("quest_falar", { npc: n.id }); // objetivos "falar": o servidor confere a distância
+    if (quest.open(n)) return; // quem tem missão a dar/receber (inclusive o leiloeiro) mostra a caixa de missões primeiro
     if (n.kind === "auctioneer") { closeNpc(); market.open(n); return; }
-    if (quest.open(n)) return;
     openShop(n);
   }
   function openShop(n: NpcDef) {

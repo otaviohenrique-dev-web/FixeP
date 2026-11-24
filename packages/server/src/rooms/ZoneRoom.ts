@@ -1233,6 +1233,10 @@ export class ZoneRoom extends Room<ZoneState> {
     void registrarEvento(this.repo.db, "quest_aceita", { contaId: this.userIds.get(sid), personagemId: p.charId, dados: { quest: id } });
     this.sendQuests(sid, p);
     this.notifyOk(sid, `Missão aceita: ${r.def.nome}.`);
+    // "falar com o próprio NPC que deu a missão": o jogador já está conversando com ele, então conta na hora (não precisa fechar e reabrir)
+    if (r.def.npc && r.def.objetivos.some((o) => o.tipo === "falar" && o.npc === r.def.npc)) {
+      this.questsMudaram(sid, p, progredirFala(p.quests, DEFS, r.def.npc).map((rt) => rt.id));
+    }
     void this.save(p); // aceitar grava na hora (não espera o salvamento periódico)
   }
 
