@@ -78,7 +78,7 @@ run_case() {
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
 for file in test/acoes.unit.ts test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
-            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts test/crafting.unit.ts test/talentos.unit.ts; do
+            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts test/crafting.unit.ts test/talentos.unit.ts test/loadouts.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"
   if npx tsx "$file"; then echo "OK  $file"; else echo "FALHA  $file"; FAILS+=("$file"); fi
@@ -128,6 +128,15 @@ run_case 2985 "ECON_TEST=1 CRAFT_TEST=1 VARIACAO_TEST_LEVEL=40 API_RATE_MULT=100
 run_case 2985 "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100" test/talentos.mjs ""
 # Talentos fora da cidade: gastar vale, reset é recusado (zona de combate).
 run_case 2984 "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/talentos.mjs "TALENTO_MODO=zona"
+# Loadouts (C2.4): 3 builds por personagem. Fase 1 (nível 10) monta e salva dois builds, aplica, renomeia e reconecta; a fase 2
+# reabre o MESMO banco em arquivo (.data/, ignorado pelo Git) no nível 6 e recusa o build de 5 pontos e a variação de nível 10;
+# a zona de combate recusa salvar e aplicar (renomear vale).
+LOADOUT_DB="../../.data/loadouts-test-pglite"; LOADOUT_TOKEN="../../.data/loadouts-test-token.txt"; rm -rf "$LOADOUT_DB" "$LOADOUT_TOKEN"; mkdir -p ../../.data
+run_case 2983 "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100 PGLITE_DIR=$LOADOUT_DB" test/loadouts.mjs "LOADOUT_FASE=1 LOADOUT_TOKEN_FILE=$LOADOUT_TOKEN"
+run_case 2983 "VARIACAO_TEST_LEVEL=6 ECON_TEST=1 API_RATE_MULT=100 PGLITE_DIR=$LOADOUT_DB" test/loadouts.mjs "LOADOUT_FASE=2 LOADOUT_TOKEN_FILE=$LOADOUT_TOKEN"
+run_case 2983 "ECON_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/loadouts.mjs "LOADOUT_FASE=zona"
+rm -rf "$LOADOUT_DB" "$LOADOUT_TOKEN"
+
 # PvP só na Arena Sangrenta (zona 5): dano entre jogadores só lá, sem fogo amigo de grupo, morte renasce na arena sem perda.
 run_case 2989 "API_RATE_MULT=100" test/pvp.mjs ""
 

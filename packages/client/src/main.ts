@@ -35,6 +35,7 @@ import { mountEconomy, type EconomyUi } from "./economy";
 import { mountDiario, type DiarioUi } from "./diario";
 import { mountVariacoes, type VariacoesUi } from "./variacoes";
 import { mountTalentos, type TalentosUi } from "./talentos";
+import { mountBuilds, type BuildsUi } from "./builds";
 import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
@@ -150,6 +151,7 @@ class WorldScene extends Phaser.Scene {
   private diario!: DiarioUi;
   private variacoes!: VariacoesUi;
   private talentos!: TalentosUi;
+  private builds!: BuildsUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -353,6 +355,7 @@ class WorldScene extends Phaser.Scene {
         { label: "Diário", run: () => this.diario.toggle() },
         { label: "Variações", run: () => this.variacoes.toggle() },
         { label: "Talentos", run: () => this.talentos.toggle() },
+        { label: "Builds", run: () => this.builds.toggle() },
       ],
     });
     mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
@@ -371,6 +374,14 @@ class WorldScene extends Phaser.Scene {
       cidade: () => !!ZONES[this.zoneId]?.safe,
       subir: (id) => this.room?.send(Msg.Talento, { id }),
       resetar: () => this.room?.send(Msg.TalentoResetar, {}),
+    });
+    this.builds = mountBuilds({ // builds (C2.4): o servidor valida e grava; o painel só mostra e pede
+      cls: this.cls,
+      estado: () => { const me = this.me(); return me ? { loadouts: String(me.loadouts ?? "{}"), level: Number(me.level) || 1 } : null; },
+      cidade: () => !!ZONES[this.zoneId]?.safe,
+      salvar: (slot) => this.room?.send(Msg.LoadoutSalvar, { slot }),
+      aplicar: (slot) => this.room?.send(Msg.LoadoutAplicar, { slot }),
+      renomear: (slot, nome) => this.room?.send(Msg.LoadoutNome, { slot, nome }),
     });
     this.worldMap = mountWorldMap((to) => { this.beginTravel(to); this.armTravelWatch(); this.room.send(Msg.Travel, { to }); });
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });

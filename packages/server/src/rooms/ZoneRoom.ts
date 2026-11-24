@@ -11,6 +11,7 @@ import {
   START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
   VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
   limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId,
+  limparLoadouts, validarLoadout, sanitizarNomeLoadout, loadoutNomePadrao, LOADOUT_SLOTS, LOADOUT_COMBAT_LOCK_S, type Loadouts,
 } from "@frixep/shared";
 import { verifySession, type AuthUser } from "../auth.js";
 
@@ -302,6 +303,22 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.TalentoResetar, (client) => {
       if (!this.allow(client)) return;
       this.resetarTalentos(client);
+    });
+    // builds (C2.4): salvar e aplicar só na cidade e fora de combate (o servidor recusa com o motivo); renomear vale em qualquer lugar
+    this.onMessage(Msg.LoadoutSalvar, (client, p: { slot?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) this.salvarLoadout(client.sessionId, pl, p);
+    });
+    this.onMessage(Msg.LoadoutAplicar, (client, p: { slot?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) this.aplicarLoadout(client.sessionId, pl, p);
+    });
+    this.onMessage(Msg.LoadoutNome, (client, p: { slot?: unknown; nome?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) this.renomearLoadout(pl, p);
     });
     this.onMessage(Msg.QMode, (client, p: { mode?: unknown }) => {
       if (!this.allow(client)) return;
@@ -1016,6 +1033,7 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.variacoes = JSON.stringify(limparEscolhas(auth.character.variacoes, pl.cls as CharClass, pl.level)); // as variações voltam com o personagem (C2.2)
     pl.talentos = JSON.stringify(limparTalentos(auth.character.talentos, pl.cls as CharClass, pl.level)); // os talentos também (C2.3)
     pl.talentosResets = Math.max(0, Math.floor(Number(auth.character.talentos_resets) || 0));
+    pl.loadouts = JSON.stringify(limparLoadouts(auth.character.loadouts, pl.cls as CharClass)); // os 3 builds voltam com o personagem (C2.4)
     if (econTest() && !auth.inventory.slots.some(Boolean) && auth.inventory.iron === 0) { // só nos testes (ECON_TEST=1): kit inicial para exercitar loja, fusão e troca sem jogar horas
       const i = auth.inventory;
       i.iron = 50000; i.obols = 2;
@@ -1480,6 +1498,74 @@ export class ZoneRoom extends Room<ZoneState> {
     if (!p.charId) return;
     const charId = p.charId, json = p.talentos, resets = p.talentosResets;
     p.saveChain = p.saveChain.then(() => this.repo.setTalentos(charId, json, resets)).catch((err) => console.error("[db] falha ao gravar os talentos:", (err as Error).message));
+  }
+
+  /** Motivo para não trocar de build agora (builds, C2.4), ou null. Trocar exige cidade segura, personagem vivo e sem combate recente. */
+  private loadoutBloqueio(pl: Player): string | null {
+    if (pl.dead) return "Você está morto.";
+    if (!this.zone.safe) return "Troque de build na cidade (Brasalume).";
+    const falta = LOADOUT_COMBAT_LOCK_S - (this.t - pl.combatAt);
+    if (falta > 0) return `Espere ${Math.ceil(falta)}s sem combate para trocar de build.`;
+    return null;
+  }
+
+  /** Índice de slot vindo do cliente (0 a 2), ou null se for inválido. */
+  private slotBuild(p: { slot?: unknown }): number | null {
+    const i = typeof p?.slot === "number" ? p.slot : NaN;
+    return Number.isInteger(i) && i >= 0 && i < LOADOUT_SLOTS ? i : null;
+  }
+
+  /** Salva as variações e os talentos atuais no slot (o nome fica). O slot salvo vira o build ativo. */
+  private salvarLoadout(sid: string, pl: Player, p: { slot?: unknown }) {
+    const i = this.slotBuild(p);
+    if (i === null) return;
+    const bloqueio = this.loadoutBloqueio(pl);
+    if (bloqueio) return this.notify(sid, bloqueio);
+    const cls = pl.cls as CharClass;
+    const lo: Loadouts = limparLoadouts(pl.loadouts, cls);
+    lo.slots[i] = { nome: lo.slots[i].nome, salvo: true, variacoes: limparEscolhas(pl.variacoes, cls, pl.level), talentos: limparTalentos(pl.talentos, cls, pl.level) };
+    lo.ativo = i;
+    this.gravarLoadouts(pl, lo);
+    this.notifyOk(sid, `${lo.slots[i].nome} salvo.`);
+  }
+
+  /** Aplica o build do slot de uma vez (variações e talentos), sem custo. O nível atual decide: um build que não cabe é recusado com o motivo. */
+  private aplicarLoadout(sid: string, pl: Player, p: { slot?: unknown }) {
+    const i = this.slotBuild(p);
+    if (i === null) return;
+    const bloqueio = this.loadoutBloqueio(pl);
+    if (bloqueio) return this.notify(sid, bloqueio);
+    const cls = pl.cls as CharClass;
+    const lo: Loadouts = limparLoadouts(pl.loadouts, cls);
+    const slot = lo.slots[i];
+    const r = validarLoadout(slot, cls, pl.level);
+    if (!r.ok) return this.notify(sid, r.error);
+    pl.variacoes = JSON.stringify(slot.variacoes);
+    if (pl.charId) this.repo.setVariacoes(pl.charId, pl.variacoes).catch((err) => console.error("[db] falha ao gravar as variações:", (err as Error).message));
+    pl.talentos = JSON.stringify(slot.talentos);
+    this.gravarTalentos(pl);
+    this.refreshStats(pl);
+    lo.ativo = i;
+    this.gravarLoadouts(pl, lo);
+    this.notifyOk(sid, `${slot.nome} aplicado.`);
+  }
+
+  /** Renomeia o slot (até 16 caracteres, sanitizado; vazio volta ao padrão). */
+  private renomearLoadout(pl: Player, p: { slot?: unknown; nome?: unknown }) {
+    const i = this.slotBuild(p);
+    if (i === null) return;
+    const cls = pl.cls as CharClass;
+    const lo: Loadouts = limparLoadouts(pl.loadouts, cls);
+    lo.slots[i].nome = sanitizarNomeLoadout(p.nome, loadoutNomePadrao(i));
+    this.gravarLoadouts(pl, lo);
+  }
+
+  /** Grava os builds em fila (a última gravação é sempre a mais nova) e manda o estado ao cliente. */
+  private gravarLoadouts(pl: Player, lo: Loadouts) {
+    pl.loadouts = JSON.stringify(lo);
+    if (!pl.charId) return;
+    const charId = pl.charId, json = pl.loadouts;
+    pl.saveChain = pl.saveChain.then(() => this.repo.setLoadouts(charId, json)).catch((err) => console.error("[db] falha ao gravar os builds:", (err as Error).message));
   }
 
   private queueAct(p: Player, a: ActionId, ax: number, ay: number) { p.queued = { a, ax, ay, until: this.t + 0.5 }; }
