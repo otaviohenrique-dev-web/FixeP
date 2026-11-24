@@ -1,6 +1,7 @@
 import type { ActionDef, ActionId, CharClass } from "./index";
 import { afixoStats, afixosValidos, emptyAfixoStats, type AfixoStats } from "./afixos";
 import { bonusRefino } from "./refino_stats"; // módulo folha (sem ciclo com items.ts)
+import { bonusGemas } from "./engaste"; // só funções puras; engaste.ts usa apenas tipos de items.ts
 
 /**
  * Itens do jogo. Definições compartilhadas: o servidor decide tudo; o cliente só exibe.
@@ -183,12 +184,13 @@ export function clampAutoPot(v: unknown): number {
 export const autoPotDispara = (hp: number, maxHp: number, at: number): boolean => at > 0 && maxHp > 0 && hp * 100 <= maxHp * at;
 
 /** Uma pilha da mochila. `af` = afixos do item (só equipamento de drop; itens antigos não têm). */
-export interface InvStack { id: string; qty: number; af?: string[]; rf?: number } // rf: nível de refino (+N, ver refino.ts; ausente = +0)
+export interface InvStack { id: string; qty: number; af?: string[]; rf?: number; gm?: string[] } // gm: gemas engastadas (ver engaste.ts; ausente = sem gema) // rf: nível de refino (+N, ver refino.ts; ausente = +0)
 export interface InventorySnapshot {
   inv: (InvStack | null)[];
   equip: Record<EquipSlot, string | null>;
   equipAf?: Partial<Record<EquipSlot, string[]>>; // afixos do que está equipado (ver afixos.ts)
   equipRf?: Partial<Record<EquipSlot, number>>; // nível de refino do que está equipado (ausente = +0)
+  equipGm?: Partial<Record<EquipSlot, string[]>>; // gemas engastadas no que está equipado (ver engaste.ts)
   iron: number; // saldo de Tostões de Ferro
   obols: number; // saldo de Óbolos de Sangue
 }
@@ -207,7 +209,7 @@ export const MAX_DR = 60; // redução de dano de equipamento: teto (%)
  * Soma os bônus do que está equipado e escolhe o kit da arma. Item de outra classe NÃO conta (equipar já recusa; isto protege dados antigos).
  * `equipAf` (opcional): afixos de cada slot. Itens sem afixo (dados antigos) funcionam como antes.
  */
-export function gearBonuses(equip: Record<EquipSlot, string | null>, cls: CharClass, equipAf: Partial<Record<EquipSlot, string[]>> = {}, equipRf: Partial<Record<EquipSlot, number>> = {}): GearBonuses {
+export function gearBonuses(equip: Record<EquipSlot, string | null>, cls: CharClass, equipAf: Partial<Record<EquipSlot, string[]>> = {}, equipRf: Partial<Record<EquipSlot, number>> = {}, equipGm: Partial<Record<EquipSlot, string[]>> = {}): GearBonuses {
   const b = emptyBonuses();
   for (const s of EQUIP_SLOTS) {
     const d = equip[s] ? ITEMS[equip[s]!] : undefined;
@@ -215,6 +217,8 @@ export function gearBonuses(equip: Record<EquipSlot, string | null>, cls: CharCl
     b.dmgPct += d.dmgPct ?? 0; b.hp += d.hp ?? 0; b.crit += d.crit ?? 0; b.dr += d.dr ?? 0; b.cdr += d.cdr ?? 0; b.mana += d.mana ?? 0; b.regen += d.regen ?? 0;
     const rf = bonusRefino(equipRf[s] ?? 0, d.kind, d.rarity); // refino (+N): soma no ataque (arma) ou na vida (defesa)
     b.dmgPct += rf.dmgPct; b.hp += rf.hp;
+    const gm = bonusGemas(equipGm[s], d.kind); // gemas engastadas (C3.3): somam no mesmo stat
+    b.dmgPct += gm.dmgPct; b.hp += gm.hp;
     if (s === "weapon" && d.wtype) b.kit = WEAPON_TYPES[d.wtype]?.kit ?? NO_KIT;
     const af = afixoStats(afixosValidos(equipAf[s] ?? [], d.kind, d.rarity), d.rarity);
     for (const k of Object.keys(af) as (keyof AfixoStats)[]) b.af[k] += af[k];
