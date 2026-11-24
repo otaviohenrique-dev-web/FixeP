@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, KINDS_EQUIPAVEIS, MAX_CHARACTERS_PER_ACCOUNT, migrateItemId, afixosValidos, afixosDaSemente, refinoValido, type CharClass, type EquipSlot } from "@frixep/shared";
+import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, KINDS_EQUIPAVEIS, MAX_CHARACTERS_PER_ACCOUNT, migrateItemId, afixosValidos, afixosDaSemente, refinoValido, gemasValidas, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
 import { emptyVault, type Vault } from "../game/vault.js";
 import type { QuestMap, QuestRt } from "../game/quests.js";
@@ -10,7 +10,7 @@ import type { Db, Tx } from "./index.js";
 export const startZone = () => { const z = Number(process.env.TEST_START_ZONE); return process.env.NODE_ENV !== "production" && Number.isInteger(z) && z > 0 ? z : START_ZONE; };
 export interface VaultRows { items: { slot: number; id: string; qty: number }[]; iron: number; obols: number }
 
-export interface InvRows { items: { slot: number; id: string; qty: number; af: string | null; rf: number | null }[]; eq: { slot: string; id: string; af: string | null; rf: number | null }[]; iron: number; obols: number }
+export interface InvRows { items: { slot: number; id: string; qty: number; af: string | null; rf: number | null; gm: string | null }[]; eq: { slot: string; id: string; af: string | null; rf: number | null; gm: string | null }[]; iron: number; obols: number }
 
 export type { CharClass };
 export interface CharacterRow {
@@ -34,6 +34,8 @@ const afixosGravados = (id: string, af: string[] | undefined): string | null => 
   if (!KINDS_EQUIPAVEIS.includes(ITEMS[id]?.kind)) return af?.length ? JSON.stringify(af) : null;
   return JSON.stringify(af ?? []);
 };
+/** Gemas engastadas como texto ("forca,vida"); sem gema = null (C3.3, migração 020). */
+const gemasGravadas = (gm: string[] | undefined): string | null => (gm?.length ? gm.join(",") : null);
 
 export const nameKey = (name: string) =>
   name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -183,8 +185,8 @@ export class Repo {
 
   async loadInventory(charId: string, cls: CharClass = "warrior"): Promise<Inventory> {
     const inv = emptyInventory();
-    const items = await this.db.query<{ slot: number; item_id: string; qty: number; af: string | null; rf: number | null }>(
-      "select slot, item_id, qty, af, rf from inventory_items where character_id = $1",
+    const items = await this.db.query<{ slot: number; item_id: string; qty: number; af: string | null; rf: number | null; gm: string | null }>(
+      "select slot, item_id, qty, af, rf, gm from inventory_items where character_id = $1",
       [charId],
     );
     for (const r of items.rows) {
@@ -198,12 +200,13 @@ export class Repo {
         if (af.length) inv.migrated = true; // grava no próximo salvamento
       }
       const rf = KINDS_EQUIPAVEIS.includes(def.kind) ? refinoValido(r.rf) : 0; // refino só existe em equipamento
-      inv.slots[r.slot] = { id, qty: Math.max(1, Math.min(def.stack, r.qty)), ...(af.length ? { af } : {}), ...(rf ? { rf } : {}) };
+      const gm = gemasValidas(r.gm ? r.gm.split(",") : [], def.kind, def.rarity); // gemas engastadas (C3.3), gravadas como "forca,vida"
+      inv.slots[r.slot] = { id, qty: Math.max(1, Math.min(def.stack, r.qty)), ...(af.length ? { af } : {}), ...(rf ? { rf } : {}), ...(gm.length ? { gm } : {}) };
     }
     const w = await this.db.query<{ iron: number; obols: number }>("select iron, obols from characters where id = $1", [charId]);
     inv.iron = Math.max(0, Number(w.rows[0]?.iron) || 0);
     inv.obols = Math.max(0, Number(w.rows[0]?.obols) || 0);
-    const eq = await this.db.query<{ slot: string; item_id: string; af: string | null; rf: number | null }>("select slot, item_id, af, rf from equipment where character_id = $1", [charId]);
+    const eq = await this.db.query<{ slot: string; item_id: string; af: string | null; rf: number | null; gm: string | null }>("select slot, item_id, af, rf, gm from equipment where character_id = $1", [charId]);
     for (const r of eq.rows) {
       const id = migrateItemId(r.item_id, cls);
       const def = ITEMS[id];
@@ -217,6 +220,8 @@ export class Repo {
         if (af.length) inv.equipAf = { ...(inv.equipAf ?? {}), [r.slot]: af };
         const rf = refinoValido(r.rf);
         if (rf) inv.equipRf = { ...(inv.equipRf ?? {}), [r.slot]: rf };
+        const gm = gemasValidas(r.gm ? r.gm.split(",") : [], def.kind, def.rarity);
+        if (gm.length) inv.equipGm = { ...(inv.equipGm ?? {}), [r.slot]: gm };
         if (id !== r.item_id) inv.migrated = true;
       }
     }
@@ -228,8 +233,8 @@ export class Repo {
     return {
       // equipamento grava SEMPRE a lista (vazia = "sem afixos", já passou pelo sistema); null fica só para itens antigos,
       // que o carregamento completa com o backfill. Assim um item sem afixo não ganha afixos a cada carregamento.
-      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, af: afixosGravados(s.id, s.af), rf: refinoValido(s.rf) || null }] : [])),
-      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]!, af: afixosGravados(inv.equip[sl]!, inv.equipAf?.[sl]), rf: refinoValido(inv.equipRf?.[sl]) || null }] : [])),
+      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, af: afixosGravados(s.id, s.af), rf: refinoValido(s.rf) || null, gm: gemasGravadas(s.gm) }] : [])),
+      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]!, af: afixosGravados(inv.equip[sl]!, inv.equipAf?.[sl]), rf: refinoValido(inv.equipRf?.[sl]) || null, gm: gemasGravadas(inv.equipGm?.[sl]) }] : [])),
       iron: inv.iron, obols: inv.obols,
     };
   }
@@ -240,12 +245,12 @@ export class Repo {
     await q("delete from equipment where character_id = $1", [charId]);
     await q("update characters set iron = $2, obols = $3 where id = $1", [charId, r.iron, r.obols]);
     if (r.items.length) {
-      const ph = r.items.map((_, i) => `($1, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5}, $${i * 5 + 6})`).join(",");
-      await q(`insert into inventory_items (character_id, slot, item_id, qty, af, rf) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty, x.af, x.rf])]);
+      const ph = r.items.map((_, i) => `($1, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6}, $${i * 6 + 7})`).join(",");
+      await q(`insert into inventory_items (character_id, slot, item_id, qty, af, rf, gm) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty, x.af, x.rf, x.gm])]);
     }
     if (r.eq.length) {
-      const ph = r.eq.map((_, i) => `($1, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4}, $${i * 4 + 5})`).join(",");
-      await q(`insert into equipment (character_id, slot, item_id, af, rf) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id, x.af, x.rf])]);
+      const ph = r.eq.map((_, i) => `($1, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5}, $${i * 5 + 6})`).join(",");
+      await q(`insert into equipment (character_id, slot, item_id, af, rf, gm) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id, x.af, x.rf, x.gm])]);
     }
   }
 
