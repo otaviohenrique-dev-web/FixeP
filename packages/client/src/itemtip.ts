@@ -1,5 +1,5 @@
 import { fmtDelta } from "./poder";
-import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, afixoLinha, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
+import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, afixoLinha, setDaPeca, setAtivo, setBonusLinhas, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
 /**
  * Dica de item: a MESMA ficha em todo lugar (mochila, trocas, mercado, baú).
  * - PC: aparece ao passar o mouse e segue o ponteiro.
@@ -12,6 +12,8 @@ export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: strin
 export interface ItemTipCtx {
   getClass(): CharClass;
   getLevel(): number;
+  /** peças equipadas agora (para contar o conjunto na dica); ausente = sem contagem */
+  getEquip?(): Partial<Record<EquipSlot, string | null>>;
   /** prévia do poder total ao equipar este item (no slot dele): poder atual e a mudança (0 = igual) */
   previewPoder?(d: ItemDef): { now: number; delta: number } | null;
 }
@@ -126,6 +128,15 @@ function build(data: ItemTipData): void {
   });
   // afixos (atributos de drop): uma linha por afixo, na cor da raridade do item
   for (const id of data.af ?? []) { const r = document.createElement("div"); r.className = "afixo"; r.style.color = RARITY_COLOR[d.rarity]; r.textContent = afixoLinha(id, d.rarity); t.append(r); }
+  // conjunto (C3.4): "Conjunto X (n/4)" com os bônus de 2 e de 4 peças; o bônus ativo agora aparece em destaque
+  const st = setDaPeca(d.id) ? setAtivo(ctx.getEquip?.() ?? {}, setDaPeca(d.id)!.classe) : null;
+  if (st && st.set.id === setDaPeca(d.id)!.id) {
+    const cab = document.createElement("div"); cab.className = "conjunto"; cab.textContent = `${st.set.nome} (${st.n}/4)`; t.append(cab);
+    for (const [n, b] of [[2, st.set.b2], [4, st.set.b4]] as const) {
+      const ativo = st.bonus !== null && st.bonus === b;
+      const l = document.createElement("div"); l.className = ativo ? "conjunto-b ativo" : "conjunto-b"; l.textContent = `${n} peças: ${setBonusLinhas(b).join(", ")}`; t.append(l);
+    }
+  }
   const pv = ctx.previewPoder?.(d);
   if (pv) {
     const r = document.createElement("div"); r.className = "row";
