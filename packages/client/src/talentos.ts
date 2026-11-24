@@ -3,6 +3,7 @@ import {
   resetCusto, type CharClass, type EscolhasTalentos, type RamoIdx,
 } from "@frixep/shared";
 import { isTypingTarget } from "./keys";
+import { criarPonto } from "./utilidades";
 
 /**
  * Talentos (C2.3). Painel em LISTA (sem árvore gráfica): 3 abas, uma por ramo da classe; em cada aba, os 4 talentos
@@ -120,6 +121,7 @@ export function mountTalentos(opts: TalentosOpts): TalentosUi {
     ramos.forEach((r, i) => {
       const b = el("button", "tl-tab" + (i === ramo ? " on" : ""), r.nome);
       b.type = "button";
+      if (livres > 0 && talentosDaClasse(opts.cls).some((t) => t.ramo === i && podeSubirTalento(esc, opts.cls, level, t.id).ok)) b.append(criarPonto()); // ramo com talento que dá para subir
       b.setAttribute("role", "tab");
       b.setAttribute("aria-selected", String(i === ramo));
       b.addEventListener("click", () => { ramo = i as RamoIdx; render(); });
@@ -146,6 +148,7 @@ export function mountTalentos(opts: TalentosOpts): TalentosUi {
       mais.disabled = !pode.ok;
       mais.title = pode.ok ? `Gastar 1 ponto em ${t.nome}` : pode.error;
       mais.setAttribute("aria-label", `Subir ${t.nome}`);
+      if (pode.ok) { mais.style.position = "relative"; mais.append(criarPonto(false)); } // ponto verde pulsante no + que dá para usar
       mais.addEventListener("click", () => { opts.subir(t.id); setTimeout(render, 250); });
       pe.append(mais);
       row.append(pe);

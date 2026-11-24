@@ -5,7 +5,7 @@ import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, materiaisDesmonte, precisaConfirmarDesmonte, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
+  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, materiaisDesmonte, precisaConfirmarDesmonte, GEMAS, GEMA_BY_ID, espacosDe, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
 } from "@frixep/shared";
 
 /**
@@ -37,7 +37,7 @@ export interface EconomyUi {
 }
 
 const CSS = `
-.ec-wallet{position:fixed;top:max(14px,env(safe-area-inset-top));right:118px;z-index:20;display:flex;gap:10px;align-items:center;height:44px;padding:0 12px;border-radius:22px;
+.ec-wallet{position:fixed;top:max(14px,env(safe-area-inset-top));right:170px;z-index:20;display:flex;gap:10px;align-items:center;height:44px;padding:0 12px;border-radius:22px;
   background:rgba(8,16,28,.7);border:1px solid rgba(160,200,240,.3);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font:700 13px/1 "Cinzel",Georgia,serif;color:#e6eef9;pointer-events:none}
 .ec-wallet span{display:flex;align-items:center;gap:4px}
 .ec-wallet img,.ec-coin{width:20px;height:20px;image-rendering:pixelated;flex:none}
@@ -202,7 +202,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   let tab: "buy" | "sell" = "buy";
   const picked = new Set<number>(); // ferreira: espaços escolhidos
   const confirmSell = new Set<number>(); // venda de item raro: pede um segundo clique
-  let smithTab: "merge" | "craft" | "refine" | "dismantle" = "merge"; // ferreira: fundir, craftar, refinar ou desmontar
+  let smithTab: "merge" | "craft" | "refine" | "socket" | "dismantle" = "merge"; // ferreira: fundir, craftar, refinar, engastar ou desmontar
   // craft (aba Craftar): escolha atual; as famílias guardam a última escolha de cada tipo
   const craftSel: { tipo: "arma" | "peca"; peca: PecaCraft; raridade: Rarity; arma: string; sec: string } = { tipo: "arma", peca: "armor", raridade: "common", arma: "", sec: "" };
 
@@ -331,11 +331,11 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
 
   function renderSmith(n: NpcDef) {
     const craft = smithTab === "craft";
-    const textoAba = smithTab === "dismantle" ? "Desmonta um equipamento da mochila em materiais de craft. Raro para cima pede confirmação." : smithTab === "refine" ? "Sobe o refino (+1 por vez) de um equipamento com Tostões e material. Nunca quebra o item." : craft ? "Cria arma ou peça de set com ingredientes e moedas. Épico para cima pede Óbolos de Sangue." : `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`;
+    const textoAba = smithTab === "dismantle" ? "Desmonta um equipamento da mochila em materiais de craft. Raro para cima pede confirmação." : smithTab === "socket" ? "Engasta uma gema num espaço livre do equipamento, pagando Óbolos de Sangue. Remover libera o espaço (a gema se perde)." : smithTab === "refine" ? "Sobe o refino (+1 por vez) de um equipamento com Tostões e material. Nunca quebra o item." : craft ? "Cria arma ou peça de set com ingredientes e moedas. Épico para cima pede Óbolos de Sangue." : `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`;
     card.append(head(`${n.name} · ${n.title}`, textoAba, closeNpc), balance());
     const tabs = el("div", "ec-tabs");
     tabs.setAttribute("role", "tablist");
-    for (const [k, label] of [["merge", "Fundir"], ["craft", "Craftar"], ["refine", "Refinar"], ["dismantle", "Desmontar"]] as const) {
+    for (const [k, label] of [["merge", "Fundir"], ["craft", "Craftar"], ["refine", "Refinar"], ["socket", "Engastar"], ["dismantle", "Desmontar"]] as const) {
       const b = el("button", "ec-tab", label);
       b.type = "button";
       b.setAttribute("role", "tab");
@@ -347,6 +347,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     if (craft) { renderCraft(n); return; }
     if (smithTab === "refine") { renderRefine(n); return; }
     if (smithTab === "dismantle") { renderDismantle(n); return; }
+    if (smithTab === "socket") { renderSocket(n); return; }
     const cap = zoneRarityCap(opts.getZone());
     // só equipamentos da mochila; depois da primeira escolha, só os compatíveis
     const first = [...picked][0];
@@ -604,6 +605,57 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
       };
     }
     foot.append(note, go);
+    card.append(list, foot);
+  }
+
+  /** aba Engastar da ferreira (C3.3): escolhe um equipamento (mochila ou vestido); mostra os espaços e as gemas.
+   *  Põe gema num espaço livre (paga em Óbolos) ou tira uma (o espaço volta; a gema se perde). O servidor confere tudo. */
+  let socketSel: { origem: "mochila" | "equip"; slot: number | EquipSlot } | null = null;
+  function renderSocket(n: NpcDef) {
+    const list = el("div", "ec-list");
+    list.style.paddingTop = "6px";
+    type Alvo = { origem: "mochila" | "equip"; slot: number | EquipSlot; id: string; gm: string[] };
+    const alvos: Alvo[] = [];
+    snap.inv.forEach((st, i) => { if (st && espacosDe(ITEMS[st.id].kind, ITEMS[st.id].rarity) > 0) alvos.push({ origem: "mochila", slot: i, id: st.id, gm: st.gm ?? [] }); });
+    for (const s of EQUIP_SLOTS) {
+      const id = snap.equip[s];
+      if (id && espacosDe(ITEMS[id].kind, ITEMS[id].rarity) > 0) alvos.push({ origem: "equip", slot: s, id, gm: snap.equipGm?.[s] ?? [] });
+    }
+    const foot = el("div", "ec-foot");
+    const note = el("p", "ec-note");
+    const go = (label: string, onclick: () => void, ok: boolean) => { const b = el("button", "ec-btn go", label); b.type = "button"; b.disabled = !ok; b.onclick = onclick; return b; };
+    if (!alvos.length) {
+      list.append(el("div", "ec-empty", "Nenhum equipamento com espaço para gema. Engasta a partir do incomum (armas ganham um espaço a mais)."));
+      note.textContent = "Engaste só equipamento de raridade incomum para cima.";
+    } else {
+      const atual = alvos.find((a) => socketSel && a.origem === socketSel.origem && a.slot === socketSel.slot) ?? alvos[0];
+      const def = ITEMS[atual.id];
+      const espacos = espacosDe(def.kind, def.rarity);
+      const seg = el("div", "ec-seg");
+      alvos.forEach((a) => {
+        const d = ITEMS[a.id];
+        const b = el("button", "ec-tab", d.name + " (" + a.gm.length + "/" + espacosDe(d.kind, d.rarity) + ")");
+        b.type = "button";
+        b.onclick = () => { socketSel = { origem: a.origem, slot: a.slot }; renderNpc(); };
+        if (a === atual) b.setAttribute("aria-selected", "true");
+        seg.append(b);
+      });
+      list.append(seg);
+      const origem = atual.origem, slot = atual.slot;
+      for (let k = 0; k < espacos; k++) {
+        const gid = atual.gm[k];
+        const linha = el("div", "ec-craft-lbl", gid ? "Espaço " + (k + 1) + ": " + GEMA_BY_ID[gid].nome : "Espaço " + (k + 1) + ": livre");
+        if (gid) list.append(linha, go("Remover", () => opts.send(Msg.Unsocket, { npc: n.id, origem, slot, idx: k }), true));
+        else list.append(linha);
+      }
+      const livre = atual.gm.length < espacos;
+      for (const g of GEMAS.filter((x) => x.kinds.includes(def.kind))) {
+        const ok = livre && snap.obols >= g.obolos;
+        list.append(go("Engastar " + g.nome + " (" + g.obolos + " Óbolo" + (g.obolos > 1 ? "s" : "") + ")", () => opts.send(Msg.Socket, { npc: n.id, origem, slot, gema: g.id }), ok));
+      }
+      note.textContent = !livre ? def.name + " não tem espaço livre." : snap.obols < Math.min(...GEMAS.filter((x) => x.kinds.includes(def.kind)).map((x) => x.obolos)) ? "Faltam Óbolos de Sangue para qualquer gema." : "Escolha uma gema para o espaço livre.";
+    }
+    foot.append(note);
     card.append(list, foot);
   }
 

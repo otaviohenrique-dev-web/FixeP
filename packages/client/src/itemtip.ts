@@ -1,5 +1,5 @@
 import { fmtDelta } from "./poder";
-import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, afixoLinha, setDaPeca, setAtivo, setBonusLinhas, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
+import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, afixoLinha, setDaPeca, setAtivo, setBonusLinhas, GEMA_BY_ID, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
 /**
  * Dica de item: a MESMA ficha em todo lugar (mochila, trocas, mercado, baú).
  * - PC: aparece ao passar o mouse e segue o ponteiro.
@@ -8,7 +8,7 @@ import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, a
  * ▲ é melhor, ▼ é pior e = é igual. Para recarga e custo, valor menor é melhor.
  */
 
-export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string; af?: string[]; rf?: number } // rf: nível de refino (+N) // af: afixos do item (cor da raridade)
+export interface ItemTipData { def: ItemDef; cmp?: ItemDef | null; extra?: string; af?: string[]; rf?: number; gm?: string[] } // rf: nível de refino (+N) // af: afixos do item (cor da raridade)
 export interface ItemTipCtx {
   getClass(): CharClass;
   getLevel(): number;
@@ -128,6 +128,8 @@ function build(data: ItemTipData): void {
   });
   // afixos (atributos de drop): uma linha por afixo, na cor da raridade do item
   for (const id of data.af ?? []) { const r = document.createElement("div"); r.className = "afixo"; r.style.color = RARITY_COLOR[d.rarity]; r.textContent = afixoLinha(id, d.rarity); t.append(r); }
+  // gemas engastadas (C3.3): uma linha por gema, com o que ela soma
+  for (const id of data.gm ?? []) { const g = GEMA_BY_ID[id]; if (!g) continue; const r = document.createElement("div"); r.className = "afixo"; r.textContent = `${g.nome} (+${g.valor}${g.stat === "dmgPct" ? "% de dano" : " de vida"})`; t.append(r); }
   // conjunto (C3.4): "Conjunto X (n/4)" com os bônus de 2 e de 4 peças; o bônus ativo agora aparece em destaque
   const st = setDaPeca(d.id) ? setAtivo(ctx.getEquip?.() ?? {}, setDaPeca(d.id)!.classe) : null;
   if (st && st.set.id === setDaPeca(d.id)!.id) {

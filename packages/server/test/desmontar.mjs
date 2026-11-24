@@ -68,7 +68,8 @@ check("longe do NPC: recusa e a arma continua", /perto/i.test(lastNotice(A)) && 
 console.log("\n== 3. Perto da ferreira desmonta: a arma sai e entra 1 Ferro Bruto");
 await goto(A, SMITH.x, SMITH.y);
 await after(A, () => A.room.send("dismantle", { npc: SMITH.npc, slot, confirm: true }));
-check("a arma sai da mochila", slotOf(A.st.snap, "espada_1m_common") < 0, lastNotice(A));
+// confere o slot desmontado (não o id): a mochila pode ter outra cópia da mesma espada
+check("a arma sai do slot desmontado", A.st.snap.inv[slot]?.id !== "espada_1m_common", `slot ${slot}: ${A.st.snap.inv[slot]?.id ?? "vazio"} | ${lastNotice(A)}`);
 check("entra 1 Ferro Bruto (regra de comum)", count(A.st.snap, "mat_ferro_bruto") === ferro0 + 1, `ferro ${ferro0} -> ${count(A.st.snap, "mat_ferro_bruto")}`);
 
 A.room.leave();

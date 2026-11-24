@@ -78,7 +78,7 @@ run_case() {
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
 for file in test/acoes.unit.ts test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
-            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts test/crafting.unit.ts test/talentos.unit.ts test/loadouts.unit.ts test/simulacao.unit.ts test/sets.unit.ts test/refino.unit.ts test/desmontar.unit.ts; do
+            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts test/crafting.unit.ts test/talentos.unit.ts test/loadouts.unit.ts test/simulacao.unit.ts test/sets.unit.ts test/refino.unit.ts test/engaste.unit.ts test/desmontar.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"
   if npx tsx "$file"; then echo "OK  $file"; else echo "FALHA  $file"; FAILS+=("$file"); fi
@@ -130,6 +130,8 @@ run_case 2993 "LOOT_TEST=1 AFIXO_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" tes
 run_case 2985 "ECON_TEST=1 CRAFT_TEST=1 VARIACAO_TEST_LEVEL=40 API_RATE_MULT=100" test/craft.mjs ""
 run_case 2960 "ECON_TEST=1 CRAFT_TEST=1 API_RATE_MULT=100" test/refino.mjs ""
 run_case 2961 "ECON_TEST=1 CRAFT_TEST=1 API_RATE_MULT=100" test/desmontar.mjs ""
+# Engaste (C3.3) na Ferreira: longe recusa, perto engasta vida (1 Óbolo), sem espaço recusa, remover devolve o espaço, persiste ao reconectar.
+run_case 2956 "ECON_TEST=1 API_RATE_MULT=100" test/engaste.mjs ""
 # Talentos (C2.3): 5 pontos (nível 10 de teste); gasta, limita por máximo e porta do ramo, bônus nos status, reset na cidade (tostões) e persistência.
 run_case 2985 "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100" test/talentos.mjs ""
 # Talentos fora da cidade: gastar vale, reset é recusado (zona de combate).

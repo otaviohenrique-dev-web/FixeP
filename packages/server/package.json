@@ -48,6 +48,8 @@
     "test:refino": "node test/refino.mjs",
     "test:desmontar:unit": "tsx test/desmontar.unit.ts",
     "test:desmontar": "node test/desmontar.mjs",
+    "test:engaste:unit": "tsx test/engaste.unit.ts",
+    "test:engaste": "node test/engaste.mjs",
     "test:sets:unit": "tsx test/sets.unit.ts",
     "test:variacoes": "node test/variacoes.mjs",
     "test:dicas": "node test/dicas.mjs",
