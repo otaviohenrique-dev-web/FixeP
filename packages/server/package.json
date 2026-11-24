@@ -30,6 +30,8 @@
     "test:econ:unit": "tsx test/economy.unit.ts",
     "test:econ": "node test/economy.mjs",
     "test:market:unit": "tsx test/market.unit.ts",
+    "test:market:precos:unit": "tsx test/market-precos.unit.ts",
+    "test:precos:unit": "tsx ../shared/src/mercado_precos.unit.ts",
     "test:market": "node test/market.mjs",
     "test:guerreiro": "node test/guerreiro.mjs",
     "test:curandeiro": "node test/curandeiro.mjs",

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   ITEMS, MAX_COINS, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_DAYS, MARKET_PAGE, listingFee,
-  cleanFilter, filterItemIds, type MarketPage, type MyListing, type MarketCurrency,
+  cleanFilter, filterItemIds, type MarketPage, type MyListing, type MarketCurrency, type MarketPricesEvent,
 } from "@frixep/shared";
 import { addItem, canFit, validSlot, type Inventory } from "./inventory.js";
 import type { Db } from "../db/index.js";
@@ -186,6 +186,30 @@ export class Market {
     const page = Math.min(f.page, pages - 1);
     const { rows } = await this.db.query<Row>(`select ${COLS} from market_listings where ${where} order by ${order} limit ${MARKET_PAGE} offset ${page * MARKET_PAGE}`, args);
     return { items: rows.map((r) => ({ id: r.id, itemId: r.item_id, qty: r.qty, price: r.price, currency: r.currency as MarketCurrency, seller: r.seller_name, expiresAt: Number(r.expires_ms), mine: r.seller_id === viewerCharId })), page, pages, total };
+  }
+
+  /** Janela de preços do formulário de venda: listagens ativas de UM item e UMA moeda, pelo preço por unidade (total / qtd.).
+   *  Devolve as 30 mais baratas e o mais caro (a consulta ordena no banco com a mesma regra de shared/mercado_precos.ts). */
+  async prices(itemIdRaw: unknown, currencyRaw: unknown, viewerCharId: string): Promise<MarketPricesEvent | null> {
+    if (typeof itemIdRaw !== "string" || !ITEMS[itemIdRaw]) return null;
+    if (currencyRaw !== "iron" && currencyRaw !== "obols") return null;
+    const cur: MarketCurrency = currencyRaw;
+    const now = this.iso(this.now());
+    const where = "status = 'active' and expires_at > $1 and item_id = $2 and currency = $3";
+    const args = [now, itemIdRaw, cur];
+    const unit = "(price::numeric / qty)";
+    const total = Number((await this.db.query<{ n: string }>(`select count(*)::text as n from market_listings where ${where}`, args)).rows[0].n);
+    const { rows } = await this.db.query<{ id: string; seller_id: string; seller_name: string; qty: number; price: number; unit: string }>(
+      `select id, seller_id, seller_name, qty, price, ${unit}::text as unit from market_listings where ${where} order by ${unit} asc, price asc, created_at asc, id asc limit 30`, args);
+    const dear = (await this.db.query<{ unit: string | null }>(`select ${unit}::text as unit from market_listings where ${where} order by ${unit} desc, price desc, created_at asc, id asc limit 1`, args)).rows[0];
+    return {
+      itemId: itemIdRaw,
+      currency: cur,
+      total,
+      cheapest: rows.length ? Number(rows[0].unit) : null,
+      dearest: dear?.unit != null ? Number(dear.unit) : null,
+      rows: rows.map((r) => ({ id: r.id, qty: r.qty, price: r.price, currency: cur, unit: Number(r.unit), seller: r.seller_name, mine: r.seller_id === viewerCharId })),
+    };
   }
 
   /** Limpeza preguiçosa (no máximo 1x por hora): apaga listagens encerradas há mais de 3 dias. */

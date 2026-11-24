@@ -49,7 +49,8 @@ attempt_case() {
   while curl -s -o /dev/null --max-time 1 "http://localhost:$port/health"; do port=$((PORT_NEXT++)); done
   if start_server "$port" "$srv"; then
     # shellcheck disable=SC2086
-    env SERVER="http://localhost:$port" $suite node "$file" && rc=0
+    # limite de 5 min por tentativa: uma suíte travada falha e repete, em vez de gastar o limite do job inteiro
+    timeout 300 env SERVER="http://localhost:$port" $suite node "$file" && rc=0
   fi
   stop_server
   return $rc
@@ -78,7 +79,7 @@ run_case() {
 # Suítes que não precisam de servidor.
 echo "== Suítes sem servidor"
 for file in test/acoes.unit.ts test/balance.unit.ts test/boss.unit.ts test/chegada.unit.ts test/economy.unit.ts \
-            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts test/crafting.unit.ts test/talentos.unit.ts test/loadouts.unit.ts test/simulacao.unit.ts test/sets.unit.ts test/refino.unit.ts test/engaste.unit.ts test/desmontar.unit.ts; do
+            test/inventory.unit.ts test/market.unit.ts test/vault.unit.ts test/telemetria.unit.ts test/moderacao.unit.ts test/quests.unit.ts test/diario.unit.ts test/dicas.unit.ts test/autopocao.unit.ts test/poder.unit.ts test/variacoes.unit.ts test/afixos.unit.ts test/afixos-itens.unit.ts test/crafting.unit.ts test/talentos.unit.ts test/loadouts.unit.ts test/simulacao.unit.ts test/sets.unit.ts test/refino.unit.ts test/engaste.unit.ts test/market-precos.unit.ts ../shared/src/mercado_precos.unit.ts test/desmontar.unit.ts; do
   RAN=$((RAN + 1))
   echo "::group::$file"
   if npx tsx "$file"; then echo "OK  $file"; else echo "FALHA  $file"; FAILS+=("$file"); fi

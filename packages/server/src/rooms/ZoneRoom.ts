@@ -233,6 +233,7 @@ export class ZoneRoom extends Room<ZoneState> {
     // mercado dos jogadores (leiloeiro)
     this.onMessage(Msg.MarketBrowse, (client, p: { npc?: unknown; filter?: unknown }) => this.marketRead(client, p?.npc, async (pl) => client.send(Evt.MarketPage, await this.market.browse(p?.filter, pl.charId))));
     this.onMessage(Msg.MarketMy, (client, p: { npc?: unknown }) => this.marketRead(client, p?.npc, (pl) => this.sendMarketMine(client.sessionId, pl)));
+    this.onMessage(Msg.MarketPrices, (client, p: { npc?: unknown; itemId?: unknown; currency?: unknown }) => this.marketRead(client, p?.npc, async (pl) => { const r = await this.market.prices(p?.itemId, p?.currency, pl.charId); if (r) client.send(Evt.MarketPrices, r); }));
     this.onMessage(Msg.MarketList, (client, p: { npc?: unknown; slot?: unknown; qty?: unknown; price?: unknown; currency?: unknown }) => this.marketOp(client, p?.npc, "list", (pl) => this.market.list(pl, p?.slot, p?.qty, p?.price, p?.currency)));
     this.onMessage(Msg.MarketBuy, (client, p: { npc?: unknown; id?: unknown }) => this.marketOp(client, p?.npc, "buy", (pl) => this.market.buy(pl, p?.id)));
     this.onMessage(Msg.MarketCancel, (client, p: { npc?: unknown; id?: unknown }) => this.marketOp(client, p?.npc, "cancel", (pl) => this.market.cancel(pl, p?.id)));
