@@ -47,6 +47,8 @@ const active = new Map<string, { room: ZoneRoom; sid: string }>();
 const arrivals = new Map<string, number>(); // personagem -> zona de origem da travessia (consumido ao entrar)
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
+/** DANO_FIXO_TEST=1 (só fora de produção): sem crítico e sem variação de dano, para os testes de números exatos não sortearem. */
+const danoFixo = () => process.env.DANO_FIXO_TEST === "1" && process.env.NODE_ENV !== "production";
 const QUEST_CHEGADA_CHECK_S = 0.5; // intervalo (s) em que os objetivos "chegar" são conferidos
 
 /** distância do ponto (px,py) ao segmento (x1,y1)-(x2,y2) */
@@ -513,8 +515,9 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   private damagePvp(by: string, oid: string, o: Player, baseDmg: number) {
-    const crit = Math.random() < this.critChance(by);
-    const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
+    const fixo = danoFixo();
+    const crit = !fixo && Math.random() < this.critChance(by);
+    const variance = fixo ? 1 : 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
     this.damagePlayer(oid, o, Math.max(1, baseDmg * variance * (crit ? CRIT.mult : 1)), by, crit);
   }
 
@@ -1834,8 +1837,9 @@ export class ZoneRoom extends Room<ZoneState> {
       if (attG.af.execute > 0 && e.hp < e.maxHp * 0.25) baseDmg *= 1 + attG.af.execute / 100; // Execução: inimigo com pouca vida
       if (attG.af.bossPct > 0 && enemyKind(e.kind).boss) baseDmg *= 1 + attG.af.bossPct / 100; // Caçador de Chefes
     }
-    const crit = !refl && Math.random() < this.critChance(by);
-    const variance = 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
+    const fixo = danoFixo();
+    const crit = !refl && !fixo && Math.random() < this.critChance(by);
+    const variance = fixo ? 1 : 1 + (Math.random() * 2 - 1) * DAMAGE_VARIANCE;
     const dmg = Math.max(1, Math.round(baseDmg * variance * (crit ? CRIT.mult + (attG?.af.critDmg ?? 0) / 100 : 1)));
     const shown = Math.min(dmg, e.hp);
     e.hp = Math.max(0, e.hp - dmg);
