@@ -511,7 +511,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   window.addEventListener("keydown", (e) => {
     if (e.repeat || isTypingTarget()) return; // digitando no chat: "i" é só uma letra
     if (isOpen() && e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); close(); return; }
-    if ((e.code === "KeyI" || e.code === "KeyB") && !document.querySelector(".gm-back.open")) { e.preventDefault(); toggle(); }
+    if (e.code === "KeyI" && !document.querySelector(".gm-back.open")) { e.preventDefault(); toggle(); } // B é dos Builds (C2.4)
   }, true);
 
   render();

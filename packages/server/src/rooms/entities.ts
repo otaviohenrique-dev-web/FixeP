@@ -24,6 +24,7 @@ export class Player extends Schema {
   @type("string") variacoes = "{}"; // C2.2: escolha de variação por habilidade (JSON: slot -> id); "{}" = todas na base
   @type("string") talentos = "{}"; // C2.3: ranks gastos por talento (JSON: id -> ranks); "{}" = nenhum
   @type("number") talentosResets = 0; // C2.3: quantos resets pagos (o custo do próximo é 50 × (resets + 1))
+  @type("string") loadouts = "{}"; // C2.4: até 3 builds (JSON: ativo + slots com nome, variações e talentos); o cliente lê com limparLoadouts
   @type("number") autoPotAt = 0; // auto-poção: bebe sozinho com a vida até este % (0 = desligada; passo 5, máximo 90)
   @type("number") mana = 0; // recurso da classe (inteiro, para a HUD)
   @type("number") maxMana = 0;
