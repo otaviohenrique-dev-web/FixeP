@@ -49,7 +49,8 @@ attempt_case() {
   while curl -s -o /dev/null --max-time 1 "http://localhost:$port/health"; do port=$((PORT_NEXT++)); done
   if start_server "$port" "$srv"; then
     # shellcheck disable=SC2086
-    env SERVER="http://localhost:$port" $suite node "$file" && rc=0
+    # limite de 5 min por tentativa: uma suíte travada falha e repete, em vez de gastar o limite do job inteiro
+    timeout 300 env SERVER="http://localhost:$port" $suite node "$file" && rc=0
   fi
   stop_server
   return $rc
