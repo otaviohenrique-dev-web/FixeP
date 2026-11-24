@@ -35,6 +35,7 @@ const CSS = `
 .qst-q p{margin:0 0 6px;font:400 13px/1.45 Georgia,serif;color:#dbeaff}
 .qst-q ul{margin:0 0 6px;padding-left:18px;font:400 12px/1.5 Georgia,serif;color:#bcd8f5}
 .qst-rew{font:400 12px/1.45 Georgia,serif;color:#e6c27a}
+.qst-aviso{margin:0;padding:10px;border-radius:6px;font:400 13px/1.45 Georgia,serif;color:#c9b98f;border:1px dashed rgba(201,164,92,.45);background:rgba(6,12,20,.5)}
 .qst-q .qst-act{margin-top:8px}
 .qst-btn{min-height:44px;padding:0 16px;border-radius:6px;cursor:pointer;font:700 12px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:#eaf4ff;
   background:linear-gradient(180deg,rgba(24,40,60,.85),rgba(7,13,22,.92));border:1px solid rgba(255,150,70,.4);touch-action:manipulation}
@@ -104,15 +105,15 @@ export function mountQuests(opts: {
     if (e.code === "Escape" && npc && back.classList.contains("open")) { e.stopImmediatePropagation(); e.preventDefault(); close(); }
   }, true);
 
-  /** quests que este NPC dá ou recebe (na ordem das definições) */
-  // Tutorial (C1.4): os passos aparecem em ordem, primeiro, e só quando o anterior foi entregue (o próximo some até lá).
+  /** quests que este NPC dá ou recebe (na ordem: tutorial primeiro, depois as outras) */
+  // Tutorial (C1.4) vem antes das outras; no resto, a ordem é a das definições.
   const entregue = (qid: string) => estados.get(qid)?.estado === "entregue";
-  const questsDoNpc = (id: string) => {
+  const liberada = (d: QuestDef) => d.preRequisitos.every(entregue);
+  const todasDoNpc = (id: string) => {
     const todas = [...defs.values()].filter((d) => d.npc === id);
-    const tutorial = todas.filter((d) => d.id.startsWith("tutorial_") && d.preRequisitos.every(entregue));
-    const outras = todas.filter((d) => !d.id.startsWith("tutorial_"));
-    return [...tutorial, ...outras];
+    return [...todas.filter((d) => d.id.startsWith("tutorial_")), ...todas.filter((d) => !d.id.startsWith("tutorial_"))];
   };
+  const nomeQuest = (qid: string) => defs.get(qid)?.nome ?? qid;
 
   function render() {
     if (!npc || !back.classList.contains("open")) return;
@@ -128,9 +129,16 @@ export function mountQuests(opts: {
     card.append(head);
 
     const body = el("div", "qst-body");
-    const lista = questsDoNpc(npc.id);
-    if (!lista.length) body.append(el("p", "qst-q", "Nenhuma missão por aqui."));
-    for (const d of lista) body.append(questBlock(d));
+    // as concluídas saem daqui (ficam no Diário, em Entregues); a próxima só aparece depois da anterior
+    const pendentes = todasDoNpc(npc.id).filter((d) => !entregue(d.id));
+    const liberadas = pendentes.filter(liberada);
+    const bloqueada = pendentes.find((d) => !liberada(d));
+    for (const d of liberadas) body.append(questBlock(d));
+    if (bloqueada) {
+      const falta = bloqueada.preRequisitos.find((p) => !entregue(p)) ?? "";
+      body.append(el("p", "qst-aviso", `Complete a missão «${nomeQuest(falta)}» primeiro.`));
+    }
+    if (!liberadas.length && !bloqueada) body.append(el("p", "qst-q", todasDoNpc(npc.id).length ? "Você concluiu as missões deste NPC. Veja no Diário, em Entregues." : "Nenhuma missão por aqui."));
     card.append(body);
 
     if (msg.text) card.append(el("p", "qst-msg" + (msg.ok ? " ok" : " bad"), msg.text));
@@ -189,7 +197,7 @@ export function mountQuests(opts: {
 
   return {
     open(n: NpcDef) {
-      if (!questsDoNpc(n.id).length) return false;
+      if (!todasDoNpc(n.id).length) return false;
       npc = n;
       msg = { text: "", ok: true };
       back.classList.add("open");

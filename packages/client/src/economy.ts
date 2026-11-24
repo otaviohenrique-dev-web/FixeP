@@ -279,7 +279,12 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
         b.type = "button";
         b.disabled = snap.iron < p;
         b.onclick = () => opts.send(Msg.ShopBuy, { npc: n.id, id, qty: 1 });
-        row.append(itemImg(id), info, price(p, snap.iron < p), b);
+        const ic = itemImg(id);
+        // ficha completa do item (atributos, classe, nível), igual à da mochila; no toque, o botão Comprar não abre a ficha
+        const tipData = () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null });
+        bindItemTip(ic, tipData);
+        bindItemTip(info, tipData);
+        row.append(ic, info, price(p, snap.iron < p), b);
         if (d.kind === "potion") {
           const b5 = el("button", "ec-btn", "×5");
           b5.type = "button";
