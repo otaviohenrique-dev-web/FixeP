@@ -1,4 +1,4 @@
-import { ITEMS, INV_SLOTS, EQUIP_SLOTS, CLASS_DEFS, rarityIndex, migrateItemId, gearBonuses, afixosValidos, sortearAfixos, KINDS_EQUIPAVEIS, type GearBonuses, type CharClass, type InvStack, type EquipSlot, type InventorySnapshot } from "@frixep/shared";
+import { ITEMS, INV_SLOTS, EQUIP_SLOTS, CLASS_DEFS, rarityIndex, migrateItemId, gearBonuses, afixosValidos, sortearAfixos, KINDS_EQUIPAVEIS, refinoValido, type GearBonuses, type CharClass, type InvStack, type EquipSlot, type InventorySnapshot } from "@frixep/shared";
 
 /** Inventário de um jogador (só existe no servidor; o cliente recebe fotografias). Funções puras e testáveis. */
 export interface Inventory {
@@ -7,6 +7,7 @@ export interface Inventory {
   iron: number; // Tostões de Ferro (gravados junto com o inventário, na mesma transação)
   obols: number; // Óbolos de Sangue
   equipAf?: Partial<Record<EquipSlot, string[]>>; // afixos do equipamento (ausente = sem afixos; itens antigos)
+  equipRf?: Partial<Record<EquipSlot, number>>; // nível de refino do equipamento (ausente = +0; ver refino.ts)
   migrated?: boolean; // itens antigos foram traduzidos ao carregar (o servidor grava de novo)
 }
 export type Result = { ok: true } | { ok: false; error: string };
@@ -20,9 +21,10 @@ export const emptyInventory = (): Inventory => ({
 });
 
 export const snapshot = (inv: Inventory): InventorySnapshot => ({
-  inv: inv.slots.map((s) => (s ? (s.af?.length ? { id: s.id, qty: s.qty, af: [...s.af] } : { id: s.id, qty: s.qty }) : null)),
+  inv: inv.slots.map((s) => (s ? { id: s.id, qty: s.qty, ...(s.af?.length ? { af: [...s.af] } : {}), ...(s.rf ? { rf: s.rf } : {}) } : null)),
   equip: { ...inv.equip },
   equipAf: Object.fromEntries(Object.entries(inv.equipAf ?? {}).filter(([, v]) => v?.length)) as Partial<Record<EquipSlot, string[]>>,
+  equipRf: Object.fromEntries(Object.entries(inv.equipRf ?? {}).filter(([, v]) => v)) as Partial<Record<EquipSlot, number>>,
   iron: inv.iron,
   obols: inv.obols,
 });
@@ -33,7 +35,7 @@ export const validSlot = (i: unknown): i is number => Number.isInteger(i) && (i 
  * Adiciona `qty` do item (completa pilhas antes de ocupar espaços vazios). Devolve quanto NÃO coube.
  * `af`: afixos do item (só faz diferença para equipamento, que tem pilha de 1 e nunca se funde). Afixos inválidos são descartados.
  */
-export function addItem(inv: Inventory, id: string, qty: number, af?: string[]): number {
+export function addItem(inv: Inventory, id: string, qty: number, af?: string[], rf?: number): number {
   const def = ITEMS[id];
   if (!def || !Number.isInteger(qty) || qty <= 0) return Math.max(0, Number.isFinite(qty) ? Math.trunc(qty) : 0);
   let left = qty;
@@ -49,7 +51,8 @@ export function addItem(inv: Inventory, id: string, qty: number, af?: string[]):
     if (inv.slots[i] === null) {
       const take = Math.min(def.stack, left);
       const ok = af?.length ? afixosValidos(af, def.kind, def.rarity) : [];
-      inv.slots[i] = ok.length ? { id, qty: take, af: ok } : { id, qty: take };
+      const nivel = refinoValido(rf); // refino vai junto com o item (equipamento de pilha 1)
+      inv.slots[i] = { id, qty: take, ...(ok.length ? { af: ok } : {}), ...(nivel ? { rf: nivel } : {}) };
       left -= take;
     }
   }
@@ -90,19 +93,25 @@ export function equipFromSlot(inv: Inventory, idx: unknown, level: number, cls: 
   // arma de duas mãos libera a mão secundária (o item vai para a mochila; sem espaço, não troca)
   const freeOff = slot === "weapon" && def.hands === 2 && !!inv.equip.offhand;
   const prevAf = inv.equipAf?.[slot];
+  const prevRf = inv.equipRf?.[slot];
   inv.equip[slot] = stack.id;
   setEquipAf(inv, slot, stack.af);
-  inv.slots[idx] = prev ? { id: prev, qty: 1, ...(prevAf?.length ? { af: prevAf } : {}) } : null; // troca: o item antigo ocupa o espaço liberado
+  setEquipRf(inv, slot, stack.rf);
+  inv.slots[idx] = prev ? { id: prev, qty: 1, ...(prevAf?.length ? { af: prevAf } : {}), ...(prevRf ? { rf: prevRf } : {}) } : null; // troca: o item antigo ocupa o espaço liberado
   if (freeOff) {
     const off = inv.equip.offhand!;
     const offAf = inv.equipAf?.offhand;
+    const offRf = inv.equipRf?.offhand;
     inv.equip.offhand = null;
     setEquipAf(inv, "offhand", undefined);
-    if (addItem(inv, off, 1, offAf) > 0) { // sem espaço: desfaz tudo
+    setEquipRf(inv, "offhand", undefined);
+    if (addItem(inv, off, 1, offAf, offRf) > 0) { // sem espaço: desfaz tudo
       inv.equip.offhand = off;
       setEquipAf(inv, "offhand", offAf);
+      setEquipRf(inv, "offhand", offRf);
       inv.equip[slot] = prev;
       setEquipAf(inv, slot, prevAf);
+      setEquipRf(inv, slot, prevRf);
       inv.slots[idx] = stack;
       return { ok: false, error: "Mochila cheia." };
     }
@@ -115,9 +124,10 @@ export function unequip(inv: Inventory, slot: unknown): Result {
   const s = slot as EquipSlot;
   const id = inv.equip[s];
   if (!id) return { ok: false, error: "Nada equipado." };
-  if (addItem(inv, id, 1, inv.equipAf?.[s]) > 0) return { ok: false, error: "Mochila cheia." };
+  if (addItem(inv, id, 1, inv.equipAf?.[s], inv.equipRf?.[s]) > 0) return { ok: false, error: "Mochila cheia." };
   inv.equip[s] = null;
   setEquipAf(inv, s, undefined);
+  setEquipRf(inv, s, undefined);
   return { ok: true };
 }
 
@@ -136,7 +146,7 @@ export function consumeOne(inv: Inventory, idx: number) {
 }
 
 /** Bônus e kit do que está equipado (só conta item da classe do jogador). */
-export const bonuses = (inv: Inventory, cls: CharClass): GearBonuses => gearBonuses(inv.equip, cls, inv.equipAf ?? {});
+export const bonuses = (inv: Inventory, cls: CharClass): GearBonuses => gearBonuses(inv.equip, cls, inv.equipAf ?? {}, inv.equipRf ?? {});
 
 /** Guarda (ou tira) os afixos do que está num slot de equipamento. */
 export function setEquipAf(inv: Inventory, slot: EquipSlot, af: string[] | undefined) {
@@ -144,6 +154,15 @@ export function setEquipAf(inv: Inventory, slot: EquipSlot, af: string[] | undef
   const next = { ...(inv.equipAf ?? {}) };
   if (af?.length) next[slot] = [...af]; else delete next[slot];
   inv.equipAf = next;
+}
+
+/** Guarda (ou tira) o nível de refino do que está num slot de equipamento (0 ou ausente = +0). */
+export function setEquipRf(inv: Inventory, slot: EquipSlot, rf: number | undefined) {
+  const nivel = refinoValido(rf);
+  if (!nivel && !inv.equipRf?.[slot]) return; // nada a mudar: não cria o campo
+  const next = { ...(inv.equipRf ?? {}) };
+  if (nivel) next[slot] = nivel; else delete next[slot];
+  inv.equipRf = next;
 }
 
 const KIND_ORDER = ["weapon", "offhand", "helmet", "armor", "boots", "cape", "potion", "material"];
@@ -159,7 +178,7 @@ export function sortInventory(inv: Inventory): void {
       if (left <= 0) break;
       if (m.id === s.id && m.qty < def.stack) { const t = Math.min(def.stack - m.qty, left); m.qty += t; left -= t; }
     }
-    if (left > 0) merged.push({ id: s.id, qty: left, ...(s.af?.length ? { af: s.af } : {}) });
+    if (left > 0) merged.push({ id: s.id, qty: left, ...(s.af?.length ? { af: s.af } : {}), ...(s.rf ? { rf: s.rf } : {}) });
   }
   merged.sort((a, b) => {
     const da = ITEMS[a.id], db = ITEMS[b.id];

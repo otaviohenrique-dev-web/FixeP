@@ -44,6 +44,8 @@
     "test:variacoes:unit": "tsx test/variacoes.unit.ts",
     "test:loadouts:unit": "tsx test/loadouts.unit.ts",
     "test:simulacao:unit": "tsx test/simulacao.unit.ts",
+    "test:refino:unit": "tsx test/refino.unit.ts",
+    "test:refino": "node test/refino.mjs",
     "test:variacoes": "node test/variacoes.mjs",
     "test:dicas": "node test/dicas.mjs",
     "test:ci": "bash test/run-all.sh"

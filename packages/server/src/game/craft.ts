@@ -7,7 +7,7 @@ type Rng = () => number;
 const countMat = (inv: Inventory, id: string) => inv.slots.reduce((n, s) => n + (s?.id === id ? s.qty : 0), 0);
 
 /** Tira `n` unidades de um ingrediente, de uma ou mais pilhas (esvazia o espaço quando zera). */
-function consumir(inv: Inventory, id: string, n: number) {
+export function consumir(inv: Inventory, id: string, n: number) {
   let left = n;
   for (let i = 0; i < inv.slots.length && left > 0; i++) {
     const s = inv.slots[i];

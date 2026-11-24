@@ -5,7 +5,7 @@ import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
+  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
 } from "@frixep/shared";
 
 /**
@@ -202,7 +202,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   let tab: "buy" | "sell" = "buy";
   const picked = new Set<number>(); // ferreira: espaços escolhidos
   const confirmSell = new Set<number>(); // venda de item raro: pede um segundo clique
-  let smithTab: "merge" | "craft" = "merge"; // ferreira: fundir ou craftar
+  let smithTab: "merge" | "craft" | "refine" = "merge"; // ferreira: fundir, craftar ou refinar
   // craft (aba Craftar): escolha atual; as famílias guardam a última escolha de cada tipo
   const craftSel: { tipo: "arma" | "peca"; peca: PecaCraft; raridade: Rarity; arma: string; sec: string } = { tipo: "arma", peca: "armor", raridade: "common", arma: "", sec: "" };
 
@@ -331,10 +331,11 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
 
   function renderSmith(n: NpcDef) {
     const craft = smithTab === "craft";
-    card.append(head(`${n.name} · ${n.title}`, craft ? "Cria arma ou peça de set com ingredientes e moedas. Épico para cima pede Óbolos de Sangue." : `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`, closeNpc), balance());
+    const textoAba = smithTab === "refine" ? "Sobe o refino (+1 por vez) de um equipamento com Tostões e material. Nunca quebra o item." : craft ? "Cria arma ou peça de set com ingredientes e moedas. Épico para cima pede Óbolos de Sangue." : `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`;
+    card.append(head(`${n.name} · ${n.title}`, textoAba, closeNpc), balance());
     const tabs = el("div", "ec-tabs");
     tabs.setAttribute("role", "tablist");
-    for (const [k, label] of [["merge", "Fundir"], ["craft", "Craftar"]] as const) {
+    for (const [k, label] of [["merge", "Fundir"], ["craft", "Craftar"], ["refine", "Refinar"]] as const) {
       const b = el("button", "ec-tab", label);
       b.type = "button";
       b.setAttribute("role", "tab");
@@ -344,6 +345,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     }
     card.append(tabs);
     if (craft) { renderCraft(n); return; }
+    if (smithTab === "refine") { renderRefine(n); return; }
     const cap = zoneRarityCap(opts.getZone());
     // só equipamentos da mochila; depois da primeira escolha, só os compatíveis
     const first = [...picked][0];
@@ -475,6 +477,78 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
       go.onclick = () => {
         opts.send(Msg.Craft, { npc: n.id, tipo: craftSel.tipo, familia: craftSel.tipo === "arma" ? craftSel.arma : craftSel.peca === "secundaria" ? craftSel.sec : undefined, peca: craftSel.tipo === "peca" ? craftSel.peca : undefined, raridade: craftSel.raridade });
       };
+    }
+    foot.append(note, go);
+    card.append(list, foot);
+  }
+
+  /** aba Refinar da ferreira: escolhe um equipamento (mochila ou vestido); mostra o custo do próximo nível (verde = tem, vermelho = falta) e o que sobe. Nunca quebra o item. */
+  let refineSel: { origem: "mochila" | "equip"; slot: number | EquipSlot } | null = null;
+  function renderRefine(n: NpcDef) {
+    const list = el("div", "ec-list");
+    list.style.paddingTop = "6px";
+    const lbl = (t: string) => el("div", "ec-craft-lbl", t);
+    type Alvo = { origem: "mochila" | "equip"; slot: number | EquipSlot; id: string; rf: number };
+    const alvos: Alvo[] = [];
+    snap.inv.forEach((st, i) => { if (st && isRefinavel(ITEMS[st.id].kind, ITEMS[st.id].rarity)) alvos.push({ origem: "mochila", slot: i, id: st.id, rf: st.rf ?? 0 }); });
+    for (const s of EQUIP_SLOTS) {
+      const id = snap.equip[s];
+      if (id && isRefinavel(ITEMS[id].kind, ITEMS[id].rarity)) alvos.push({ origem: "equip", slot: s, id, rf: snap.equipRf?.[s] ?? 0 });
+    }
+    const foot = el("div", "ec-foot");
+    const note = el("p", "ec-note");
+    const go = el("button", "ec-btn go", "Refinar");
+    go.type = "button";
+    go.disabled = true;
+    if (!alvos.length) {
+      list.append(el("div", "ec-empty", "Nenhum equipamento para refinar. Traga um da mochila ou vista um."));
+      note.textContent = "Refinável: arma, mão secundária, elmo, armadura, botas e capa.";
+    } else {
+      const atual = alvos.find((a) => refineSel && a.origem === refineSel.origem && a.slot === refineSel.slot) ?? alvos[0];
+      list.append(lbl("Equipamento"));
+      const w = el("div", "ec-seg");
+      w.setAttribute("role", "tablist");
+      for (const a of alvos) {
+        const rot = rotuloRefino(a.rf);
+        const b = el("button", "ec-tab", (a.origem === "equip" ? "Vestido: " : "") + ITEMS[a.id].name + (rot ? " " + rot : ""));
+        b.type = "button";
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", String(a === atual));
+        b.onclick = () => { refineSel = { origem: a.origem, slot: a.slot }; renderNpc(); };
+        w.append(b);
+      }
+      list.append(w);
+      const def = ITEMS[atual.id];
+      const c = custoRefino(atual.rf, def.kind, def.rarity);
+      if (!c) {
+        list.append(el("div", "ec-empty", def.name + " já está no refino máximo (+" + MAX_REFINO + ")."));
+        note.textContent = "Não dá para refinar mais.";
+      } else {
+        const have = (id: string) => snap.inv.reduce((t, st) => t + (st?.id === id ? st.qty : 0), 0);
+        list.append(lbl("Custo para +" + (atual.rf + 1)));
+        const reqs: [string, HTMLElement, number, number][] = [
+          ...Object.entries(c.mats).map(([id, need]) => [id, itemImg(id, "ec-ic"), have(id), need] as [string, HTMLElement, number, number]),
+          [COIN_IRON.id, coinImg("iron"), snap.iron, c.tostoes],
+        ];
+        for (const [id, img, tem, precisa] of reqs) {
+          const row = el("div", "ec-req " + (tem >= precisa ? "ok" : "no"));
+          row.append(img ?? el("span"), el("span", "", nomeIngrediente(id)), el("b", "", num(tem) + " / " + num(precisa)));
+          list.append(row);
+        }
+        const antes = bonusRefino(atual.rf, def.kind, def.rarity), depois = bonusRefino(atual.rf + 1, def.kind, def.rarity);
+        const ganho = depois.dmgPct > antes.dmgPct ? "+" + (depois.dmgPct - antes.dmgPct) + "% de dano" : "+" + (depois.hp - antes.hp) + " de vida";
+        list.append(el("p", "ec-note", def.name + " sobe para +" + (atual.rf + 1) + ": " + ganho + "."));
+        const faltas = faltasRefino(c, have, snap.iron);
+        if (faltas.length) {
+          note.textContent = "Faltam: " + faltas.map((f) => nomeIngrediente(f.id)).join(", ") + ".";
+          note.classList.add("bad");
+        } else {
+          note.textContent = "Pronto. Refinar não tem chance de falha.";
+          go.disabled = false;
+        }
+        const origem = atual.origem, slot = atual.slot;
+        go.onclick = () => opts.send(Msg.Refine, { npc: n.id, origem, slot });
+      }
     }
     foot.append(note, go);
     card.append(list, foot);

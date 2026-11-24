@@ -42,6 +42,7 @@ export const Msg = {
   ShopSell: "shop_sell", // { npc, slot, qty }: vende ao comerciante
   SmithMerge: "smith_merge", // { npc, slots: [a, b, c] }: funde 3 equipamentos iguais num de raridade superior (custa tostões; pode falhar)
   Craft: "craft", // { npc, tipo: "arma"|"peca", familia?, peca?, raridade }: craft de arma ou peça (Ferreira, aba Craftar); consome ingredientes/moedas e gera o item (ver crafting.ts)
+  Refine: "refine", // { npc, origem: "mochila" | "equip", slot }: sobe +1 o refino de um equipamento (Ferreira, aba Refinar); custa Tostões e material; nunca quebra o item (ver refino.ts)
   TradeInvite: "trade_invite", // { name }: convida um jogador da zona, por perto, para uma troca
   TradeAccept: "trade_accept", // {}: aceita o convite de troca
   TradeDecline: "trade_decline", // {}: recusa o convite
@@ -607,4 +608,6 @@ export * from "./talentos";
 export * from "./loadouts";
 export * from "./buffs";
 export * from "./crafting";
+export * from "./refino";
+export * from "./refino_stats";
 export * from "./simulacao";
