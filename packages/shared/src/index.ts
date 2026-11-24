@@ -601,3 +601,4 @@ export * from "./variacoes";
 export * from "./talentos";
 export * from "./buffs";
 export * from "./crafting";
+export * from "./simulacao";
