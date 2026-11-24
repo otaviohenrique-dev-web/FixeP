@@ -196,7 +196,13 @@ const METRICAS: { label(c: CharClass): string; pre: string; un: string; sempre: 
 /** festa de atributos: ao equipar, um banner no MEIO da tela (PC e celular) mostra o ganho de poder e dos atributos, contando até o valor novo */
 let gainEl: HTMLDivElement | null = null;
 let gainTimer = 0;
-function showGain(poderUp: number, rows: { label: string; pre: string; un: string; up: number }[]): void {
+/** manchete atual do banner (o número do poder total), para o valor oficial do servidor corrigi-la em tempo real */
+let gainHead: HTMLElement | null = null;
+export function atualizaPoderDoBanner(n: number): void {
+  if (gainHead?.isConnected) gainHead.textContent = n.toLocaleString("pt-BR");
+}
+/** `poderDe` = poder total antes e depois (conta local); o banner mostra o NÚMERO do poder, contando do atual até o novo */
+function showGain(poderUp: number, rows: { label: string; pre: string; un: string; up: number }[], poderDe: { from: number; to: number }): void {
   gainEl?.remove();
   window.clearTimeout(gainTimer);
   const el = document.createElement("div");
@@ -210,12 +216,14 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
   lbl.className = "g-lbl";
   lbl.textContent = poderUp > 0 ? "Seu personagem ficou mais forte" : "Atributos melhorados";
   box.append(lbl);
-  const contas: { node: HTMLElement; to: number; delay: number; pre: string; un: string }[] = [];
+  const contas: { node: HTMLElement; to: number; delay: number; pre: string; un: string; from?: number }[] = [];
+  gainHead = null;
   if (poderUp > 0) {
     const head = document.createElement("span");
     head.className = "g-pw";
-    contas.push({ node: head, to: poderUp, delay: 0, pre: "PODER +", un: "" });
+    contas.push({ node: head, from: poderDe.from, to: poderDe.to, delay: 0, pre: "", un: "" });
     box.append(head);
+    gainHead = head;
   }
   rows.forEach((r, i) => {
     const row = document.createElement("span");
@@ -232,14 +240,16 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
   gainEl = el;
   const reduzido = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
   if (reduzido) {
-    for (const c of contas) c.node.textContent = `${c.pre}${c.to}${c.un}`;
+    for (const c of contas) c.node.textContent = c.from === undefined ? `${c.pre}${c.to}${c.un}` : c.to.toLocaleString("pt-BR");
   } else {
     const t0 = performance.now();
     for (const c of contas) {
-      c.node.textContent = `${c.pre}0${c.un}`;
+      const a = c.from ?? 0;
+      c.node.textContent = c.from === undefined ? `${c.pre}0${c.un}` : a.toLocaleString("pt-BR");
       const step = (now: number) => {
         const k = Math.min(1, Math.max(0, (now - t0 - c.delay) / 700));
-        c.node.textContent = `${c.pre}${Math.round(c.to * (1 - Math.pow(1 - k, 3)))}${c.un}`;
+        const v = Math.round(a + (c.to - a) * (1 - Math.pow(1 - k, 3)));
+        c.node.textContent = c.from === undefined ? `${c.pre}${v}${c.un}` : v.toLocaleString("pt-BR");
         if (k < 1) requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
@@ -306,6 +316,7 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   const poderBox = back.querySelector<HTMLElement>(".iv-poder")!;
   const poderNum = poderBox.querySelector<HTMLElement>(".pw-n")!;
   let poderNow = 0;
+  let poderAt = -1e9; // quando o poder oficial chegou pela última vez
   let poderShown: number | null = null;
   let gearAntes: GearBonuses | null = null; // bônus do último inventário recebido (para a festa de atributos)
 
@@ -636,6 +647,8 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       animatePoder(poderNum, poderShown, n, poderBox);
       poderShown = n;
       poderNow = n;
+      poderAt = performance.now();
+      atualizaPoderDoBanner(n); // banner aberto: o número passa a ser o valor oficial do servidor
     },
     setSnapshot(s) {
       snap = s;
@@ -645,7 +658,11 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
         const rows = METRICAS.map((m) => ({ label: m.label(opts.getClass()), pre: m.pre, un: m.un, up: m.val(gear) - m.val(gearAntes!) }))
           .filter((r) => r.up > 0);
         const poderUp = poderDe(gear) - poderDe(gearAntes);
-        if (rows.length || poderUp > 0) showGain(poderUp, rows);
+        if (rows.length || poderUp > 0) {
+          // o total oficial pode chegar antes ou depois da fotografia: se acabou de chegar, ele já inclui o ganho
+          const jaSomado = performance.now() - poderAt < 600;
+          showGain(poderUp, rows, jaSomado ? { from: poderNow - poderUp, to: poderNow } : { from: poderNow, to: poderNow + poderUp });
+        }
       }
       gearAntes = gear;
       // se o item selecionado mudou de lugar ou sumiu, limpa a seleção
