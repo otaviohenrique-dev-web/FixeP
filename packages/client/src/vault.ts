@@ -1,4 +1,5 @@
 import { isTypingTarget } from "./keys";
+import { ICONS } from "./inventory";
 import { ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, VAULT_PAGE, VAULT_PAGES, VAULT_SLOTS, type InventorySnapshot, type VaultSnapshot, type ItemDef } from "@frixep/shared";
 
 /**
@@ -128,7 +129,13 @@ export function mountVault(opts: { send(type: string, payload: unknown): void })
       b.style.borderColor = RARITY_COLOR[def.rarity] + "88";
       const im = el("img");
       im.src = `/assets/items/item_${def.id}.png`; im.alt = ""; im.draggable = false;
-      im.onerror = () => { im.style.visibility = "hidden"; };
+      // sem o PNG final: mostra o mesmo desenho provisório da mochila (antes ficava vazio)
+      im.onerror = () => {
+        const span = el("span", "vt-fb");
+        span.style.cssText = `color:${RARITY_COLOR[def.rarity]};display:contents`;
+        span.innerHTML = ICONS[def.kind as keyof typeof ICONS] ?? "";
+        im.replaceWith(span);
+      };
       b.append(im);
       if (st.qty > 1) { const q = el("span", "vt-qty", String(st.qty)); q.style.color = "#fff"; b.append(q); }
       b.draggable = true;

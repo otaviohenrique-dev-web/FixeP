@@ -104,7 +104,8 @@ function build(data: ItemTipData): void {
   t.style.setProperty("--rc", RARITY_COLOR[d.rarity]);
   const h = document.createElement("h4"); h.textContent = d.name; h.style.color = RARITY_COLOR[d.rarity];
   const sm = document.createElement("small");
-  sm.textContent = `${RARITY_NAME[d.rarity]}${d.kind !== "potion" ? ` · ${EQUIP_SLOT_NAME[d.kind as EquipSlot]}` : ""}${d.hands ? ` · ${d.hands === 2 ? "duas mãos" : "uma mão"}` : ""}`;
+  const tipo = d.kind === "material" ? "Material de craft" : EQUIP_SLOT_NAME[d.kind as EquipSlot];
+  sm.textContent = `${RARITY_NAME[d.rarity]}${d.kind !== "potion" ? ` · ${tipo}` : ""}${d.hands ? ` · ${d.hands === 2 ? "duas mãos" : "uma mão"}` : ""}`;
   t.append(h, sm);
   const cmp = data.cmp && data.cmp.id !== d.id ? data.cmp : null;
   const rb = cmp ? rowsOf(cmp) : null;
