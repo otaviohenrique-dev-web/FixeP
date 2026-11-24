@@ -21,7 +21,8 @@ async function spawn(cls) {
   const room = await new Client(WS).joinOrCreate("zone", { token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
   const ev = { hits: [] };
-  room.onMessage("hit", (m) => ev.hits.push({ ...m, at: Date.now() })); // com horário: a provocação se mede por janela de tempo
+  // golpes na ordem em que chegam (uma única conexão mantém a ordem): a provocação se mede pela sequência, não pelo relógio
+  room.onMessage("hit", (m) => ev.hits.push(m));
   room.onMessage("*", () => {});
   await sleep(250);
   return {
@@ -63,15 +64,22 @@ console.log("\n== 2. Guerreiro: provocar (E) ==");
   // o esqueleto e1 (30,16): B (outro guerreiro) está MAIS perto que G (2 tiles contra 6); sem provocar, o esqueleto bateria em B.
   // G fica do outro lado, longe de B, para o golpe do esqueleto contra G não atingir B de raspão.
   await Promise.all([arrive(B, 28, 16), arrive(G, 30, 22)]);
+  // a provocação só puxa inimigos dentro de 7 tiles do Guerreiro (tauntRadius); se ele não chegou perto, o teste não mede nada
+  const e1 = G.room.state.enemies.get("e1");
+  const dG = e1 ? Math.hypot(G.me().x - e1.x, G.me().y - e1.y) : Infinity;
+  check("o Guerreiro está perto do esqueleto (dentro dos 7 tiles da provocação)", dG <= 6.5, `distância ${dG.toFixed(2)}`);
   check("antes da provocação o esqueleto bate em B (quem está mais perto)", await until(() => B.ev.hits.some((h) => h.k === "p" && h.id === B.id), 15000, 100));
-  const t0 = Date.now();
   G.act("skill3", G.me().x, G.me().y);
+  const castAt = G.ev.hits.length; // a partir daqui, só golpes que chegam depois do cast contam
   check("E é aceito: o Guerreiro fica com o buff de defesa", await until(() => G.me().buff === true, 2000));
-  await sleep(1500); // golpe que já estava em preparo contra B pode cair ainda
-  const from = t0 + 1500, to = t0 + 3800; // a provocação dura 4 s: a janela fica dentro dela
-  await sleep(to - Date.now());
-  const toG = G.ev.hits.filter((h) => h.k === "p" && h.id === G.id && h.at >= from && h.at <= to).length;
-  const toB = G.ev.hits.filter((h) => h.k === "p" && h.id === B.id && h.at >= from && h.at <= to).length;
+  // 1) o primeiro golpe da provocação: o esqueleto pode ter começado um golpe em B antes do cast (telégrafo de 0,7 s); pode cair antes do primeiro golpe no Guerreiro
+  const firstG = await until(() => G.ev.hits.slice(castAt).some((h) => h.k === "p" && h.id === G.id), 6000, 50);
+  check("depois da provocação o esqueleto bate no Guerreiro", firstG);
+  const iFirst = G.ev.hits.findIndex((h, i) => i >= castAt && h.k === "p" && h.id === G.id);
+  // 2) depois do primeiro golpe no Guerreiro (provocação ainda ativa: dura 4 s e o golpe chega antes disso), nenhum golpe em B por 1 s
+  await sleep(1000);
+  const toG = G.ev.hits.slice(iFirst).filter((h) => h.k === "p" && h.id === G.id).length;
+  const toB = G.ev.hits.slice(iFirst).filter((h) => h.k === "p" && h.id === B.id).length;
   check("durante a provocação os golpes vão para o Guerreiro, não para B", toG >= 1 && toB === 0, `Guerreiro ${toG} · B ${toB}`);
   [G, B].forEach((x) => x.room.leave());
   await sleep(500);
