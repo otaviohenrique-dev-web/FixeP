@@ -102,13 +102,17 @@ const CSS = `
 .iv-stats .st-r{display:block}
 .iv-stats .st-up{color:#7dd68a;font-weight:700}
 .iv-stats .st-dn{color:#ff8f7e;font-weight:700}
-.iv-gain{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:26;pointer-events:none;text-align:center;font-family:"Cinzel",Georgia,serif;opacity:0;transition:opacity .45s ease}
-.iv-gain.on{opacity:1}
-.iv-gain .g-pw{display:block;font:800 36px/1 Georgia,serif;color:#7dd68a;text-shadow:0 0 16px rgba(61,255,122,.7),0 2px 4px #000;margin-bottom:8px}
-.iv-gain .g-pw small{display:block;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.3em;color:#c9b07a;margin-bottom:6px;text-transform:uppercase;text-shadow:0 1px 3px #000}
-.iv-gain .g-row{display:block;font:700 15px/1.55 Georgia,serif;color:#7dd68a;text-shadow:0 1px 3px #000,0 0 10px rgba(61,255,122,.35)}
-.iv-gain .g-row i{font-style:normal;color:#d9efe0;font-weight:400;margin-right:6px}
-@media (prefers-reduced-motion:reduce){.iv-gain{transition:none}}
+.iv-gain{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;pointer-events:none;text-align:center;font-family:Cinzel,Georgia,serif;width:min(94vw,520px)}
+.iv-gain-rays{position:absolute;left:50%;top:50%;width:560px;height:560px;margin:-280px 0 0 -280px;opacity:.3;background:repeating-conic-gradient(from 0deg,#3dff7a 0 6deg,transparent 6deg 18deg);-webkit-mask-image:radial-gradient(circle,#000 20%,transparent 70%);mask-image:radial-gradient(circle,#000 20%,transparent 70%);animation:iv-gain-spin 6s linear infinite}
+.iv-gain-in{position:relative;animation:iv-gain-pop .5s cubic-bezier(.2,1.4,.4,1) both,iv-gain-out .5s ease-in 2.7s forwards}
+.iv-gain .g-lbl{display:block;font-size:clamp(12px,2.4vw,15px);font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:#f3d77a;text-shadow:0 2px 0 #000}
+.iv-gain .g-pw{display:block;font-size:clamp(48px,11vw,92px);font-weight:800;line-height:1.05;color:#7dff9b;text-shadow:0 0 22px rgba(61,255,122,.85),0 0 4px #000,0 4px 0 #000;margin:6px 0 10px}
+.iv-gain .g-row{display:block;font-size:clamp(17px,3.6vw,24px);font-weight:700;line-height:1.5;color:#7dd68a;text-shadow:0 2px 0 #000,0 0 12px rgba(61,255,122,.5)}
+.iv-gain .g-row i{font-style:normal;color:#e9f7ec;font-weight:600;margin-right:8px}
+@keyframes iv-gain-pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+@keyframes iv-gain-out{to{opacity:0;transform:translateY(-14px)}}
+@keyframes iv-gain-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.iv-gain-rays,.iv-gain-in{animation:none}}
 .iv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .iv-slot{position:relative;aspect-ratio:1;border-radius:5px;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;--rc:rgba(160,200,240,.2);
   background:radial-gradient(circle at 50% 35%,rgba(20,30,46,.9),rgba(5,9,15,.9));border:1.5px solid var(--rc);transition:border-color .15s,transform .12s}
@@ -189,7 +193,7 @@ const METRICAS: { label(c: CharClass): string; pre: string; un: string; sempre: 
   { label: () => "Regeneração", pre: "+", un: "/s", sempre: false, val: (g) => g.regen },
 ];
 
-/** festa de atributos: ao equipar, o que subiu aparece no meio da tela e conta até o valor novo (só o positivo) */
+/** festa de atributos: ao equipar, um banner no MEIO da tela (PC e celular) mostra o ganho de poder e dos atributos, contando até o valor novo */
 let gainEl: HTMLDivElement | null = null;
 let gainTimer = 0;
 function showGain(poderUp: number, rows: { label: string; pre: string; un: string; up: number }[]): void {
@@ -197,28 +201,33 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
   window.clearTimeout(gainTimer);
   const el = document.createElement("div");
   el.className = "iv-gain";
-  el.setAttribute("aria-hidden", "true");
+  el.setAttribute("role", "status");
+  const rays = document.createElement("div");
+  rays.className = "iv-gain-rays";
+  const box = document.createElement("div");
+  box.className = "iv-gain-in";
+  const lbl = document.createElement("span");
+  lbl.className = "g-lbl";
+  lbl.textContent = poderUp > 0 ? "Seu personagem ficou mais forte" : "Atributos melhorados";
+  box.append(lbl);
   const contas: { node: HTMLElement; to: number; delay: number; pre: string; un: string }[] = [];
   if (poderUp > 0) {
     const head = document.createElement("span");
     head.className = "g-pw";
-    const small = document.createElement("small");
-    small.textContent = "Poder total";
-    const num = document.createElement("span");
-    head.append(small, num);
-    el.append(head);
-    contas.push({ node: num, to: poderUp, delay: 0, pre: "+", un: "" });
+    contas.push({ node: head, to: poderUp, delay: 0, pre: "PODER +", un: "" });
+    box.append(head);
   }
   rows.forEach((r, i) => {
     const row = document.createElement("span");
     row.className = "g-row";
-    const i2 = document.createElement("i");
-    i2.textContent = r.label;
+    const name = document.createElement("i");
+    name.textContent = r.label;
     const num = document.createElement("span");
-    row.append(i2, num);
-    el.append(row);
+    row.append(name, num);
+    box.append(row);
     contas.push({ node: num, to: r.up, delay: 140 * (i + (poderUp > 0 ? 1 : 0)), pre: r.pre === "−" ? "+" : r.pre, un: r.un });
   });
+  el.append(rays, box);
   document.body.append(el);
   gainEl = el;
   const reduzido = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
@@ -236,12 +245,10 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
       requestAnimationFrame(step);
     }
   }
-  requestAnimationFrame(() => el.classList.add("on"));
   gainTimer = window.setTimeout(() => {
-    el.classList.remove("on");
-    window.setTimeout(() => el.remove(), 500);
+    el.remove();
     if (gainEl === el) gainEl = null;
-  }, 2300);
+  }, 3200);
 }
 
 /** 0 = sem brilho; épico pulsa leve, lendário médio, mítico forte */
