@@ -5,7 +5,7 @@ import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, GEMAS, GEMA_BY_ID, espacosDe, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketPricesEvent, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
+  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, materiaisDesmonte, precisaConfirmarDesmonte, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, GEMAS, GEMA_BY_ID, espacosDe, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketPricesEvent, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
 } from "@frixep/shared";
 
 /**
@@ -203,7 +203,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   let tab: "buy" | "sell" = "buy";
   const picked = new Set<number>(); // ferreira: espaços escolhidos
   const confirmSell = new Set<number>(); // venda de item raro: pede um segundo clique
-  let smithTab: "merge" | "craft" | "refine" | "socket" = "merge"; // ferreira: fundir, craftar, refinar ou engastar
+  let smithTab: "merge" | "craft" | "refine" | "socket" | "dismantle" = "merge"; // ferreira: fundir, craftar, refinar, engastar ou desmontar
   // craft (aba Craftar): escolha atual; as famílias guardam a última escolha de cada tipo
   const craftSel: { tipo: "arma" | "peca"; peca: PecaCraft; raridade: Rarity; arma: string; sec: string } = { tipo: "arma", peca: "armor", raridade: "common", arma: "", sec: "" };
 
@@ -332,11 +332,11 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
 
   function renderSmith(n: NpcDef) {
     const craft = smithTab === "craft";
-    const textoAba = smithTab === "socket" ? "Engasta uma gema num espaço livre do equipamento, pagando Óbolos de Sangue. Remover libera o espaço (a gema se perde)." : smithTab === "refine" ? "Sobe o refino (+1 por vez) de um equipamento com Tostões e material. Nunca quebra o item." : craft ? "Cria arma ou peça de set com ingredientes e moedas. Épico para cima pede Óbolos de Sangue." : `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`;
+    const textoAba = smithTab === "dismantle" ? "Desmonta um equipamento da mochila em materiais de craft. Raro para cima pede confirmação." : smithTab === "socket" ? "Engasta uma gema num espaço livre do equipamento, pagando Óbolos de Sangue. Remover libera o espaço (a gema se perde)." : smithTab === "refine" ? "Sobe o refino (+1 por vez) de um equipamento com Tostões e material. Nunca quebra o item." : craft ? "Cria arma ou peça de set com ingredientes e moedas. Épico para cima pede Óbolos de Sangue." : `Funde ${MERGE_COUNT} equipamentos iguais num de raridade superior. Pode falhar.`;
     card.append(head(`${n.name} · ${n.title}`, textoAba, closeNpc), balance());
     const tabs = el("div", "ec-tabs");
     tabs.setAttribute("role", "tablist");
-    for (const [k, label] of [["merge", "Fundir"], ["craft", "Craftar"], ["refine", "Refinar"], ["socket", "Engastar"]] as const) {
+    for (const [k, label] of [["merge", "Fundir"], ["craft", "Craftar"], ["refine", "Refinar"], ["socket", "Engastar"], ["dismantle", "Desmontar"]] as const) {
       const b = el("button", "ec-tab", label);
       b.type = "button";
       b.setAttribute("role", "tab");
@@ -347,6 +347,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     card.append(tabs);
     if (craft) { renderCraft(n); return; }
     if (smithTab === "refine") { renderRefine(n); return; }
+    if (smithTab === "dismantle") { renderDismantle(n); return; }
     if (smithTab === "socket") { renderSocket(n); return; }
     const cap = zoneRarityCap(opts.getZone());
     // só equipamentos da mochila; depois da primeira escolha, só os compatíveis
@@ -551,6 +552,58 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
         const origem = atual.origem, slot = atual.slot;
         go.onclick = () => opts.send(Msg.Refine, { npc: n.id, origem, slot });
       }
+    }
+    foot.append(note, go);
+    card.append(list, foot);
+  }
+
+  // aba Desmontar (C3.5): um equipamento da mochila vira materiais de craft; raro ou melhor pede confirmação
+  let dismantleSel: number | null = null;
+  function renderDismantle(n: NpcDef) {
+    const list = el("div", "ec-list");
+    list.style.paddingTop = "6px";
+    const foot = el("div", "ec-foot");
+    const note = el("p", "ec-note");
+    const go = el("button", "ec-btn go", "Desmontar");
+    go.type = "button";
+    go.disabled = true;
+    const alvos: number[] = [];
+    snap.inv.forEach((st, i) => { if (st && materiaisDesmonte(st.id, st.rf ?? 0)) alvos.push(i); });
+    if (!alvos.length) {
+      list.append(el("div", "ec-empty", "Nada para desmontar. Traga um equipamento da mochila."));
+      note.textContent = "Desmontável: arma, mão secundária, elmo, armadura, botas e capa.";
+    } else {
+      const atual = alvos.find((i) => i === dismantleSel) ?? alvos[0];
+      list.append(el("div", "ec-craft-lbl", "Equipamento da mochila"));
+      const w = el("div", "ec-seg");
+      w.setAttribute("role", "tablist");
+      for (const i of alvos) {
+        const st = snap.inv[i]!;
+        const d = ITEMS[st.id];
+        const b = el("button", "ec-tab", d.name + (rotuloRefino(st.rf ?? 0) ? " " + rotuloRefino(st.rf ?? 0) : ""));
+        b.type = "button";
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", String(i === atual));
+        b.onclick = () => { dismantleSel = i; renderNpc(); };
+        w.append(b);
+      }
+      list.append(w);
+      const st = snap.inv[atual]!;
+      const d = ITEMS[st.id];
+      const mats = materiaisDesmonte(st.id, st.rf ?? 0) ?? {};
+      list.append(el("div", "ec-craft-lbl", "Você recebe"));
+      for (const [id, qtd] of Object.entries(mats)) {
+        const row = el("div", "ec-req ok");
+        row.append(itemImg(id, "ec-ic") ?? el("span"), el("span", "", nomeIngrediente(id)), el("b", "", "+" + num(qtd)));
+        list.append(row);
+      }
+      if (precisaConfirmarDesmonte(d.rarity)) list.append(el("p", "ec-note bad", `Este é um item ${RARITY_NAME[d.rarity].toLowerCase()}: vai pedir confirmação.`));
+      note.textContent = "Troca tudo ou nada: se a mochila não tiver espaço para os materiais, o item fica.";
+      go.disabled = false;
+      go.onclick = () => {
+        if (precisaConfirmarDesmonte(d.rarity) && !window.confirm(`Desmontar ${d.name}? O item será destruído e você recebe os materiais. Não pode ser desfeito.`)) return;
+        opts.send(Msg.Dismantle, { npc: n.id, slot: atual, confirm: true });
+      };
     }
     foot.append(note, go);
     card.append(list, foot);

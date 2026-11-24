@@ -28,6 +28,7 @@ import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuse
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
 import { craftItem } from "../game/craft.js";
 import { refinarItem } from "../game/refino.js";
+import { desmontarItem } from "../game/desmontar.js";
 import { engastarGema, removerGema } from "../game/engaste.js";
 import { addCoins, buyItem, sellSlot, breakSlot, mergeItems, parseOffer, executeTrade, emptyOffer, sameOffer, describeCoins, type TradeOffer } from "../game/economy.js";
 import { parties, type Result } from "../game/party.js";
@@ -208,6 +209,8 @@ export class ZoneRoom extends Room<ZoneState> {
     this.onMessage(Msg.Craft, (client, p: { npc?: unknown; tipo?: unknown; familia?: unknown; peca?: unknown; raridade?: unknown }) => this.econOp(client, p?.npc, "smith", (pl) => craftItem(pl.inv, pl.cls as CharClass, pl.level, p)));
     // refino na Ferreira (aba Refinar): +1 por vez, custa Tostões e material; nunca quebra o item (ver game/refino.ts)
     this.onMessage(Msg.Refine, (client, p: { npc?: unknown; origem?: unknown; slot?: unknown }) => this.econOp(client, p?.npc, "smith", (pl) => refinarItem(pl.inv, p)));
+    // desmontar na Ferreira (aba Desmontar, C3.5): equipamento da mochila vira materiais de craft; troca atômica (ver game/desmontar.ts)
+    this.onMessage(Msg.Dismantle, (client, p: { npc?: unknown; slot?: unknown; confirm?: unknown }) => this.econOp(client, p?.npc, "smith", (pl) => desmontarItem(pl.inv, p)));
     // engaste na Ferreira (aba Engastar, C3.3): gema num espaço livre, paga em Óbolos; remover libera o espaço (gema perdida)
     this.onMessage(Msg.Socket, (client, p: { npc?: unknown; origem?: unknown; slot?: unknown; gema?: unknown }) => this.econOp(client, p?.npc, "smith", (pl) => engastarGema(pl.inv, p)));
     this.onMessage(Msg.Unsocket, (client, p: { npc?: unknown; origem?: unknown; slot?: unknown; idx?: unknown }) => this.econOp(client, p?.npc, "smith", (pl) => removerGema(pl.inv, p)));
