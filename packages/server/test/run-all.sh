@@ -114,6 +114,8 @@ run_case 2991 "LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/buffs.mjs "
 run_case 2997 "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1" test/moderacao.mjs ""
 # Quests (C1.1): aceitar, progredir, entregar e persistir. QUEST_TEST=1 libera o atalho de abates de teste (nunca em produção).
 run_case 2998 "QUEST_TEST=1 QUEST_FIXTURE=1 API_RATE_MULT=100" test/quests.mjs ""
+# Quest de abate REAL (PD-07): aceita na cidade, atravessa o portão, mata 3 esqueletos com ataque de verdade, entrega e persiste.
+run_case 2998 "QUEST_TEST=1 QUEST_FIXTURE=1 LOOT_TEST=1 API_RATE_MULT=100" test/quests_combate.mjs ""
 # Tutorial (C1.4): 5 quests encadeadas na cidade, para as 4 classes; reconecta no meio e no fim.
 run_case 2994 "QUEST_TEST=1 API_RATE_MULT=100" test/tutorial.mjs ""
 # Dicas contextuais (C1.6): grava a dica vista, reenvia ao reentrar e ignora id inválido.
