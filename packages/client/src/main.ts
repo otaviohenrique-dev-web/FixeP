@@ -1316,7 +1316,9 @@ class WorldScene extends Phaser.Scene {
     }
     // foco travado (toque ou clique): as habilidades mirram nele, mesmo com o mouse ou o polegar fora dele
     // (a esquiva e as ações sem alcance não mirram no foco: a esquiva vai para onde o polegar/mouse aponta, não para cima do inimigo)
-    const focus = this.reach(a) > 0 ? this.targets().find((t) => t.key === this.lockKey) : undefined;
+    // No computador as habilidades (exceto o ataque básico) NÃO grudam no foco: vão para onde o ponteiro aponta (o alcance é limitado pelo servidor/prévia).
+    // No toque, o toque curto mira o alvo travado; segurar e arrastar escolhe o ponto livremente (aimGrid).
+    const focus = this.reach(a) > 0 && (this.touchMode || a === "attack") ? this.targets().find((t) => t.key === this.lockKey) : undefined;
     if (focus) return { x: focus.x, y: focus.y };
     if (!this.touchMode) {
       // ataque básico no teclado sem foco: mira no inimigo do alcance (como no toque), não no ponteiro nem na última direção
