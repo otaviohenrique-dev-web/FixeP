@@ -46,16 +46,18 @@ check("o limiar de 90% ficou gravado", me().autoPotAt === 90, `autoPotAt ${me().
 
 const sk = room.state.enemies.get("e2"); // esqueleto nível 1 da zona 1
 check("o esqueleto de teste (e2) existe na zona 1", !!sk);
-let minHp = me().hp;
-const watch = setInterval(() => { minHp = Math.min(minHp, me().hp); }, 50);
+// o dano do esqueleto só DERRUBA a vida; a regeneração sobe devagar (centésimos por amostra). Um salto grande entre
+// duas amostras de 50 ms só pode ser a poção, mesmo que o esqueleto volte a bater depois (sem depender da ordem).
+let prevHp = me().hp, maxSalto = 0;
+const watch = setInterval(() => { const h = me().hp; maxSalto = Math.max(maxSalto, h - prevHp); prevHp = h; }, 50);
 room.send("move_to", { x: sk.x - 2.2, y: sk.y }); // entra no alcance; ele reage e bate (o Guerreiro não ataca)
 const bebeu = await until(() => pots() < antes0, 30000, 100);
+await sleep(1000); // o estado da vida pode chegar depois da fotografia da bolsa: olha mais um pouco
 clearInterval(watch);
-// a fotografia da bolsa pode chegar antes da vida no estado: espera a vida subir (a poção cura 40)
-const subiu = bebeu && (await until(() => me().hp > minHp, 5000, 50));
 check("apanhou do esqueleto (recebeu dano de verdade)", st.hits > 0, `acertos ${st.hits}`);
 check("uma poção saiu da bolsa sem nenhum inv_use do cliente", bebeu, `poções ${antes0} -> ${pots()}`);
-check("a vida voltou a subir depois de beber (acima do ponto mais baixo)", subiu, `mínimo ${minHp.toFixed(0)}, agora ${me().hp.toFixed(0)}`);
+// a poção cura 40 (limitado ao máximo): de uma vida de até 108 de 120 o salto é de pelo menos 12
+check("a vida voltou a subir de uma vez, como cura de poção", maxSalto >= 10, `maior salto entre amostras: ${maxSalto.toFixed(0)}`);
 check("sala continua ativa e o personagem vivo", !st.left && !me().dead, `hp ${me().hp}/${me().maxHp}`);
 
 console.log("\n== 2. Sem nenhuma poção: nada quebra ==");
