@@ -1,5 +1,5 @@
 import {
-  ITEMS, Msg, RARITY_COLOR, RARITY_NAME, RARITIES, COIN_IRON, COIN_OBOL, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_FEE_PCT, MARKET_DAYS, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MARKET_SORTS, MARKET_SORT_NAME, MARKET_MAX_ACTIVE, priceHeadline, sortByUnitPrice,
+  ITEMS, Msg, RARITY_COLOR, RARITY_NAME, RARITIES, COIN_IRON, COIN_OBOL, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_FEE_PCT, MARKET_DAYS, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MARKET_MAX_ACTIVE, priceHeadline, sortByUnitPrice,
   EQUIP_SLOT_NAME, CLASS_DEFS, itemValue, listingFee, suggestedPrice,
   type InventorySnapshot, type ItemDef, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type MarketFilter, type MarketPricesEvent, type MyListing, type MarketCurrency, type CharClass, type ItemKind, type Rarity,
 } from "@frixep/shared";
@@ -22,12 +22,18 @@ export interface MarketUi {
 
 const CSS = `
 .mk-card{width:min(720px,100%);height:min(640px,calc(100vh - 24px))}
-.mk-filters{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:0 14px 8px}
+.mk-filters{flex:none;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 14px 8px}
 .mk-filters input,.mk-filters select{min-width:0;min-height:34px;box-sizing:border-box;padding:0 8px;border-radius:5px;border:1px solid rgba(160,200,240,.3);background:rgba(6,12,20,.9);color:#e6eef9;font:600 12px/1 Georgia,serif}
-.mk-filters .q{grid-column:span 3}.mk-filters .s{grid-column:span 3}
-.mk-filters .c{grid-column:span 2}.mk-filters .p{grid-column:span 3}
-.mk-filters input:focus-visible,.mk-filters select:focus-visible{outline:2px solid #ffd2a3}
-@media (max-width:620px){.mk-filters{grid-template-columns:1fr 1fr}.mk-filters .q,.mk-filters .s,.mk-filters .c,.mk-filters .p{grid-column:span 1}.mk-filters .q{grid-column:span 2}}
+.mk-filters select{flex:1 1 118px}
+.mk-filters .p{flex:1 1 84px;width:84px}
+.mk-search{flex:2 1 180px;display:flex;min-width:0}
+.mk-search input{flex:1 1 auto;width:100%;border-radius:5px 0 0 5px}
+.mk-search button{flex:none;width:36px;min-height:34px;display:grid;place-items:center;padding:0;box-sizing:border-box;border:1px solid rgba(160,200,240,.3);border-left:0;border-radius:0 5px 5px 0;background:rgba(20,32,48,.95);color:#ffd2a3;cursor:pointer}
+.mk-filters input:focus-visible,.mk-filters select:focus-visible,.mk-search button:focus-visible,.mk-head button:focus-visible{outline:2px solid #ffd2a3}
+.mk-head{flex:none;display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:4px 14px 4px;border-bottom:1px solid rgba(160,200,240,.2)}
+.mk-head button{min-height:26px;padding:0 8px;border:0;background:none;color:#9fc0e0;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+.mk-head button.on{color:#ffd2a3}
+.mk-head .pr{justify-self:end}
 .mk-card .ec-list{flex:1 1 auto;min-height:0}
 .mk-row{flex:none;display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:6px 8px;border-radius:6px;background:linear-gradient(90deg,rgba(6,12,20,.85),rgba(14,22,34,.7));border:1px solid rgba(160,200,240,.18);position:relative;overflow:hidden}
 .mk-row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--rc,#445)}
@@ -119,7 +125,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
   let npc: NpcDef | null = null;
   let tab: "buy" | "sell" | "mine" = "buy";
   let snap: InventorySnapshot = { inv: [], equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null }, iron: 0, obols: 0 };
-  let filter: Required<Pick<MarketFilter, "q" | "cls" | "kind" | "rarity" | "currency" | "sort" | "page">> & { minPrice: number; maxPrice: number } = { q: "", cls: "all", kind: "all", rarity: "all", currency: "all", sort: "newest", page: 0, minPrice: 0, maxPrice: MARKET_MAX_PRICE };
+  let filter: Required<Pick<MarketFilter, "q" | "cls" | "kind" | "rarity" | "currency" | "sort" | "page">> & { minPrice: number; maxPrice: number } = { q: "", cls: "all", kind: "all", rarity: "all", currency: "all", sort: "price_asc", page: 0, minPrice: 0, maxPrice: MARKET_MAX_PRICE };
   let page: MarketPage | null = null;
   let mine: MarketMineEvent | null = null;
   let listSlot = -1; // aba Vender: espaço com o formulário aberto
@@ -204,16 +210,41 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
   function renderBuy() {
     const f = el("div", "mk-filters");
     const setF = (patch: Partial<typeof filter>) => { filter = { ...filter, ...patch, page: patch.page ?? 0 }; browseSoon(); };
+    // linha 1: busca por nome (com lupa) + dropdowns compactos; quebram para a linha de baixo no celular
+    const search = el("div", "mk-search");
+    const q = input("q", "Procurar pelo nome", "q", "text", filter.q, "Procurar…", (v) => setF({ q: v.slice(0, 30) }));
+    q.enterKeyHint = "search";
+    q.onkeydown = (e) => { if (e.key === "Enter") { clearTimeout(browseTimer); browse(); } };
+    const lupa = el("button", "", "");
+    lupa.type = "button"; lupa.setAttribute("aria-label", "Buscar");
+    lupa.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>';
+    lupa.onclick = () => { clearTimeout(browseTimer); browse(); };
+    search.append(q, lupa);
     f.append(
-      input("q", "Buscar pelo nome", "q", "text", filter.q, "Buscar pelo nome…", (v) => setF({ q: v.slice(0, 30) })),
-      select("sort", "Ordenar", "s", MARKET_SORTS.map((s) => [s, MARKET_SORT_NAME[s]] as [string, string]), filter.sort, (v) => { setF({ sort: v as typeof filter.sort }); render(); }),
-      select("cls", "Classe", "c", [["all", "Todas as classes"], ...(["warrior", "archer", "cleric", "mage"] as CharClass[]).map((c) => [c, CLASS_DEFS[c].name] as [string, string])], filter.cls, (v) => { setF({ cls: v as typeof filter.cls }); render(); }),
-      select("kind", "Tipo", "c", [["all", "Todos os tipos"], ...(["weapon", "offhand", "helmet", "armor", "boots", "cape", "potion"] as ItemKind[]).map((k) => [k, k === "potion" ? "Poção" : EQUIP_SLOT_NAME[k as keyof typeof EQUIP_SLOT_NAME]] as [string, string])], filter.kind, (v) => { setF({ kind: v as typeof filter.kind }); render(); }),
-      select("rarity", "Raridade", "c", [["all", "Todas as raridades"], ...RARITIES.map((r) => [r, RARITY_NAME[r]] as [string, string])], filter.rarity, (v) => { setF({ rarity: v as Rarity | "all" }); render(); }),
-      select("cur", "Moeda", "c", [["all", "Todas as moedas"], ["iron", "Tostões"], ["obols", "Óbolos de Sangue"]], filter.currency, (v) => { setF({ currency: v as typeof filter.currency }); render(); }),
+      search,
+      select("kind", "Categoria", "c", [["all", "Categoria"], ...(["weapon", "offhand", "helmet", "armor", "boots", "cape", "potion"] as ItemKind[]).map((k) => [k, k === "potion" ? "Poção" : EQUIP_SLOT_NAME[k as keyof typeof EQUIP_SLOT_NAME]] as [string, string])], filter.kind, (v) => { setF({ kind: v as typeof filter.kind }); render(); }),
+      select("cls", "Classe", "c",[["all", "Todas as classes"], ...(["warrior", "archer", "cleric", "mage"] as CharClass[]).map((c) => [c, CLASS_DEFS[c].name] as [string, string])], filter.cls, (v) => { setF({ cls: v as typeof filter.cls }); render(); }),
+      select("rarity", "Raridade", "c", [["all", "Raridade"], ...RARITIES.map((r) => [r, RARITY_NAME[r]] as [string, string])], filter.rarity, (v) => { setF({ rarity: v as Rarity | "all" }); render(); }),
+      select("cur", "Moeda", "c", [["all", "Moeda"], ["iron", "Tostões"], ["obols", "Óbolos de Sangue"]], filter.currency, (v) => { setF({ currency: v as typeof filter.currency }); render(); }),
       input("min", "Preço mínimo", "p", "number", filter.minPrice ? String(filter.minPrice) : "", "Preço mín.", (v) => setF({ minPrice: Math.max(0, Math.floor(Number(v) || 0)) })),
       input("max", "Preço máximo", "p", "number", filter.maxPrice < MARKET_MAX_PRICE ? String(filter.maxPrice) : "", "Preço máx.", (v) => setF({ maxPrice: v === "" ? MARKET_MAX_PRICE : Math.max(0, Math.floor(Number(v) || 0)) })),
     );
+    // linha 2: cabeçalho de colunas clicável. Preço alterna mais barato/mais caro; Item ordena por raridade (o servidor não ordena por nome).
+    const head = el("div", "mk-head");
+    const hItem = el("button", "", "Item");
+    hItem.type = "button";
+    hItem.classList.toggle("on", filter.sort === "rarity");
+    hItem.setAttribute("aria-label", "Ordenar por raridade");
+    hItem.onclick = () => { filter = { ...filter, sort: "rarity", page: 0 }; render(); browse(); };
+    const hPrice = el("button", "pr", "Preço");
+    hPrice.type = "button";
+    const asc = filter.sort === "price_asc";
+    const desc = filter.sort === "price_desc";
+    hPrice.classList.toggle("on", asc || desc);
+    hPrice.textContent = `Preço ${asc ? "▲" : desc ? "▼" : "↕"}`;
+    hPrice.setAttribute("aria-label", asc ? "Preço: do menor para o maior. Clique para inverter" : desc ? "Preço: do maior para o menor. Clique para inverter" : "Ordenar por preço (menor primeiro)");
+    hPrice.onclick = () => { filter = { ...filter, sort: asc ? "price_desc" : "price_asc", page: 0 }; render(); browse(); };
+    head.append(el("span"), hItem, hPrice);
     const list = el("div", "ec-list");
     if (!page) list.append(el("div", "ec-empty", "Consultando o mercado…"));
     else if (!page.items.length) list.append(el("div", "ec-empty", "Nenhuma listagem com esses filtros."));
@@ -244,7 +275,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
       row.append(ic, info, act);
       list.append(row);
     }
-    card.append(f, list);
+    card.append(f, head, list);
     if (page && page.pages > 1) {
       const pg = el("div", "mk-pager");
       const prev = el("button", "ec-btn", "‹"); prev.type = "button"; prev.disabled = page.page <= 0; prev.setAttribute("aria-label", "Página anterior");
