@@ -23,6 +23,9 @@ const CSS = `
 .fc-card[aria-checked=true]{border-color:#ff9a4d;box-shadow:0 0 18px rgba(255,120,40,.3);background:linear-gradient(180deg,rgba(120,50,12,.85),rgba(50,18,6,.95))}
 .fc-card:disabled{opacity:.45;cursor:not-allowed}
 .fc-card:focus-visible,.fc-link:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
+.fc-back{position:fixed;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));z-index:10000;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:5px;cursor:pointer;color:#dbeaff;background:linear-gradient(180deg,rgba(24,40,60,.82),rgba(7,13,22,.9));border:1px solid rgba(160,200,240,.35);font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.12em;text-transform:uppercase;max-width:calc(100vw - 24px - 60px);white-space:nowrap}
+.fc-back:hover{border-color:#ff9a4d}
+.fc-back:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
 .fc-link{align-self:center;margin-top:2px;background:none;border:0;color:#7fa6cc;font:400 12px/1 Georgia,serif;letter-spacing:.08em;cursor:pointer;text-decoration:underline;padding:8px}
 `;
 
@@ -64,7 +67,7 @@ function selectScreen(token: string, lista: CharacterInfo[], max: number): Promi
       s.button(`${escHtml(c.name)} · ${escHtml(classe)} · nível ${c.level}`, "&#10022;", i === 0, () => { sair(); resolve(c); });
     });
     if (lista.length < max) {
-      s.button(`Criar personagem (${lista.length} de ${max})`, "+", false, () => { sair(); void createScreen(token).then(resolve); });
+      s.button(`Criar personagem (${lista.length} de ${max})`, "+", false, () => { sair(); void createScreen(token, () => ensureCharacter(token)).then(resolve); });
     }
     const out = document.createElement("button");
     out.type = "button";
@@ -82,7 +85,8 @@ function retryScreen(): Promise<void> {
   });
 }
 
-function createScreen(token: string): Promise<CharacterInfo> {
+/** Criação de personagem. `voltar` (quando a conta já tem personagens) leva de volta à lista, no canto superior esquerdo. */
+function createScreen(token: string, voltar?: () => Promise<CharacterInfo>): Promise<CharacterInfo> {
   return new Promise((resolve) => {
     const style = document.createElement("style");
     style.textContent = CSS;
@@ -143,6 +147,7 @@ function createScreen(token: string): Promise<CharacterInfo> {
         if (!res.ok) return s.setMessage(body.error ?? "Não foi possível criar o personagem.");
         s.destroy();
         style.remove();
+        back?.remove();
         resolve(body.character as CharacterInfo);
       } catch {
         s.setMessage("Servidor indisponível. Tente novamente.");
@@ -157,6 +162,18 @@ function createScreen(token: string): Promise<CharacterInfo> {
     out.textContent = "Voltar ao login";
     out.onclick = () => logout();
     s.panel.insertBefore(out, s.msg);
+
+    // atalho "Personagens" no canto superior esquerdo: volta à lista da conta sem recarregar a sessão (só se a conta já tem personagem)
+    let back: HTMLButtonElement | null = null;
+    if (voltar) {
+      back = document.createElement("button");
+      back.type = "button";
+      back.className = "fc-back";
+      back.setAttribute("aria-label", "Voltar à lista de personagens");
+      back.innerHTML = "&#8249; Personagens";
+      back.onclick = () => { back?.remove(); s.destroy(); style.remove(); resolve(voltar()); };
+      document.body.append(back);
+    }
 
     setTimeout(() => input.focus(), 900); // depois da animação de entrada
   });
