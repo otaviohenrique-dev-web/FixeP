@@ -1,6 +1,7 @@
 import { isTypingTarget } from "./keys";
 import { ICONS } from "./inventory";
-import { ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, VAULT_PAGE, VAULT_PAGES, VAULT_SLOTS, type InventorySnapshot, type VaultSnapshot, type ItemDef } from "@frixep/shared";
+import { bindItemTip, bindDoubleTap, dicaDeToqueAberta, hideItemTip, type ItemTipData } from "./itemtip";
+import { ITEMS,INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, VAULT_PAGE, VAULT_PAGES, VAULT_SLOTS, type InventorySnapshot, type VaultSnapshot, type ItemDef } from "@frixep/shared";
 
 /**
  * Baú de armazenamento da cidade (DOM). O servidor decide tudo (distância, espaço, saldo): aqui só se mostra a fotografia e se pedem as ações.
@@ -140,6 +141,10 @@ export function mountVault(opts: { send(type: string, payload: unknown): void })
       if (st.qty > 1) { const q = el("span", "vt-qty", String(st.qty)); q.style.color = "#fff"; b.append(q); }
       b.draggable = true;
       b.ondragstart = (e) => { e.dataTransfer?.setData("text/plain", `${side}:${i}`); sel = { side, i }; };
+      // inspecionar: a mesma dica da mochila (PC: passar o mouse; celular: segurar)
+      bindItemTip(b, () => tipDo(side, i));
+      // um toque com a dica aberta (celular) só fecha a dica, sem selecionar nem mover o item
+      b.addEventListener("click", (e) => { if (dicaDeToqueAberta(b)) { e.stopImmediatePropagation(); e.preventDefault(); hideItemTip(); } }, true);
     }
     // alvo de soltar: bolsa -> baú (espaço escolhido), baú -> bolsa, baú -> baú
     b.ondragover = (e) => { e.preventDefault(); b.classList.add("over"); };
@@ -162,18 +167,31 @@ export function mountVault(opts: { send(type: string, payload: unknown): void })
         sel = null;
         return render();
       }
+      if (Date.now() - movidoEm < 600) return; // o 2º toque do duplo toque já moveu: não seleciona o espaço
       if (sel && sel.side === side && sel.i === i) { sel = null; return render(); }
       sel = st ? { side, i } : null;
       qty = st ? st.qty : 1;
       render();
     };
-    b.ondblclick = () => { if (st) move(side, i, st.qty); };
+    // duplo toque (celular) ou duplo clique (PC) move a pilha inteira; a chave identifica o espaço mesmo com o botão recriado
+    bindDoubleTap(b, `${side}:${i}`, () => { if (st) move(side, i, st.qty); });
     return b;
   }
 
+  /** dados da dica de um item do baú ou da mochila (na mochila, compara com a peça equipada do mesmo tipo) */
+  function tipDo(side: "bag" | "vault", i: number): ItemTipData {
+    const st = stackOf(side, i)!;
+    const def = ITEMS[st.id];
+    const slot = def.kind as keyof InventorySnapshot["equip"];
+    const eq = slot in inv.equip ? ITEMS[inv.equip[slot] ?? ""] ?? null : null;
+    return { def, cmp: eq && eq.id !== def.id ? eq : null, af: st.af, rf: st.rf, gm: st.gm };
+  }
+
+  let movidoEm = 0;
   function move(side: "bag" | "vault", i: number, n: number) {
     opts.send(side === "bag" ? Msg.VaultDeposit : Msg.VaultWithdraw, { slot: i, qty: n });
     sel = null;
+    movidoEm = Date.now();
   }
 
   function coinRow(kind: "iron" | "obols"): HTMLElement {
@@ -196,7 +214,8 @@ export function mountVault(opts: { send(type: string, payload: unknown): void })
 
   function render() {
     if (!isOpen()) return;
-    const keep = document.activeElement instanceof HTMLInputElement ? { v: document.activeElement.value, label: document.activeElement.getAttribute("aria-label") } : null;
+    hideItemTip(); // a grade é refeita: a dica antiga apontaria para um botão que já não existe
+    const keep =document.activeElement instanceof HTMLInputElement ? { v: document.activeElement.value, label: document.activeElement.getAttribute("aria-label") } : null;
     card.replaceChildren();
     const head = el("div", "vt-head");
     const t = el("h2", "vt-title", "Baú de Brasalume");
@@ -251,7 +270,7 @@ export function mountVault(opts: { send(type: string, payload: unknown): void })
       if (side === "vault") det.append(el("small", "", "Toque em outro espaço do baú para trocar de lugar."));
     } else {
       const info = el("div", "t");
-      info.append(el("b", "", "Toque num item"), el("small", "", "Duplo toque move a pilha inteira. No computador, também dá para arrastar."));
+      info.append(el("b", "", "Toque num item"), el("small", "", "Duplo toque move a pilha inteira. Segure para ver a dica. No computador, também dá para arrastar."));
       det.append(info);
     }
 

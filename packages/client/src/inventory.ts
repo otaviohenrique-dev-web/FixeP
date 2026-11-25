@@ -40,7 +40,6 @@ const CSS = `
 .iv-poder{display:flex;flex-direction:column;align-items:center;gap:2px;margin:4px 0 2px;padding:6px 8px;border-radius:8px;background:linear-gradient(180deg,rgba(20,30,46,.7),rgba(8,12,20,.7));border:1px solid rgba(201,168,90,.35)}
 .iv-poder .iv-pl{font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.22em;color:#c9b07a;text-transform:uppercase}
 .iv-poder .pw-n{font:800 30px/1 Georgia,serif;color:#f3d77a;text-shadow:0 2px 6px #000}
-.iv-stats{white-space:pre-line}
 .iv-wallet{display:flex;gap:14px;align-items:center;margin:0 0 8px;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9}
 .iv-wallet span{display:flex;align-items:center;gap:5px}
 .iv-wallet img{width:20px;height:20px;image-rendering:pixelated}
@@ -52,7 +51,7 @@ const CSS = `
 .iv-doll{--s:72px;position:relative;width:100%;max-width:262px;aspect-ratio:262/292;border-radius:10px;overflow:hidden;
   background:linear-gradient(180deg,rgba(14,14,16,.94),rgba(6,6,9,.97));border:1px solid rgba(255,150,70,.22);
   box-shadow:inset 0 0 40px rgba(0,0,0,.7)}
-@media (max-width:640px){.iv-doll{--s:56px;max-width:232px}.iv-es .lbl{display:none}.iv-acc{padding:6px 0 0}.iv-acc .iv-es{--s:34px;width:34px;height:34px}.iv-stats{margin:2px 0 0;font-size:11px}}
+@media (max-width:640px){.iv-doll{--s:56px;max-width:232px}.iv-es .lbl{display:none}.iv-acc{padding:6px 0 0}.iv-acc .iv-es{--s:34px;width:34px;height:34px}}
 .iv-sil{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .iv-es{position:absolute;width:var(--s);height:var(--s);transform:translate(-50%,-50%);display:grid;place-items:center;padding:0;border-radius:7px;cursor:pointer;color:#7a8da3;
   --rc:rgba(160,200,240,.35);background:radial-gradient(circle at 50% 35%,rgba(26,38,56,.92),rgba(5,9,15,.96));border:2px solid var(--rc);box-shadow:inset 0 0 10px rgba(0,0,0,.8);
@@ -98,10 +97,24 @@ const CSS = `
 .iv-tip .up{color:#7dd68a}.iv-tip .dn{color:#ff8f7e}.iv-tip .eq{color:#8fb0cf}
 .iv-tip hr{border:0;border-top:1px solid rgba(160,200,240,.18);margin:5px 0}
 .iv-tip .bad{color:#ff9d8a}
-.iv-stats{font:400 12px/1.5 Georgia,serif;color:#9fc0e0;margin:6px 0 0;text-align:center}
-.iv-stats .st-r{display:block}
+/* atributos: largura toda abaixo do boneco e da mochila; duas colunas (rótulo à esquerda, valor à direita) */
+.iv-stats{margin:12px 0 0;font:400 12px/1.4 Georgia,serif;color:#9fc0e0}
+.iv-st-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px 22px}
+.iv-st-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.iv-st-grp{display:flex;flex-direction:column;gap:2px}
+.iv-st-grp h4{margin:0 0 4px;padding-bottom:3px;border-bottom:1px solid rgba(201,168,90,.28);font:700 10px/1.2 "Cinzel",Georgia,serif;letter-spacing:.2em;text-transform:uppercase;color:#c9b07a}
+.iv-stats .st-r{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:2px 0}
+.iv-stats .st-l{min-width:0;color:#b9d2ea}
+.iv-stats .st-v{flex:none;font-weight:700;color:#eaf4ff;white-space:nowrap;font-variant-numeric:tabular-nums}
 .iv-stats .st-up{color:#7dd68a;font-weight:700}
 .iv-stats .st-dn{color:#ff8f7e;font-weight:700}
+.iv-st-full{display:flex;flex-direction:column;gap:3px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(160,200,240,.16)}
+.iv-st-full .st-r{justify-content:flex-start}
+.iv-st-full .st-kit{font-weight:700;color:#eaf4ff}
+.iv-st-full .st-set{font:700 11px/1.3 "Cinzel",Georgia,serif;letter-spacing:.08em;color:#f3d77a}
+.iv-st-full .st-bon{padding-left:12px;color:#8fb0cf}
+.iv-st-full .st-bon.on{color:#e6f0ff}
+@media (max-width:640px){.iv-st-cols{grid-template-columns:1fr;gap:10px}.iv-stats{font-size:11px}}
 .iv-gain{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;pointer-events:none;text-align:center;font-family:Cinzel,Georgia,serif;width:min(94vw,520px)}
 .iv-gain-in{position:relative;animation:iv-gain-pop .5s cubic-bezier(.2,1.4,.4,1) both,iv-gain-out .5s ease-in 2.7s forwards}
 .iv-gain .g-lbl{display:block;font-size:clamp(10px,2vw,12px);font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:#f3d77a;text-shadow:0 2px 0 #000}
@@ -183,14 +196,14 @@ function statLines(d: ItemDef): string[] {
 }
 
 /** atributos do personagem no painel (quanto maior, melhor). `sempre`: aparece mesmo zerado */
-const METRICAS: { label(c: CharClass): string; pre: string; un: string; sempre: boolean; val(g: GearBonuses): number }[] = [
-  { label: () => "Poder", pre: "+", un: "%", sempre: true, val: (g) => g.dmgPct },
-  { label: () => "Vida", pre: "+", un: "", sempre: true, val: (g) => g.hp },
-  { label: () => "Crítico", pre: "+", un: "%", sempre: false, val: (g) => g.crit + (g.kit.crit ?? 0) },
-  { label: () => "Dano recebido", pre: "−", un: "%", sempre: false, val: (g) => g.dr },
-  { label: () => "Recarga", pre: "−", un: "%", sempre: false, val: (g) => g.cdr },
-  { label: (c) => `${CLASS_DEFS[c].resource.name} máx.`, pre: "+", un: "", sempre: false, val: (g) => g.mana },
-  { label: () => "Regeneração", pre: "+", un: "/s", sempre: false, val: (g) => g.regen },
+const METRICAS: { label(c: CharClass): string; pre: string; un: string; sempre: boolean; grupo: "Ofensivo" | "Defensivo" | "Utilidade"; val(g: GearBonuses): number }[] = [
+  { label: () => "Poder", pre: "+", un: "%", sempre: true, grupo: "Ofensivo", val: (g) => g.dmgPct },
+  { label: () => "Crítico", pre: "+", un: "%", sempre: false, grupo: "Ofensivo", val: (g) => g.crit + (g.kit.crit ?? 0) },
+  { label: () => "Vida", pre: "+", un: "", sempre: true, grupo: "Defensivo", val: (g) => g.hp },
+  { label: (c) => `${CLASS_DEFS[c].resource.name} máx.`, pre: "+", un: "", sempre: false, grupo: "Defensivo", val: (g) => g.mana },
+  { label: () => "Dano recebido", pre: "−", un: "%", sempre: false, grupo: "Defensivo", val: (g) => g.dr },
+  { label: () => "Regeneração", pre: "+", un: "/s", sempre: false, grupo: "Defensivo", val: (g) => g.regen },
+  { label: () => "Recarga", pre: "−", un: "%", sempre: false, grupo: "Utilidade", val: (g) => g.cdr },
 ];
 
 /** festa de atributos: ao equipar, um banner no MEIO da tela (PC e celular) mostra o ganho de poder e dos atributos, contando até o valor novo */
@@ -302,9 +315,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     <div class="iv-card" role="dialog" aria-modal="true" aria-label="Mochila">
       <div class="iv-head"><div class="iv-id"><div class="iv-medal"><canvas width="47" height="47" aria-hidden="true"></canvas></div><h2 class="iv-title">Mochila</h2></div><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
       <div class="iv-body">
-        <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><div class="iv-poder pw-host" aria-label="Poder total"><span class="iv-pl">Poder</span><b class="pw-n">0</b></div><p class="iv-stats"></p></div>
+        <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><div class="iv-poder pw-host" aria-label="Poder total"><span class="iv-pl">Poder</span><b class="pw-n">0</b></div></div>
         <div><div class="iv-wallet" aria-label="Moedas"></div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
       </div>
+      <div class="iv-stats" aria-label="Atributos"></div>
     </div>`;
   const toasts = document.createElement("div");
   toasts.className = "iv-toasts";
@@ -481,43 +495,73 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     }
     const cls = opts.getClass();
     statsEl.replaceChildren();
+    // duas colunas: Ofensivo + Utilidade à esquerda, Defensivo à direita; Kit e Conjunto ocupam a largura toda abaixo
+    const grupos = new Map<string, HTMLElement[]>();
     for (const m of METRICAS) {
       const v = m.val(now);
       const dv = novo ? m.val(novo) - v : 0;
       if (!m.sempre && !v && !(novo && m.val(novo))) continue;
       const row = document.createElement("span");
       row.className = "st-r";
-      row.textContent = v ? `${m.label(cls)} ${m.pre}${v}${m.un}` : m.label(cls);
+      const rot = document.createElement("span");
+      rot.className = "st-l";
+      rot.textContent = m.label(cls);
+      const val = document.createElement("b");
+      val.className = "st-v";
+      val.textContent = v ? `${m.pre}${v}${m.un}` : "—";
       if (dv) {
-        const b = document.createElement("b");
-        b.className = dv > 0 ? "st-up" : "st-dn";
-        b.textContent = ` ${dv > 0 ? "▲" : "▼"} ${dv > 0 ? "+" : "−"}${Math.abs(dv)}${m.un}`;
-        row.append(b);
+        const d = document.createElement("span");
+        d.className = dv > 0 ? "st-up" : "st-dn";
+        d.textContent = ` ${dv > 0 ? "▲" : "▼"} ${dv > 0 ? "+" : "−"}${Math.abs(dv)}${m.un}`;
+        val.append(d);
       }
-      statsEl.append(row);
+      row.append(rot, val);
+      if (!grupos.has(m.grupo)) grupos.set(m.grupo, []);
+      grupos.get(m.grupo)!.push(row);
     }
+    const bloco = (titulo: string, linhas: HTMLElement[]) => {
+      const g = document.createElement("div");
+      g.className = "iv-st-grp";
+      const h = document.createElement("h4");
+      h.textContent = titulo;
+      g.append(h, ...linhas);
+      return g;
+    };
+    const colA = document.createElement("div");
+    colA.className = "iv-st-col";
+    const colB = document.createElement("div");
+    colB.className = "iv-st-col";
+    for (const t of ["Ofensivo", "Utilidade"] as const) if (grupos.get(t)?.length) colA.append(bloco(t, grupos.get(t)!));
+    if (grupos.get("Defensivo")?.length) colB.append(bloco("Defensivo", grupos.get("Defensivo")!));
+    const cols = document.createElement("div");
+    cols.className = "iv-st-cols";
+    cols.append(colA, colB);
+    statsEl.append(cols);
+
+    const cheio = document.createElement("div");
+    cheio.className = "iv-st-full";
     const wd = snap.equip.weapon ? ITEMS[snap.equip.weapon] : null;
     if (wd?.wtype) {
       const k = document.createElement("span");
-      k.className = "st-r";
+      k.className = "st-r st-kit";
       k.textContent = `Kit: ${WEAPON_TYPES[wd.wtype].name}`;
-      statsEl.append(k);
+      cheio.append(k);
     }
     // conjunto ativo (C3.4): nome, peças (n/4) e os bônus; o que está ligado agora fica em destaque
     const cj = setAtivo(snap.equip, cls);
     if (cj && cj.n > 0) {
       const h = document.createElement("span");
-      h.className = "st-r";
+      h.className = "st-r st-set";
       h.textContent = `${cj.set.nome} (${cj.n}/4)`;
-      statsEl.append(h);
+      cheio.append(h);
       for (const [n, b] of [[2, cj.set.b2], [4, cj.set.b4]] as const) {
         const l = document.createElement("span");
-        l.className = "st-r";
-        l.style.opacity = cj.bonus === b ? "1" : "0.5";
+        l.className = `st-r st-bon${cj.bonus === b ? " on" : ""}`;
         l.textContent = `${cj.bonus === b ? "▸ " : ""}${n} peças: ${setBonusLinhas(b).join(", ")}`;
-        statsEl.append(l);
+        cheio.append(l);
       }
     }
+    if (cheio.childElementCount) statsEl.append(cheio);
   }
 
   function renderWallet() {
