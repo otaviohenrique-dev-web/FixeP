@@ -371,6 +371,8 @@ class WorldScene extends Phaser.Scene {
       cidade: () => !!ZONES[this.zoneId]?.safe,
       salvar: (slot) => this.room?.send(Msg.LoadoutSalvar, { slot }),
       aplicar: (slot) => this.room?.send(Msg.LoadoutAplicar, { slot }),
+      salvarEquip: (slot) => this.room?.send(Msg.LoadoutEquipSalvar, { slot }),
+      aplicarEquip: (slot) => this.room?.send(Msg.LoadoutEquipAplicar, { slot }),
       renomear: (slot, nome) => this.room?.send(Msg.LoadoutNome, { slot, nome }),
     });
     this.montarUtilidades();

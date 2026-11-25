@@ -12,7 +12,9 @@ import {
   VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
   limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId, aplicarSets,
   limparLoadouts, validarLoadout, sanitizarNomeLoadout, loadoutNomePadrao, LOADOUT_SLOTS, LOADOUT_COMBAT_LOCK_S, type Loadouts,
+  EQUIP_SLOTS, type EquipBuild,
 } from "@frixep/shared";
+import { aplicarEquipBuild } from "../game/loadoutEquip.js";
 import { verifySession, type AuthUser } from "../auth.js";
 
 /** Salas de zona vivas (para contar os jogadores online do jogo inteiro). */
@@ -332,6 +334,17 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!this.allow(client)) return;
       const pl = this.state.players.get(client.sessionId);
       if (pl) this.renomearLoadout(pl, p);
+    });
+    // equipamento do build (C3.6): mesma regra de cidade e sem combate recente; o conjunto vestido vai para o slot e volta com um clique
+    this.onMessage(Msg.LoadoutEquipSalvar, (client, p: { slot?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) this.salvarEquipLoadout(client.sessionId, pl, p);
+    });
+    this.onMessage(Msg.LoadoutEquipAplicar, (client, p: { slot?: unknown }) => {
+      if (!this.allow(client)) return;
+      const pl = this.state.players.get(client.sessionId);
+      if (pl) this.aplicarEquipLoadout(client.sessionId, pl, p);
     });
     this.onMessage(Msg.QMode, (client, p: { mode?: unknown }) => {
       if (!this.allow(client)) return;
@@ -1578,6 +1591,47 @@ export class ZoneRoom extends Room<ZoneState> {
     const lo: Loadouts = limparLoadouts(pl.loadouts, cls);
     lo.slots[i].nome = sanitizarNomeLoadout(p.nome, loadoutNomePadrao(i));
     this.gravarLoadouts(pl, lo);
+  }
+
+  /** Salva no slot as peças que o personagem veste agora (C3.6). Não mexe no build de talentos/variações nem no ativo. */
+  private salvarEquipLoadout(sid: string, pl: Player, p: { slot?: unknown }) {
+    const i = this.slotBuild(p);
+    if (i === null) return;
+    const bloqueio = this.loadoutBloqueio(pl);
+    if (bloqueio) return this.notify(sid, bloqueio);
+    const cls = pl.cls as CharClass;
+    const inv = pl.inv;
+    const build: EquipBuild = {};
+    for (const s of EQUIP_SLOTS) {
+      const id = inv.equip[s];
+      if (!id) continue;
+      const af = inv.equipAf?.[s], rf = inv.equipRf?.[s], gm = inv.equipGm?.[s];
+      build[s] = { id, ...(af?.length ? { af: [...af] } : {}), ...(rf ? { rf } : {}), ...(gm?.length ? { gm: [...gm] } : {}) };
+    }
+    const lo: Loadouts = limparLoadouts(pl.loadouts, cls);
+    lo.slots[i] = { ...lo.slots[i], equipSalvo: true, equip: build };
+    this.gravarLoadouts(pl, lo);
+    this.notifyOk(sid, `Equipamento salvo em ${lo.slots[i].nome}.`);
+  }
+
+  /** Veste o conjunto salvo no slot (C3.6): peça que não existe mais é ignorada; nada é duplicado nem perdido. */
+  private aplicarEquipLoadout(sid: string, pl: Player, p: { slot?: unknown }) {
+    const i = this.slotBuild(p);
+    if (i === null) return;
+    const bloqueio = this.loadoutBloqueio(pl);
+    if (bloqueio) return this.notify(sid, bloqueio);
+    if (pl.trading || pl.marketBusy) return this.notify(sid, pl.trading ? "Termine ou cancele a troca primeiro." : "Aguarde a operação do mercado.");
+    const cls = pl.cls as CharClass;
+    const lo: Loadouts = limparLoadouts(pl.loadouts, cls);
+    const slot = lo.slots[i];
+    if (!slot.equipSalvo) return this.notify(sid, "Este slot não tem equipamento salvo: salve um conjunto nele primeiro.");
+    const r = aplicarEquipBuild(pl.inv, slot.equip ?? {}, cls, pl.level);
+    if (!r.ok) return this.notify(sid, r.error);
+    pl.invDirty = true;
+    this.refreshStats(pl);
+    this.sendInv(sid, pl);
+    this.questsDaMochila(sid, pl);
+    this.notifyOk(sid, r.faltando.length ? `${slot.nome} aplicado; ${r.faltando.length} peça(s) não estão mais com você e foram ignoradas.` : `${slot.nome} (equipamento) aplicado.`);
   }
 
   /** Grava os builds em fila (a última gravação é sempre a mais nova) e manda o estado ao cliente. */
