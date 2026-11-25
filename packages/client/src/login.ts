@@ -300,12 +300,12 @@ class Ambience {
 
 // ---------------------------------------------------------------- estilos
 const CSS = `
-.fx-root{position:fixed;inset:0;overflow:hidden;background:#02050b;color:#dbeaff;font-family:"Cinzel",Georgia,"Times New Roman",serif;z-index:10;animation:fx-in 1.4s ease-out both;-webkit-tap-highlight-color:transparent;user-select:none}
+.fx-root{position:fixed;inset:0;overflow-x:hidden;overflow-y:auto;background:#02050b;color:#dbeaff;font-family:"Cinzel",Georgia,"Times New Roman",serif;z-index:10;animation:fx-in 1.4s ease-out both;-webkit-tap-highlight-color:transparent;user-select:none}
 .fx-layer{position:absolute;inset:-${PAD}px;will-change:transform}
 .fx-layer svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .fx-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .fx-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 58%,rgba(0,0,0,0) 38%,rgba(1,3,8,.55) 78%,rgba(0,1,4,.9) 100%),linear-gradient(180deg,rgba(2,5,11,.55) 0%,rgba(2,5,11,0) 28%,rgba(2,5,11,0) 70%,rgba(2,5,11,.7) 100%)}
-.fx-ui{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:clamp(20px,6vh,64px) 16px clamp(22px,6vh,56px)}
+.fx-ui{position:relative;min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:clamp(20px,6vh,64px) 16px clamp(22px,6vh,56px)}
 .fx-logo{text-align:center;animation:fx-rise 1.6s .35s cubic-bezier(.2,.7,.2,1) both}
 .fx-pre{display:block;font-weight:400;font-size:clamp(10px,1.5vw,13px);letter-spacing:.5em;text-transform:uppercase;color:#7fa6cc;opacity:.85;margin-bottom:6px;text-indent:.5em}
 .fx-logo h1{margin:0;font-weight:900;font-size:clamp(54px,10vw,124px);line-height:1;letter-spacing:.07em;text-indent:.07em;
