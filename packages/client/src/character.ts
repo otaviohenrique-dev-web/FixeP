@@ -23,7 +23,7 @@ const CSS = `
 .fc-card[aria-checked=true]{border-color:#ff9a4d;box-shadow:0 0 18px rgba(255,120,40,.3);background:linear-gradient(180deg,rgba(120,50,12,.85),rgba(50,18,6,.95))}
 .fc-card:disabled{opacity:.45;cursor:not-allowed}
 .fc-card:focus-visible,.fc-link:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
-.fc-back{position:fixed;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));z-index:10000;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:5px;cursor:pointer;color:#dbeaff;background:linear-gradient(180deg,rgba(24,40,60,.82),rgba(7,13,22,.9));border:1px solid rgba(160,200,240,.35);font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.12em;text-transform:uppercase;max-width:calc(100vw - 24px - 60px);white-space:nowrap}
+.fc-back{position:fixed;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));z-index:10000;display:inline-flex;align-items:center;gap:6px;padding:11px 16px;border-radius:6px;cursor:pointer;color:#fff;background:linear-gradient(180deg,rgba(120,50,12,.9),rgba(50,18,6,.95));border:1px solid #ff9a4d;box-shadow:0 0 16px rgba(255,120,40,.35);font:700 13px/1 "Cinzel",Georgia,serif;letter-spacing:.12em;text-transform:uppercase;max-width:calc(100vw - 24px - 60px);white-space:nowrap}
 .fc-back:hover{border-color:#ff9a4d}
 .fc-back:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
 .fc-link{align-self:center;margin-top:2px;background:none;border:0;color:#7fa6cc;font:400 12px/1 Georgia,serif;letter-spacing:.08em;cursor:pointer;text-decoration:underline;padding:8px}
@@ -159,7 +159,7 @@ function createScreen(token: string, voltar?: () => Promise<CharacterInfo>): Pro
     const out = document.createElement("button");
     out.type = "button";
     out.className = "fc-link";
-    out.textContent = "Voltar ao login";
+    out.textContent = "Desconectar";
     out.onclick = () => logout();
     s.panel.insertBefore(out, s.msg);
 
