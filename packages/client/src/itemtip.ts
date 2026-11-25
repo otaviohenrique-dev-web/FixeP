@@ -1,5 +1,5 @@
 import { fmtDelta } from "./poder";
-import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, afixoLinha, setDaPeca, setAtivo, setBonusLinhas, GEMA_BY_ID, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
+import { RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOT_NAME, WEAPON_TYPES, afixoLinha, setDaPeca, setAtivo, setBonusLinhas, GEMA_BY_ID, espacosDe, type ItemDef, type EquipSlot, type CharClass } from "@frixep/shared";
 /**
  * Dica de item: a MESMA ficha em todo lugar (mochila, trocas, mercado, baú).
  * - PC: aparece ao passar o mouse e segue o ponteiro.
@@ -78,6 +78,13 @@ const CSS = `
 .iv-tip .eq{color:#8fb0cf}
 .iv-tip .bad{color:#ff8f7e}
 .iv-tip hr{border:0;border-top:1px solid rgba(160,200,240,.2);margin:5px 0}
+.iv-tip .gema-tit{margin-top:6px;padding-top:4px;border-top:1px solid rgba(160,200,240,.2);color:#e8d28a;font:700 12px/1.2 "Cinzel",Georgia,serif}
+.iv-tip .gema-linha{display:flex;align-items:center;gap:6px;color:#b9d2ea;min-width:0;overflow-wrap:anywhere}
+.iv-tip .gema-linha.vazio{color:#7d8a99;font-style:italic}
+.iv-tip .gema-ico{flex:none;color:#9fd8ff;font-size:11px}
+.iv-tip .gema-linha.vazio .gema-ico{color:#5d6876}
+.iv-tip .gema-bonus{color:#7dd68a;font-weight:700}
+@media (max-width:480px){.iv-tip{max-width:min(270px,calc(100vw - 16px))}}
 `;
 
 let tip: HTMLDivElement | null = null;
@@ -128,8 +135,24 @@ function build(data: ItemTipData): void {
   });
   // afixos (atributos de drop): uma linha por afixo, na cor da raridade do item
   for (const id of data.af ?? []) { const r = document.createElement("div"); r.className = "afixo"; r.style.color = RARITY_COLOR[d.rarity]; r.textContent = afixoLinha(id, d.rarity); t.append(r); }
-  // gemas engastadas (C3.3): uma linha por gema, com o que ela soma
-  for (const id of data.gm ?? []) { const g = GEMA_BY_ID[id]; if (!g) continue; const r = document.createElement("div"); r.className = "afixo"; r.textContent = `${g.nome} (+${g.valor}${g.stat === "dmgPct" ? "% de dano" : " de vida"})`; t.append(r); }
+  // espaços de gema (C3.3): como "Propriedades adicionais" do MIR4. Sem espaço (comum, não engastável) = sem seção.
+  const espacos = espacosDe(d.kind, d.rarity);
+  if (espacos > 0) {
+    const cab = document.createElement("div"); cab.className = "gema-tit"; cab.textContent = "Espaços de gema"; t.append(cab);
+    for (let i = 0; i < espacos; i++) {
+      const g = GEMA_BY_ID[data.gm?.[i] ?? ""]; // gm ausente ou vazio = espaço vazio (sem erro)
+      const r = document.createElement("div"); r.className = g ? "gema-linha" : "gema-linha vazio";
+      const losango = document.createElement("span"); losango.className = "gema-ico"; losango.textContent = g ? "◆" : "◇";
+      const txt = document.createElement("span");
+      if (g) {
+        const nome = document.createElement("span"); nome.textContent = g.nome;
+        const bonus = document.createElement("span"); bonus.className = "gema-bonus";
+        bonus.textContent = `+${g.valor}${g.stat === "dmgPct" ? "% de dano" : " de vida"}`;
+        txt.append(nome, " ", bonus);
+      } else txt.textContent = "Espaço de gema vazio";
+      r.append(losango, txt); t.append(r);
+    }
+  }
   // conjunto (C3.4): "Conjunto X (n/4)" com os bônus de 2 e de 4 peças; o bônus ativo agora aparece em destaque
   const st = setDaPeca(d.id) ? setAtivo(ctx.getEquip?.() ?? {}, setDaPeca(d.id)!.classe) : null;
   if (st && st.set.id === setDaPeca(d.id)!.id) {
