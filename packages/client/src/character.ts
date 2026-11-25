@@ -26,6 +26,8 @@ const CSS = `
 .fc-back{position:fixed;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));z-index:10000;display:inline-flex;align-items:center;gap:6px;padding:11px 16px;border-radius:6px;cursor:pointer;color:#fff;background:linear-gradient(180deg,rgba(120,50,12,.9),rgba(50,18,6,.95));border:1px solid #ff9a4d;box-shadow:0 0 16px rgba(255,120,40,.35);font:700 13px/1 "Cinzel",Georgia,serif;letter-spacing:.12em;text-transform:uppercase;max-width:calc(100vw - 24px - 60px);white-space:nowrap}
 .fc-back:hover{border-color:#ff9a4d}
 .fc-back:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
+@media (max-height:720px){.fc-card{padding:7px 4px}.fc-field{gap:4px}.fc-cls{gap:6px}}
+@media (max-height:620px){.fc-input{min-height:40px;font-size:15px}.fc-card b{font-size:11px}.fc-card span{font-size:9px}}
 .fc-link{align-self:center;margin-top:2px;background:none;border:0;color:#7fa6cc;font:400 12px/1 Georgia,serif;letter-spacing:.08em;cursor:pointer;text-decoration:underline;padding:8px}
 `;
 
