@@ -74,6 +74,8 @@ export const Msg = {
   LoadoutSalvar: "loadout_salvar", // { slot }: grava as variações e os talentos atuais no slot (0-2); só na cidade e fora de combate (C2.4)
   LoadoutAplicar: "loadout_aplicar", // { slot }: aplica o build do slot de uma vez (sem custo); valida contra o nível atual; só na cidade e fora de combate (C2.4)
   LoadoutNome: "loadout_nome", // { slot, nome }: renomeia o slot (máx. 16 caracteres, sanitizado); vale em qualquer lugar (C2.4)
+  LoadoutEquipSalvar: "loadout_equip_salvar", // { slot }: grava as peças vestidas no slot (C3.6); só na cidade e fora de combate
+  LoadoutEquipAplicar: "loadout_equip_aplicar", // { slot }: veste o conjunto salvo no slot (C3.6); só na cidade e fora de combate
   AutoPot: "auto_pot", // { at }: limiar da auto-poção em % de vida (0 = desligada); o servidor limita a 0..90, grava e sincroniza
   QMode: "q_mode",// { mode: 0 | 1 }: o Clérigo escolhe o Q (0 = cura em área, 1 = cura focada); só fora de combate
   QuestAccept: "quest_aceitar", // { id }: aceita uma quest (o servidor valida nível, pré-requisitos e se já aceitou)

@@ -45,6 +45,7 @@
     "test:autopocao:disparo": "node test/autopocao-disparo.mjs",
     "test:variacoes:unit": "tsx test/variacoes.unit.ts",
     "test:loadouts:unit": "tsx test/loadouts.unit.ts",
+    "test:loadout-equip:unit": "tsx test/loadout-equip.unit.ts",
     "test:simulacao:unit": "tsx test/simulacao.unit.ts",
     "test:refino:unit": "tsx test/refino.unit.ts",
     "test:refino": "node test/refino.mjs",

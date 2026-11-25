@@ -1,4 +1,4 @@
-import { LOADOUT_SLOTS, LOADOUT_NOME_MAX, limparLoadouts, resumoLoadout, validarLoadout, type CharClass, type Loadouts } from "@frixep/shared";
+import { LOADOUT_SLOTS, LOADOUT_NOME_MAX, limparLoadouts, resumoLoadout, resumoEquip, validarLoadout, type CharClass, type Loadouts } from "@frixep/shared";
 import { isTypingTarget } from "./keys";
 
 /**
@@ -25,6 +25,8 @@ interface BuildsOpts {
   salvar(slot: number): void;
   aplicar(slot: number): void;
   renomear(slot: number, nome: string): void;
+  salvarEquip(slot: number): void;
+  aplicarEquip(slot: number): void;
 }
 
 interface SlotUi {
@@ -34,6 +36,8 @@ interface SlotUi {
   erro: HTMLElement;
   salvar: HTMLButtonElement;
   aplicar: HTMLButtonElement;
+  salvarEq: HTMLButtonElement;
+  aplicarEq: HTMLButtonElement;
 }
 
 const CSS = `
@@ -125,13 +129,24 @@ export function mountBuilds(opts: BuildsOpts): BuildsUi {
     const aplicar = el("button", "bd-btn primario", "Aplicar");
     aplicar.type = "button";
     acoes.append(salvar, aplicar);
-    sec.append(top, resumo, erro, acoes);
+    // equipamento (C3.6): segunda linha de botões, separada dos talentos e variações
+    const acoesEq = el("div", "bd-acoes");
+    const salvarEq = el("button", "bd-btn", "Salvar equip.");
+    salvarEq.type = "button";
+    salvarEq.title = "Grava as peças que você veste agora neste build";
+    const aplicarEq = el("button", "bd-btn primario", "Aplicar equip.");
+    aplicarEq.type = "button";
+    aplicarEq.title = "Veste o equipamento salvo neste build";
+    acoesEq.append(salvarEq, aplicarEq);
+    sec.append(top, resumo, erro, acoes, acoesEq);
     grade.append(sec);
     nome.addEventListener("change", () => opts.renomear(i, nome.value.trim()));
     nome.addEventListener("keydown", (e) => { if (e.key === "Enter") nome.blur(); });
     salvar.addEventListener("click", () => { opts.salvar(i); setTimeout(render, 250); });
     aplicar.addEventListener("click", () => { opts.aplicar(i); setTimeout(render, 250); });
-    slots.push({ nome, tag, resumo, erro, salvar, aplicar });
+    salvarEq.addEventListener("click", () => { opts.salvarEquip(i); setTimeout(render, 250); });
+    aplicarEq.addEventListener("click", () => { opts.aplicarEquip(i); setTimeout(render, 250); });
+    slots.push({ nome, tag, resumo, erro, salvar, aplicar, salvarEq, aplicarEq });
   }
   corpo.append(grade);
 
@@ -169,6 +184,10 @@ export function mountBuilds(opts: BuildsOpts): BuildsUi {
       s.salvar.disabled = !cidade;
       s.aplicar.disabled = !cidade || !sl.salvo || !ok.ok;
       s.aplicar.title = ok.ok ? "Troca as variações e os talentos por este build" : ok.error;
+      const pecas = resumoEquip(sl);
+      s.resumo.append(el("li", "", pecas.length ? `Equipamento: ${pecas.join(", ")}` : "Equipamento: sem salvar"));
+      s.salvarEq.disabled = !cidade;
+      s.aplicarEq.disabled = !cidade || !sl.equipSalvo;
     });
   }
 

@@ -1,6 +1,10 @@
 import type { CharClass } from "./index";
 import { VARIACAO_SLOTS, VARIACAO_NIVEL, variacaoPorId, variacaoDesbloqueada, type EscolhasVariacao, type VariacaoSlot } from "./variacoes";
 import { limparTalentos, pontosGastos, pontosTotais, talentosDaClasse, type EscolhasTalentos } from "./talentos";
+import { ITEMS, EQUIP_SLOTS, type EquipSlot } from "./items";
+import { afixosValidos } from "./afixos";
+import { refinoValido } from "./refino_stats";
+import { gemasValidas } from "./engaste";
 
 /**
  * LOADOUTS (C2.4). Cada personagem tem 3 slots de build. Cada slot guarda as variações escolhidas (C2.2)
@@ -19,11 +23,23 @@ export const LOADOUT_SLOTS = 3;
 export const LOADOUT_NOME_MAX = 16;
 export const LOADOUT_COMBAT_LOCK_S = 8; // sem combate por este tempo antes de trocar de build (mesmo critério de atravessar portal)
 
+/** Uma peça de equipamento como estava vestida: item, afixos, refino e gemas (C3.6 guarda o conjunto inteiro). */
+export interface EquipSnap {
+  id: string;
+  af?: string[];
+  rf?: number;
+  gm?: string[];
+}
+/** Conjunto vestido por slot. Ausente = a peça não estava vestida ao salvar. */
+export type EquipBuild = Partial<Record<EquipSlot, EquipSnap>>;
+
 export interface LoadoutSlot {
   nome: string;
   salvo: boolean; // false = slot vazio (ainda não salvou nenhum build nele)
   variacoes: EscolhasVariacao;
   talentos: EscolhasTalentos;
+  equipSalvo?: boolean; // C3.6: o slot tem um conjunto de equipamento salvo (independente dos talentos e variações)
+  equip?: EquipBuild;
 }
 export interface Loadouts {
   ativo: number; // índice do build ativo (último aplicado ou salvo); -1 = nenhum
@@ -45,7 +61,7 @@ export function sanitizarNomeLoadout(raw: unknown, padrao: string): string {
 export function loadoutsVazio(): Loadouts {
   return {
     ativo: -1,
-    slots: Array.from({ length: LOADOUT_SLOTS }, (_, i) => ({ nome: loadoutNomePadrao(i), salvo: false, variacoes: {}, talentos: {} })),
+    slots: Array.from({ length: LOADOUT_SLOTS }, (_, i) => ({ nome: loadoutNomePadrao(i), salvo: false, variacoes: {}, talentos: {}, equipSalvo: false, equip: {} })),
   };
 }
 
@@ -63,6 +79,8 @@ export function limparLoadouts(raw: unknown, cls: CharClass): Loadouts {
     s.salvo = d.salvo === true;
     s.variacoes = variacoesBrutas(d.variacoes, cls);
     s.talentos = talentosBrutos(d.talentos, cls);
+    s.equipSalvo = d.equipSalvo === true;
+    s.equip = equipBruto(d.equip);
   });
   const a = typeof o.ativo === "number" ? Math.floor(o.ativo) : -1;
   out.ativo = a >= 0 && a < LOADOUT_SLOTS && out.slots[a].salvo ? a : -1;
@@ -89,6 +107,33 @@ export function validarLoadout(slot: LoadoutSlot, cls: CharClass, level: number)
   return { ok: true };
 }
 
+/** Chave de comparação de uma peça: mesmo item, mesmos afixos, refino e gemas (ordem não importa). */
+export function chaveEquip(e: EquipSnap): string {
+  return [e.id, [...(e.af ?? [])].sort().join(","), e.rf ?? 0, [...(e.gm ?? [])].sort().join(",")].join("|");
+}
+
+/** Diz se o conjunto de equipamento pode ser vestido neste nível e classe. Recusa com o motivo; não corta em silêncio. */
+export function validarEquipBuild(build: EquipBuild, cls: CharClass, level: number): { ok: true } | { ok: false; error: string } {
+  for (const s of EQUIP_SLOTS) {
+    const e = build[s];
+    if (!e) continue;
+    const def = ITEMS[e.id];
+    if (!def || def.kind !== s) return { ok: false, error: "Este build tem uma peça que não existe mais para este slot." };
+    if (def.cls && def.cls !== cls) return { ok: false, error: `${def.name} só pode ser usado por outra classe.` };
+    if (level < def.minLevel) return { ok: false, error: `${def.name} requer nível ${def.minLevel} (você está no nível ${level}).` };
+  }
+  const arma = build.weapon ? ITEMS[build.weapon.id] : undefined;
+  if (arma?.hands === 2 && build.offhand) return { ok: false, error: "Este build tem arma de duas mãos e escudo: não combinam." };
+  return { ok: true };
+}
+
+/** Nomes das peças salvas no slot (para o painel Builds). Vazio se não há equipamento salvo. */
+export function resumoEquip(slot: LoadoutSlot): string[] {
+  if (!slot.equipSalvo) return [];
+  const pecas = EQUIP_SLOTS.filter((s) => slot.equip?.[s]).map((s) => ITEMS[slot.equip![s]!.id]?.name ?? "?");
+  return pecas.length ? pecas : ["Sem peças vestidas"];
+}
+
 export interface ResumoLoadout {
   variacoes: string[]; // uma linha por habilidade: "Q: Flecha Veloz", "W: base"...
   talentos: string[]; // só os talentos com rank: "Golpe Firme 2/3"
@@ -108,6 +153,23 @@ export function resumoLoadout(slot: LoadoutSlot, cls: CharClass): ResumoLoadout 
 }
 
 // ---- helpers internos ----
+
+function equipBruto(raw: unknown): EquipBuild {
+  const o = lerObjeto(raw);
+  const out: EquipBuild = {};
+  for (const s of EQUIP_SLOTS) {
+    const r = o[s];
+    if (!r || typeof r !== "object") continue;
+    const d = r as Record<string, unknown>;
+    const def = typeof d.id === "string" ? ITEMS[d.id] : undefined;
+    if (!def || def.kind !== s) continue;
+    const af = afixosValidos(d.af, def.kind, def.rarity);
+    const rf = refinoValido(d.rf);
+    const gm = gemasValidas(d.gm, def.kind, def.rarity);
+    out[s] = { id: def.id, ...(af.length ? { af } : {}), ...(rf ? { rf } : {}), ...(gm.length ? { gm } : {}) };
+  }
+  return out;
+}
 
 function lerObjeto(raw: unknown): Record<string, unknown> {
   let o: unknown = raw;
