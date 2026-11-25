@@ -89,6 +89,7 @@ const CSS = `
 
 let tip: HTMLDivElement | null = null;
 let owner: HTMLElement | null = null; // item cuja dica está aberta
+let abertaNoToque = false; // a dica atual foi aberta por segurar (celular), não pelo mouse
 let ctx: ItemTipCtx = { getClass: () => "warrior", getLevel: () => 1 };
 
 /** quem está jogando (para a classe e o nível da dica): ligado uma vez, ao montar a mochila */
@@ -193,6 +194,12 @@ function place(x: number, y: number, above: boolean) {
 export function hideItemTip(): void {
   if (tip) tip.style.display = "none";
   owner = null;
+  abertaNoToque = false;
+}
+
+/** a dica aberta por segurar (celular) pertence a este elemento: um toque nele fecha a dica sem selecionar o item */
+export function dicaDeToqueAberta(el: HTMLElement): boolean {
+  return abertaNoToque && owner === el && !!tip && tip.style.display !== "none";
 }
 
 /** liga a dica a um elemento: mouse (passar) e toque (tocar) */
@@ -217,6 +224,7 @@ export function bindItemTip(el: HTMLElement, get: () => ItemTipData): void {
       timer = 0;
       build(get());
       owner = el;
+      abertaNoToque = true;
       ensure().style.display = "block";
       const r = el.getBoundingClientRect();
       place(r.left + r.width / 2, r.top, true);
