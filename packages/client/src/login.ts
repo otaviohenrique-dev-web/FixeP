@@ -306,26 +306,26 @@ const CSS = `
 .fx-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .fx-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 58%,rgba(0,0,0,0) 38%,rgba(1,3,8,.55) 78%,rgba(0,1,4,.9) 100%),linear-gradient(180deg,rgba(2,5,11,.55) 0%,rgba(2,5,11,0) 28%,rgba(2,5,11,0) 70%,rgba(2,5,11,.7) 100%)}
 /* conteúdo rola dentro da tela quando não cabe (altura baixa, zoom alto); os espaçadores ::before/::after empurram o conteúdo para o meio/rodapé e encolhem a zero quando não há folga */
-.fx-ui{position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:clamp(6px,2.4vh,26px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:rgba(255,150,70,.35) transparent;padding:max(clamp(16px,4vh,64px),env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(clamp(16px,4vh,56px),env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.fx-ui{position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:clamp(4px,1.5vh,22px);overflow:hidden;padding:max(clamp(10px,3vh,64px),env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(clamp(10px,3vh,56px),env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
 .fx-ui::before,.fx-ui::after{content:"";flex:1 0 0;min-height:0}
 .fx-ui > *{flex-shrink:0}
 .fx-logo{text-align:center;animation:fx-rise 1.6s .35s cubic-bezier(.2,.7,.2,1) both}
-.fx-pre{display:block;font-weight:400;font-size:clamp(10px,1.5vw,13px);letter-spacing:.5em;text-transform:uppercase;color:#7fa6cc;opacity:.85;margin-bottom:6px;text-indent:.5em}
-.fx-logo h1{margin:0;font-weight:900;font-size:clamp(48px,min(10vw,14vh),124px);line-height:1;letter-spacing:.07em;text-indent:.07em;
+.fx-pre{display:block;font-weight:400;font-size:clamp(9px,min(1.5vw,2.2vh),13px);letter-spacing:.5em;text-transform:uppercase;color:#7fa6cc;opacity:.85;margin-bottom:6px;text-indent:.5em}
+.fx-logo h1{margin:0;font-weight:900;font-size:clamp(40px,min(9vw,11.5vh),116px);line-height:1;letter-spacing:.07em;text-indent:.07em;
   background:linear-gradient(180deg,#ffffff 0%,#bfe3ff 38%,#6fb0e6 62%,#ff9a4d 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 18px rgba(120,190,255,.35)) drop-shadow(0 4px 22px rgba(255,120,40,.28))}
 .fx-logo h1 b{font-weight:900;background:linear-gradient(180deg,#fff2c9 0%,#ffb35c 45%,#ff5a1a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;animation:fx-flick 2.6s infinite}
-.fx-emb{display:block;margin:0 auto 10px;width:clamp(64px,min(24vh,32vw),210px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
+.fx-emb{display:block;margin:0 auto 10px;width:clamp(52px,min(17vh,25vw),180px);height:auto;filter:drop-shadow(0 4px 14px rgba(0,0,0,.8)) drop-shadow(0 0 16px rgba(255,150,60,.25))}
 .fx-orn{display:flex;align-items:center;justify-content:center;gap:12px;margin:10px auto 0;width:min(340px,70vw)}
 .fx-orn::before,.fx-orn::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(230,190,120,.7))}
 .fx-orn::after{transform:scaleX(-1)}
 .fx-orn i{width:7px;height:7px;transform:rotate(45deg);background:#e6be78;box-shadow:0 0 10px rgba(255,170,70,.7)}
-.fx-tag{margin:10px 0 0;font-weight:400;font-size:clamp(11px,1.7vw,16px);letter-spacing:.32em;text-transform:uppercase;color:#a9c7e6;text-indent:.32em;text-shadow:0 2px 12px #000}
-.fx-panel{width:min(360px,100%);box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:clamp(8px,1.6vh,12px);animation:fx-rise 1.6s .9s cubic-bezier(.2,.7,.2,1) both}
+.fx-tag{margin:10px 0 0;font-weight:400;font-size:clamp(9px,min(1.7vw,2.6vh),16px);letter-spacing:.32em;text-transform:uppercase;color:#a9c7e6;text-indent:.32em;text-shadow:0 2px 12px #000}
+.fx-panel{width:min(360px,100%);box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:clamp(5px,1.2vh,12px);animation:fx-rise 1.6s .9s cubic-bezier(.2,.7,.2,1) both}
 .fx-head{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:700;letter-spacing:.4em;text-transform:uppercase;color:#ffb072;margin-bottom:2px;text-shadow:0 0 14px rgba(255,120,40,.5);justify-content:center;text-indent:.4em}
 .fx-head::before,.fx-head::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(255,150,70,.7))}
 .fx-head::after{transform:scaleX(-1)}
-.fx-btn{position:relative;display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:0 18px;border-radius:5px;cursor:pointer;
+.fx-btn{position:relative;display:flex;align-items:center;justify-content:center;gap:12px;min-height:clamp(38px,6vh,52px);padding:0 18px;border-radius:5px;cursor:pointer;
   font:700 14px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:#eaf4ff;
   background:linear-gradient(180deg,rgba(24,40,60,.82),rgba(7,13,22,.9));border:1px solid rgba(255,150,70,.38);
   box-shadow:inset 0 1px 0 rgba(180,220,255,.12),0 6px 22px rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
@@ -352,10 +352,10 @@ const CSS = `
 @keyframes fx-tw{0%,100%{opacity:.25}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.fx-root,.fx-logo,.fx-panel{animation:none}.fx-logo h1 b,.fx-tw{animation:none}}
 @media (max-width:520px){.fx-ui{padding-top:max(60px,env(safe-area-inset-top))}.fx-pre{letter-spacing:.32em;text-indent:.32em}.fx-tag{letter-spacing:.2em;text-indent:.2em}}
-@media (max-height:800px){.fx-emb{width:clamp(64px,16vh,120px);margin-bottom:6px}.fx-logo h1{font-size:clamp(44px,min(9vw,12vh),100px)}.fx-orn{margin-top:6px}.fx-tag{margin-top:6px}}
-@media (max-height:720px){.fx-ui{padding-top:max(clamp(14px,3vh,40px),env(safe-area-inset-top))}.fx-emb{margin-bottom:4px}.fx-tag{margin-top:6px}.fx-btn{min-height:46px}.fx-logo h1{font-size:clamp(40px,min(9vw,11vh),96px)}}
-@media (max-height:620px){.fx-pre,.fx-tag,.fx-orn{display:none}.fx-emb{width:clamp(48px,min(15vh,22vw),96px)}.fx-logo h1{font-size:clamp(36px,min(9vw,11vh),72px)}.fx-panel{gap:8px}.fx-head{margin-bottom:0}}
-@media (max-height:460px){.fx-emb{display:none}.fx-btn{min-height:42px}}
+@media (max-height:800px){.fx-emb{margin-bottom:4px}.fx-orn{margin-top:4px}.fx-tag{margin-top:4px}}
+@media (max-height:620px){.fx-panel{gap:6px}.fx-head{margin-bottom:0}.fx-orn{margin-top:2px}}
+@media (max-height:420px){.fx-emb{display:none}.fx-orn{display:none}}
+@media (max-height:340px){.fx-ui{overflow-y:auto;padding-top:6px;padding-bottom:6px;gap:3px}.fx-logo h1{font-size:30px}.fx-pre,.fx-tag{font-size:8px;margin:0}.fx-panel{gap:4px}.fx-head{font-size:10px}.fx-btn{min-height:34px;font-size:12px}.fx-link,.fc-link{padding:2px}}
 `;
 
 const ICON_ON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></svg>`;
