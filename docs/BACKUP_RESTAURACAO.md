@@ -119,6 +119,38 @@ pg_restore --no-owner --no-acl -f "D:\Backup\teste.sql" "D:\Backup\FrixeP-banco\
 psql "$env:TESTE_URL" -f "D:\Backup\teste.sql"
 ```
 
+### 3.4 Teste de restauração sem pg_dump (Node)
+
+Alternativa que roda **sem** instalar o cliente PostgreSQL: `tools/backup_restore_teste.mjs`, feito só com Node e as bibliotecas do próprio projeto (`pg` e PGlite).
+
+```powershell
+node --env-file=E:\Projetos_Dev\FrixeP\.env tools\backup_restore_teste.mjs
+```
+
+O script faz, nesta ordem:
+
+1. **Backup de produção, só leitura:** lê cada tabela de `public` numa transação `read only` (apenas `SELECT`) e grava um `.json` por tabela e um `manifesto.json` em `E:\Projetos_Dev\FrixeP-backups-banco\backup_AAAA-MM-DD-HH-MM-SS\` (fora do Git).
+2. **Restauração num banco de teste descartável:** cria um PGlite temporário com as migrações de `packages/server/migrations` e carrega os JSON nele.
+3. **Comparação:** para cada tabela, conta as linhas e calcula um checksum (md5 do conteúdo) na origem e no restaurado. Imprime `OK` ou `DIFERENÇA`, só com nomes de tabela e contagens.
+4. **Servidor:** sobe o servidor na porta **2599** apontando para o banco restaurado e confere se `/health` responde e se o log mostra `[db] conectado (pglite)`.
+
+Segurança: a `DATABASE_URL` é lida só do ambiente e nunca é impressa. O `.env` não é aberto pelo script, só repassado pelo `--env-file`.
+
+Limitações deste teste:
+
+- Não gera um `.dump` do `pg_dump`. Ele prova que os **dados** voltam íntegros e que o schema das migrações aceita os dados, mas não testa o formato oficial de backup do Supabase.
+- O restaurado é um PGlite (PostgreSQL embutido), não um PostgreSQL de servidor. Diferenças de extensão ou de versão do Postgres não aparecem aqui.
+- O servidor sobe em modo de desenvolvimento, porque em `NODE_ENV=production` ele exige `DATABASE_URL`.
+- Não testa o `pg_restore` nem o `psql` do guia (seções 3.1 a 3.3).
+
+Para fechar a PD-05 com o procedimento oficial, instale o cliente PostgreSQL (uma vez):
+
+```powershell
+winget install --id PostgreSQL.PostgreSQL.17 --override "--mode unattended --enable-components commandlinetools --disable-components server pgAdmin stackbuilder"
+```
+
+A versão do cliente deve ser igual ou maior que a do servidor Supabase. Depois, use as seções 2.2 e 3.1.
+
 ---
 
 ## 4. Restaurar o repositório a partir do espelho
