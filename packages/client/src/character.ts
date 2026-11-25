@@ -11,12 +11,12 @@ const CLASSES: { id: CharClass; name: string; role: string }[] = ([...PLAYABLE_C
 const CSS = `
 .fc-field{display:flex;flex-direction:column;gap:6px}
 .fc-label{font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.3em;text-transform:uppercase;color:#8fb0cf}
-.fc-input{width:100%;box-sizing:border-box;min-height:50px;padding:0 14px;border-radius:5px;font:700 16px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;color:#fff;text-align:center;
+.fc-input{width:100%;box-sizing:border-box;min-height:clamp(36px,5.6vh,50px);padding:0 14px;border-radius:5px;font:700 16px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;color:#fff;text-align:center;
   background:rgba(6,12,20,.85);border:1px solid rgba(255,150,70,.4);box-shadow:inset 0 2px 8px rgba(0,0,0,.5);outline:none;transition:border-color .18s,box-shadow .18s}
 .fc-input::placeholder{color:#5f7893;font-weight:400}
 .fc-input:focus{border-color:#ff9a4d;box-shadow:inset 0 2px 8px rgba(0,0,0,.5),0 0 18px rgba(255,120,40,.3)}
 .fc-cls{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.fc-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:5px;cursor:pointer;color:#dbeaff;text-align:center;
+.fc-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:clamp(4px,1.1vh,10px) 4px;border-radius:5px;cursor:pointer;color:#dbeaff;text-align:center;
   background:linear-gradient(180deg,rgba(24,40,60,.82),rgba(7,13,22,.9));border:1px solid rgba(160,200,240,.25);transition:border-color .18s,box-shadow .18s}
 .fc-card b{font:700 12px/1.1 "Cinzel",Georgia,serif;letter-spacing:.08em;text-transform:uppercase}
 .fc-card span{font:400 10px/1.2 Georgia,serif;color:#8fb0cf}
@@ -26,6 +26,8 @@ const CSS = `
 .fc-back{position:fixed;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));z-index:10000;display:inline-flex;align-items:center;gap:6px;padding:11px 16px;border-radius:6px;cursor:pointer;color:#fff;background:linear-gradient(180deg,rgba(120,50,12,.9),rgba(50,18,6,.95));border:1px solid #ff9a4d;box-shadow:0 0 16px rgba(255,120,40,.35);font:700 13px/1 "Cinzel",Georgia,serif;letter-spacing:.12em;text-transform:uppercase;max-width:calc(100vw - 24px - 60px);white-space:nowrap}
 .fc-back:hover{border-color:#ff9a4d}
 .fc-back:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
+@media (max-height:340px){.fc-input{min-height:32px;font-size:13px}.fc-card{padding:2px 4px}.fc-card b{font-size:10px}.fc-card span{font-size:8px}.fc-field{gap:2px}}
+@media (max-height:620px){.fc-field{gap:3px}.fc-cls{gap:6px}.fc-input{font-size:14px}.fc-card b{font-size:11px}.fc-card span{font-size:9px}}
 .fc-link{align-self:center;margin-top:2px;background:none;border:0;color:#7fa6cc;font:400 12px/1 Georgia,serif;letter-spacing:.08em;cursor:pointer;text-decoration:underline;padding:8px}
 `;
 
