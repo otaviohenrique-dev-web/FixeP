@@ -3,7 +3,7 @@ import { silhouetteSvg } from "./silhouette";
 import { animatePoder, previewPoderDelta } from "./poder";
 import { bindItemTip, bindDoubleTap, COARSE, hideItemTip, setItemTipContext, compareStats, type ItemTipData } from "./itemtip";
 import {
-  ITEMS, INV_SLOTS, Msg, setAtivo, setBonusLinhas, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, statsDoPersonagem, poderTotal, type GearBonuses, type CharClass,
+  ITEMS, INV_SLOTS, Msg, setAtivo, setBonusLinhas, COIN_IRON, COIN_OBOL, breakValue, RARITY_COLOR, RARITY_NAME, CLASS_DEFS, EQUIP_SLOTS, EQUIP_SLOT_NAME, WEAPON_TYPES, gearBonuses, kitLines, statsDoPersonagem, poderTotal, maxHpFor, maxManaFor, dmgMult, CRIT, PLAYER_REGEN_PCT_S, type GearBonuses, type CharClass,
   type InventorySnapshot, type ItemDef, type EquipSlot,
 } from "@frixep/shared";
 
@@ -117,8 +117,13 @@ const CSS = `
 @media (max-width:640px){.iv-st-cols{grid-template-columns:1fr;gap:10px}.iv-stats{font-size:11px}}
 /* a janela sempre cabe na tela: a área de equipamento/mochila rola sozinha e os atributos têm altura limitada (rolam dentro dela) */
 .iv-card > .iv-body{flex:0 1 auto;min-height:0;overflow:auto;align-content:start}
-.iv-card > .iv-stats{flex:0 0 auto;max-height:34vh;overflow:auto;margin:10px 0 0;padding-top:4px}
-@media (max-width:640px){.iv-card > .iv-stats{max-height:32vh}}
+.iv-card > .iv-stats-d{flex:0 0 auto;margin-top:8px;padding-top:6px;border-top:1px solid rgba(160,200,240,.16)}
+.iv-stats-d > summary{cursor:pointer;list-style:none;font:700 10px/1.2 "Cinzel",Georgia,serif;letter-spacing:.2em;text-transform:uppercase;color:#c9b07a;padding:4px 0;user-select:none}
+.iv-stats-d > summary::-webkit-details-marker{display:none}
+.iv-stats-d > summary::after{content:" ▾";font-size:11px}
+.iv-stats-d[open] > summary::after{content:" ▴"}
+.iv-stats-d > .iv-stats{max-height:28vh;overflow:auto;margin:6px 0 0}
+.iv-stats .st-eq{color:#8fb0cf;font-weight:400;font-size:.92em}
 .iv-gain{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;pointer-events:none;text-align:center;font-family:Cinzel,Georgia,serif;width:min(94vw,520px)}
 .iv-gain-in{position:relative;animation:iv-gain-pop .5s cubic-bezier(.2,1.4,.4,1) both,iv-gain-out .5s ease-in 2.7s forwards}
 .iv-gain .g-lbl{display:block;font-size:clamp(10px,2vw,12px);font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:#f3d77a;text-shadow:0 2px 0 #000}
@@ -199,16 +204,23 @@ function statLines(d: ItemDef): string[] {
   return o;
 }
 
-/** atributos do personagem no painel (quanto maior, melhor). `sempre`: aparece mesmo zerado */
-const METRICAS: { label(c: CharClass): string; pre: string; un: string; sempre: boolean; grupo: "Ofensivo" | "Defensivo" | "Utilidade"; val(g: GearBonuses): number }[] = [
-  { label: () => "Poder", pre: "+", un: "%", sempre: true, grupo: "Ofensivo", val: (g) => g.dmgPct },
-  { label: () => "Crítico", pre: "+", un: "%", sempre: false, grupo: "Ofensivo", val: (g) => g.crit + (g.kit.crit ?? 0) },
-  { label: () => "Vida", pre: "+", un: "", sempre: true, grupo: "Defensivo", val: (g) => g.hp },
-  { label: (c) => `${CLASS_DEFS[c].resource.name} máx.`, pre: "+", un: "", sempre: false, grupo: "Defensivo", val: (g) => g.mana },
-  { label: () => "Dano recebido", pre: "−", un: "%", sempre: false, grupo: "Defensivo", val: (g) => g.dr },
-  { label: () => "Regeneração", pre: "+", un: "/s", sempre: false, grupo: "Defensivo", val: (g) => g.regen },
-  { label: () => "Recarga", pre: "−", un: "%", sempre: false, grupo: "Utilidade", val: (g) => g.cdr },
+/**
+ * atributos do personagem no painel. `total` = base da classe/nível + equipamento, pelas MESMAS regras do servidor
+ * (shared: maxHpFor, dmgMult, CRIT, maxManaFor, resource.regen, PLAYER_REGEN_PCT_S); `bon` = só o bônus do equipamento.
+ */
+type Metrica = { label(c: CharClass): string; pre: string; un: string; grupo: "Ofensivo" | "Defensivo" | "Utilidade"; total(g: GearBonuses, c: CharClass, lv: number): number; bon(g: GearBonuses): number };
+const METRICAS: Metrica[] = [
+  { label: () => "Poder", pre: "+", un: "%", grupo: "Ofensivo", total: (g, _c, lv) => Math.round((dmgMult(lv, g.dmgPct) - 1) * 100), bon: (g) => g.dmgPct },
+  { label: () => "Crítico", pre: "+", un: "%", grupo: "Ofensivo", total: (g) => Math.round(CRIT.chance * 100 + g.crit + (g.kit.crit ?? 0)), bon: (g) => g.crit + (g.kit.crit ?? 0) },
+  { label: () => "Vida", pre: "", un: "", grupo: "Defensivo", total: (g, c, lv) => maxHpFor(c, lv, g.hp), bon: (g) => g.hp },
+  { label: (c) => `${CLASS_DEFS[c].resource.name} máx.`, pre: "", un: "", grupo: "Defensivo", total: (g, c, lv) => maxManaFor(c, lv) + g.mana, bon: (g) => g.mana },
+  { label: () => "Dano recebido", pre: "−", un: "%", grupo: "Defensivo", total: (g) => g.dr, bon: (g) => g.dr },
+  { label: () => "Regen. de vida", pre: "+", un: "/s", grupo: "Defensivo", total: (g, c, lv) => maxHpFor(c, lv, g.hp) * PLAYER_REGEN_PCT_S + g.af.hpRegen, bon: (g) => g.af.hpRegen },
+  { label: (c) => `Regen. de ${CLASS_DEFS[c].resource.name.toLowerCase()}`, pre: "+", un: "/s", grupo: "Defensivo", total: (g, c) => CLASS_DEFS[c].resource.regen + g.regen, bon: (g) => g.regen },
+  { label: () => "Recarga", pre: "−", un: "%", grupo: "Utilidade", total: (g) => g.cdr, bon: (g) => g.cdr },
 ];
+/** número do painel: inteiro, ou uma casa decimal (regeneração) */
+const fmtStat = (n: number) => String(Math.round(n * 10) / 10);
 
 /** festa de atributos: ao equipar, um banner no MEIO da tela (PC e celular) mostra o ganho de poder e dos atributos, contando até o valor novo */
 let gainEl: HTMLDivElement | null = null;
@@ -322,8 +334,9 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
         <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><div class="iv-poder pw-host" aria-label="Poder total"><span class="iv-pl">Poder</span><b class="pw-n">0</b></div></div>
         <div><div class="iv-wallet" aria-label="Moedas"></div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
       </div>
-      <div class="iv-stats" aria-label="Atributos"></div>
+      <details class="iv-stats-d"><summary>Atributos</summary><div class="iv-stats" aria-label="Atributos"></div></details>
     </div>`;
+  const detStats = back.querySelector<HTMLDetailsElement>(".iv-stats-d")!;
   const toasts = document.createElement("div");
   toasts.className = "iv-toasts";
   toasts.setAttribute("aria-live", "polite");
@@ -356,7 +369,11 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     cx.clearRect(0, 0, portrait.width, portrait.height);
     if (src && src.width) cx.drawImage(src, 0, 0, src.width, src.height, 0, 0, portrait.width, portrait.height);
   };
-  const open = () => { back.classList.add("open"); drawPortrait(); render(); };
+  const open = () => {
+    // atributos abertos só em tela grande (ao abrir, não ao criar a janela): no celular a grade e os slots ficam em primeiro lugar
+    detStats.open = matchMedia("(min-width: 641px) and (min-height: 600px)").matches;
+    back.classList.add("open"); drawPortrait(); render();
+  };
   const close = () => { back.classList.remove("open"); btn.focus(); };
   const toggle = () => (isOpen() ? close() : open());
 
@@ -501,10 +518,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
     statsEl.replaceChildren();
     // duas colunas: Ofensivo + Utilidade à esquerda, Defensivo à direita; Kit e Conjunto ocupam a largura toda abaixo
     const grupos = new Map<string, HTMLElement[]>();
+    const lv = opts.getLevel();
     for (const m of METRICAS) {
-      const v = m.val(now);
-      const dv = novo ? m.val(novo) - v : 0;
-      if (!m.sempre && !v && !(novo && m.val(novo))) continue;
+      const v = m.total(now, cls, lv);
+      const dv = novo ? m.total(novo, cls, lv) - v : 0;
       const row = document.createElement("span");
       row.className = "st-r";
       const rot = document.createElement("span");
@@ -512,11 +529,18 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       rot.textContent = m.label(cls);
       const val = document.createElement("b");
       val.className = "st-v";
-      val.textContent = v ? `${m.pre}${v}${m.un}` : "—";
+      val.textContent = `${v ? m.pre : ""}${fmtStat(v)}${m.un}`;
+      const eq = m.bon(now);
+      if (eq) {
+        const e = document.createElement("small");
+        e.className = "st-eq";
+        e.textContent = ` (${eq > 0 ? "+" : ""}${fmtStat(eq)} equip.)`;
+        val.append(e);
+      }
       if (dv) {
         const d = document.createElement("span");
         d.className = dv > 0 ? "st-up" : "st-dn";
-        d.textContent = ` ${dv > 0 ? "▲" : "▼"} ${dv > 0 ? "+" : "−"}${Math.abs(dv)}${m.un}`;
+        d.textContent = ` ${dv > 0 ? "▲" : "▼"} ${dv > 0 ? "+" : "−"}${fmtStat(Math.abs(dv))}${m.un}`;
         val.append(d);
       }
       row.append(rot, val);
@@ -723,7 +747,8 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       // equipar algo que dá atributo: a festa de números (a primeira leitura só guarda o ponto de partida)
       const gear = gearOf(snap.equip, snap.equipAf ?? {});
       if (gearAntes) {
-        const rows = METRICAS.map((m) => ({ label: m.label(opts.getClass()), pre: m.pre, un: m.un, up: m.val(gear) - m.val(gearAntes!) }))
+        const cls = opts.getClass(), lv = opts.getLevel();
+        const rows = METRICAS.map((m) => ({ label: m.label(cls), pre: m.pre, un: m.un, up: m.total(gear, cls, lv) - m.total(gearAntes!, cls, lv) }))
           .filter((r) => r.up > 0);
         const poderUp = poderDe(gear) - poderDe(gearAntes);
         if (rows.length || poderUp > 0) {
