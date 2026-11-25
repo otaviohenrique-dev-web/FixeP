@@ -26,7 +26,7 @@ const CSS = `
 .iv-btn svg{width:22px;height:22px}
 .iv-back{position:fixed;inset:0;z-index:19;display:none;align-items:center;justify-content:center;background:rgba(2,5,11,.55);padding:12px;font-family:"Cinzel",Georgia,serif}
 .iv-back.open{display:flex}
-.iv-card{width:min(660px,100%);max-height:calc(100vh - 24px);overflow:auto;padding:16px;border-radius:8px;color:#dbeaff;
+.iv-card{width:min(660px,100%);display:flex;flex-direction:column;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:hidden;padding:16px;border-radius:8px;color:#dbeaff;
   background:linear-gradient(180deg,rgba(20,34,52,.97),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4);box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 1px 0 rgba(180,220,255,.12)}
 .iv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .iv-id{display:flex;align-items:center;gap:12px}
@@ -34,7 +34,7 @@ const CSS = `
 .iv-medal canvas{display:block;width:100%;height:100%;border-radius:50%;image-rendering:pixelated;background:#1a1410;box-shadow:inset 0 0 6px #000}
 .iv-title{margin:0;font-size:14px;font-weight:700;letter-spacing:.35em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 14px rgba(255,120,40,.5)}
 .iv-x{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#bcd8f5;background:transparent;border:1px solid rgba(160,200,240,.3);font:700 16px/1 Georgia,serif}
-.iv-body{display:grid;grid-template-columns:272px 1fr;gap:14px}
+.iv-body{display:grid;grid-template-columns:272px 1fr;gap:14px;align-items:start}
 @media (max-width:640px){.iv-body{grid-template-columns:1fr}.iv-card{padding:12px}}
 .iv-left{display:flex;flex-direction:column;gap:6px;align-items:center}
 .iv-poder{display:flex;flex-direction:column;align-items:center;gap:2px;margin:4px 0 2px;padding:6px 8px;border-radius:8px;background:linear-gradient(180deg,rgba(20,30,46,.7),rgba(8,12,20,.7));border:1px solid rgba(201,168,90,.35)}
@@ -115,6 +115,10 @@ const CSS = `
 .iv-st-full .st-bon{padding-left:12px;color:#8fb0cf}
 .iv-st-full .st-bon.on{color:#e6f0ff}
 @media (max-width:640px){.iv-st-cols{grid-template-columns:1fr;gap:10px}.iv-stats{font-size:11px}}
+/* a janela sempre cabe na tela: a área de equipamento/mochila rola sozinha e os atributos têm altura limitada (rolam dentro dela) */
+.iv-card > .iv-body{flex:0 1 auto;min-height:0;overflow:auto;align-content:start}
+.iv-card > .iv-stats{flex:0 0 auto;max-height:34vh;overflow:auto;margin:10px 0 0;padding-top:4px}
+@media (max-width:640px){.iv-card > .iv-stats{max-height:32vh}}
 .iv-gain{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;pointer-events:none;text-align:center;font-family:Cinzel,Georgia,serif;width:min(94vw,520px)}
 .iv-gain-in{position:relative;animation:iv-gain-pop .5s cubic-bezier(.2,1.4,.4,1) both,iv-gain-out .5s ease-in 2.7s forwards}
 .iv-gain .g-lbl{display:block;font-size:clamp(10px,2vw,12px);font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:#f3d77a;text-shadow:0 2px 0 #000}
