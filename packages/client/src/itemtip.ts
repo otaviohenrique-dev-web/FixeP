@@ -202,6 +202,15 @@ export function dicaDeToqueAberta(el: HTMLElement): boolean {
   return abertaNoToque && owner === el && !!tip && tip.style.display !== "none";
 }
 
+/** abre a ficha de um elemento já (usado pelo clique com o mouse); fica acima do elemento */
+export function openItemTip(el: HTMLElement, data: ItemTipData): void {
+  build(data);
+  owner = el;
+  ensure().style.display = "block";
+  const r = el.getBoundingClientRect();
+  place(r.left + r.width / 2, r.top, true);
+}
+
 /** liga a dica a um elemento: mouse (passar) e toque (tocar) */
 export function bindItemTip(el: HTMLElement, get: () => ItemTipData): void {
   el.addEventListener("mouseenter", (e) => {
