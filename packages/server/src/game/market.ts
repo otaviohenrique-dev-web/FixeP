@@ -4,6 +4,7 @@ import {
   cleanFilter, filterItemIds, type MarketPage, type MyListing, type MarketCurrency, type MarketPricesEvent,
 } from "@frixep/shared";
 import { addItem, canFit, validSlot, type Inventory } from "./inventory.js";
+import { bloqueioGm } from "../gm/modoDeus.js";
 import type { Db } from "../db/index.js";
 import type { Repo } from "../db/repo.js";
 
@@ -65,6 +66,8 @@ export class Market {
     if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
     const st0 = a.inv.slots[slot];
     if (!st0 || !ITEMS[st0.id]) return { ok: false, error: "Espaço vazio." };
+    const travado = bloqueioGm(st0); // item do Modo Deus não vai ao mercado
+    if (travado) return { ok: false, error: travado };
     if (typeof qty !== "number" || !Number.isInteger(qty) || qty < 1 || qty > st0.qty) return { ok: false, error: "Quantidade inválida." };
     if (typeof price !== "number" || !Number.isInteger(price) || price < lim.min || price > lim.max) return { ok: false, error: `O preço vai de ${lim.min} a ${lim.max.toLocaleString("pt-BR")} ${cn}.` };
     const minP = minListingPrice(st0.id, qty, cur);

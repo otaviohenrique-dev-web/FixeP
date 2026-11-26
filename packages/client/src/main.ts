@@ -18,6 +18,7 @@ import { mountHudCamadas } from "./hudcamadas";
 import { attachPerf, startPerf, timed, count } from "./perf-probe";
 import { modoQualidade } from "./quality";
 import { mountHud, type Hud } from "./hud";
+import { ehAdmin, gmVisivel, rotuloGm, indicadorGm } from "./gm/modo-deus";
 import { mountInventory, type InventoryUi } from "./inventory";
 import { sfx } from "./sfx";
 import { mountStats } from "./stats";
@@ -456,6 +457,12 @@ class WorldScene extends Phaser.Scene {
       if (isTypingTarget() || this.busy) return; // digitando no chat
       if (e.code === "Escape") { this.lockKey = ""; this.chase = null; if (this.selId) this.deselect(); }
       if (e.code === "KeyZ" && !e.repeat && !menuOpen() && this.cls === "cleric") { this.hud.toggleQ(); return; } // Z: alterna o Q do Clérigo
+      if (e.code === "F10" && !e.repeat && ehAdmin() && !menuOpen()) { // F10 (admin): painel direto na aba Modo Deus
+        e.preventDefault();
+        const tk = (this.sys.settings.data as { token: string }).token;
+        void import("./painel/abrir-painel").then((m) => m.abrirPainel(tk, "modo-deus")).catch(() => alert("Não foi possível abrir o painel agora. Tente de novo."));
+        return;
+      }
       if (e.code === "KeyF" && !e.repeat && !menuOpen()) { // F: bebe a primeira poção
         this.drinkPotion();
         return;
@@ -487,10 +494,10 @@ class WorldScene extends Phaser.Scene {
       view.obj.setPosition(at.sx, at.sy); // nasce na posição certa (sem deslizar desde a origem)
       this.sprites.set(`p:${id}`, view);
       this.levelTags.set(`p:${id}`, this.add.text(0, 0, String(Number(p.level) || 1), { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "16px", color: "#fff6dc", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(1e5 + 2));
-      this.labels.set(`p:${id}`, this.add.text(0, 0, p.name, { fontSize: "11px", color: "#ddd", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
+      this.labels.set(`p:${id}`, this.add.text(0, 0, rotuloGm(p.name, p), { fontSize: "11px", color: "#ddd", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 1));
       if (me) this.cameras.main.startFollow(view.obj, true, 0.1, 0.1);
     });
-    st.players.onRemove((_: any, id: string) => this.dropSprite(`p:${id}`));
+    st.players.onRemove((_: any, id: string) => { this.dropSprite(`p:${id}`); if (id === this.room.sessionId) indicadorGm(false); });
 
     st.enemies.onAdd((e: any, id: string) => {
       const kd = enemyKind(String(e.kind));
@@ -1732,12 +1739,21 @@ class WorldScene extends Phaser.Scene {
     const mateOf = (p: any, id: string) => !!myParty && id !== this.room.sessionId && p.party === myParty; // colega de grupo
     st.players.forEach((p: any, id: string) => { // nome vermelho com espadas = em PvP; azul = colega de grupo; "..." enquanto canaliza a entrada
       const mate = mateOf(p, id);
-      const tag = (p.pvp ? "pvp" : p.pvpChan === 1 ? "chan" : "") + (mate ? "|mate" : "");
+      const tag = (p.pvp ? "pvp" : p.pvpChan === 1 ? "chan" : "") + (mate ? "|mate" : "") + (p.gm && ehAdmin() ? "|gm" : "");
       if (this.pvpTag.get(id) !== tag) {
         this.pvpTag.set(id, tag);
-        const base = p.pvp ? `⚔ ${p.name}` : p.pvpChan === 1 ? `${p.name} …` : p.name;
+        const base = rotuloGm(p.pvp ? `⚔ ${p.name}` : p.pvpChan === 1 ? `${p.name} …` : p.name, p); // [GM] só aparece para admin
         this.labels.get(`p:${id}`)?.setText(base).setColor(mate ? "#8fd0ff" : p.pvp ? "#ff6a5a" : "#ccc");
       }
+      // Modo Deus: invisível some para quem não é admin (o dono e os admins continuam vendo)
+      const visivel = gmVisivel(p, id === this.room.sessionId);
+      const sp = this.sprites.get(`p:${id}`);
+      if (sp && sp.obj.visible !== visivel) {
+        sp.obj.setVisible(visivel);
+        this.labels.get(`p:${id}`)?.setVisible(visivel);
+        this.levelTags.get(`p:${id}`)?.setVisible(visivel);
+      }
+      if (id === this.room.sessionId) indicadorGm(!!p.gm); // selo "GM" enquanto o próprio personagem está em Modo Deus
     });
     st.players.forEach((p: any, id: string) => {
       let shield = 0; // 0 = sem bolha; senão a opacidade (pisca de leve nos últimos 2 s, só para o dono, que sabe o tempo)
