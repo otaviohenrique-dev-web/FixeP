@@ -184,7 +184,7 @@ export function clampAutoPot(v: unknown): number {
 export const autoPotDispara = (hp: number, maxHp: number, at: number): boolean => at > 0 && maxHp > 0 && hp * 100 <= maxHp * at;
 
 /** Uma pilha da mochila. `af` = afixos do item (só equipamento de drop; itens antigos não têm). */
-export interface InvStack { id: string; qty: number; af?: string[]; rf?: number; gm?: string[] } // gm: gemas engastadas (ver engaste.ts; ausente = sem gema) // rf: nível de refino (+N, ver refino.ts; ausente = +0)
+export interface InvStack { id: string; qty: number; af?: string[]; rf?: number; gm?: string[]; gmv?: boolean } // gm: gemas engastadas (ver engaste.ts; ausente = sem gema) // rf: nível de refino (+N, ver refino.ts; ausente = +0)
 export interface InventorySnapshot {
   inv: (InvStack | null)[];
   equip: Record<EquipSlot, string | null>;

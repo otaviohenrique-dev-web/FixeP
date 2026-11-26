@@ -1,4 +1,5 @@
 import { apiUrl } from "../auth";
+import { setAdmin } from "../gm/modo-deus";
 
 /**
  * Entrada do painel no jogo. Este arquivo fica no bundle dos jogadores, então é só o botão:
@@ -15,6 +16,7 @@ export async function montarEntradaPainel(token: string, addAcao: (label: string
   } catch {
     admin = false; // sem rede: o botão simplesmente não aparece
   }
+  setAdmin(admin); // o Modo Deus (marca [GM], invisíveis e F10) só liga para admin
   if (!admin) return;
 
   addAcao("Painel", async () => {

@@ -622,5 +622,6 @@ export * from "./refino";
 export * from "./desmontar";
 export * from "./engaste";
 export * from "./refino_stats";
+export * from "./modo_deus";
 export * from "./simulacao";
 export * from "./ajustes";

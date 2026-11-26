@@ -1,3 +1,4 @@
+import { bloqueioGm } from "../gm/modoDeus.js";
 import { ITEMS, INV_SLOTS, EQUIP_SLOTS, CLASS_DEFS, rarityIndex, migrateItemId, gearBonuses, afixosValidos, sortearAfixos, KINDS_EQUIPAVEIS, refinoValido, gemasValidas, type GearBonuses, type CharClass, type InvStack, type EquipSlot, type InventorySnapshot } from "@frixep/shared";
 
 /** Inventário de um jogador (só existe no servidor; o cliente recebe fotografias). Funções puras e testáveis. */
@@ -9,6 +10,7 @@ export interface Inventory {
   equipAf?: Partial<Record<EquipSlot, string[]>>; // afixos do equipamento (ausente = sem afixos; itens antigos)
   equipRf?: Partial<Record<EquipSlot, number>>; // nível de refino do equipamento (ausente = +0; ver refino.ts)
   equipGm?: Partial<Record<EquipSlot, string[]>>; // gemas engastadas no equipamento vestido (ausente = nenhuma; ver engaste.ts)
+  equipGmv?: Partial<Record<EquipSlot, boolean>>; // equipamento vestido criado pelo Modo Deus (vinculado: ver gm/modoDeus.ts)
   migrated?: boolean; // itens antigos foram traduzidos ao carregar (o servidor grava de novo)
 }
 export type Result = { ok: true } | { ok: false; error: string };
@@ -22,7 +24,7 @@ export const emptyInventory = (): Inventory => ({
 });
 
 export const snapshot = (inv: Inventory): InventorySnapshot => ({
-  inv: inv.slots.map((s) => (s ? { id: s.id, qty: s.qty, ...(s.af?.length ? { af: [...s.af] } : {}), ...(s.rf ? { rf: s.rf } : {}), ...(s.gm?.length ? { gm: [...s.gm] } : {}) } : null)),
+  inv: inv.slots.map((s) => (s ? { id: s.id, qty: s.qty, ...(s.af?.length ? { af: [...s.af] } : {}), ...(s.rf ? { rf: s.rf } : {}), ...(s.gm?.length ? { gm: [...s.gm] } : {}), ...(s.gmv ? { gmv: true } : {}) } : null)),
   equip: { ...inv.equip },
   equipAf: Object.fromEntries(Object.entries(inv.equipAf ?? {}).filter(([, v]) => v?.length)) as Partial<Record<EquipSlot, string[]>>,
   equipRf: Object.fromEntries(Object.entries(inv.equipRf ?? {}).filter(([, v]) => v)) as Partial<Record<EquipSlot, number>>,
@@ -37,13 +39,13 @@ export const validSlot = (i: unknown): i is number => Number.isInteger(i) && (i 
  * Adiciona `qty` do item (completa pilhas antes de ocupar espaços vazios). Devolve quanto NÃO coube.
  * `af`: afixos do item (só faz diferença para equipamento, que tem pilha de 1 e nunca se funde). Afixos inválidos são descartados.
  */
-export function addItem(inv: Inventory, id: string, qty: number, af?: string[], rf?: number, gm?: string[]): number {
+export function addItem(inv: Inventory, id: string, qty: number, af?: string[], rf?: number, gm?: string[], gmv = false): number {
   const def = ITEMS[id];
   if (!def || !Number.isInteger(qty) || qty <= 0) return Math.max(0, Number.isFinite(qty) ? Math.trunc(qty) : 0);
   let left = qty;
   for (const s of inv.slots) {
     if (left <= 0) break;
-    if (s && s.id === id && s.qty < def.stack) {
+    if (s && s.id === id && s.qty < def.stack && !s.gmv === !gmv) { // item do GM nunca funde com item comum
       const take = Math.min(def.stack - s.qty, left);
       s.qty += take;
       left -= take;
@@ -55,7 +57,7 @@ export function addItem(inv: Inventory, id: string, qty: number, af?: string[], 
       const ok = af?.length ? afixosValidos(af, def.kind, def.rarity) : [];
       const nivel = refinoValido(rf); // refino vai junto com o item (equipamento de pilha 1)
       const gemas = def.kind && take === 1 ? gemasValidas(gm, def.kind, def.rarity) : []; // gemas vão com o item de pilha 1 (equipamento)
-      inv.slots[i] = { id, qty: take, ...(ok.length ? { af: ok } : {}), ...(nivel ? { rf: nivel } : {}), ...(gemas.length ? { gm: gemas } : {}) };
+      inv.slots[i] = { id, qty: take, ...(ok.length ? { af: ok } : {}), ...(nivel ? { rf: nivel } : {}), ...(gemas.length ? { gm: gemas } : {}), ...(gmv ? { gmv: true } : {}) };
       left -= take;
     }
   }
@@ -98,29 +100,35 @@ export function equipFromSlot(inv: Inventory, idx: unknown, level: number, cls: 
   const prevAf = inv.equipAf?.[slot];
   const prevRf = inv.equipRf?.[slot];
   const prevGm = inv.equipGm?.[slot];
+  const prevGmv = !!inv.equipGmv?.[slot];
   inv.equip[slot] = stack.id;
   setEquipAf(inv, slot, stack.af);
   setEquipRf(inv, slot, stack.rf);
   setEquipGm(inv, slot, stack.gm);
-  inv.slots[idx] = prev ? { id: prev, qty: 1, ...(prevAf?.length ? { af: prevAf } : {}), ...(prevRf ? { rf: prevRf } : {}), ...(prevGm?.length ? { gm: prevGm } : {}) } : null; // troca: o item antigo ocupa o espaço liberado
+  setEquipGmv(inv, slot, !!stack.gmv);
+  inv.slots[idx] = prev ? { id: prev, qty: 1, ...(prevAf?.length ? { af: prevAf } : {}), ...(prevRf ? { rf: prevRf } : {}), ...(prevGm?.length ? { gm: prevGm } : {}), ...(prevGmv ? { gmv: true } : {}) } : null; // troca: o item antigo ocupa o espaço liberado
   if (freeOff) {
     const off = inv.equip.offhand!;
     const offAf = inv.equipAf?.offhand;
     const offRf = inv.equipRf?.offhand;
     const offGm = inv.equipGm?.offhand;
+    const offGmv = !!inv.equipGmv?.offhand;
     inv.equip.offhand = null;
     setEquipAf(inv, "offhand", undefined);
     setEquipRf(inv, "offhand", undefined);
     setEquipGm(inv, "offhand", undefined);
-    if (addItem(inv, off, 1, offAf, offRf, offGm) > 0) { // sem espaço: desfaz tudo
+    setEquipGmv(inv, "offhand", false);
+    if (addItem(inv, off, 1, offAf, offRf, offGm, offGmv) > 0) { // sem espaço: desfaz tudo
       inv.equip.offhand = off;
       setEquipAf(inv, "offhand", offAf);
       setEquipRf(inv, "offhand", offRf);
       setEquipGm(inv, "offhand", offGm);
+      setEquipGmv(inv, "offhand", offGmv);
       inv.equip[slot] = prev;
       setEquipAf(inv, slot, prevAf);
       setEquipRf(inv, slot, prevRf);
       setEquipGm(inv, slot, prevGm);
+      setEquipGmv(inv, slot, prevGmv);
       inv.slots[idx] = stack;
       return { ok: false, error: "Mochila cheia." };
     }
@@ -133,17 +141,20 @@ export function unequip(inv: Inventory, slot: unknown): Result {
   const s = slot as EquipSlot;
   const id = inv.equip[s];
   if (!id) return { ok: false, error: "Nada equipado." };
-  if (addItem(inv, id, 1, inv.equipAf?.[s], inv.equipRf?.[s], inv.equipGm?.[s]) > 0) return { ok: false, error: "Mochila cheia." };
+  if (addItem(inv, id, 1, inv.equipAf?.[s], inv.equipRf?.[s], inv.equipGm?.[s], !!inv.equipGmv?.[s]) > 0) return { ok: false, error: "Mochila cheia." };
   inv.equip[s] = null;
   setEquipAf(inv, s, undefined);
   setEquipRf(inv, s, undefined);
   setEquipGm(inv, s, undefined);
+  setEquipGmv(inv, s, false);
   return { ok: true };
 }
 
 export function dropSlot(inv: Inventory, idx: unknown): Result {
   if (!validSlot(idx)) return { ok: false, error: "Espaço inválido." };
   if (!inv.slots[idx]) return { ok: false, error: "Espaço vazio." };
+  const travado = bloqueioGm(inv.slots[idx]);
+  if (travado) return { ok: false, error: travado };
   inv.slots[idx] = null;
   return { ok: true };
 }
@@ -183,6 +194,14 @@ export function setEquipGm(inv: Inventory, slot: EquipSlot, gm: string[] | undef
   inv.equipGm = next;
 }
 
+/** Guarda (ou tira) a marca de item criado pelo Modo Deus no equipamento vestido. */
+export function setEquipGmv(inv: Inventory, slot: EquipSlot, gmv: boolean | undefined) {
+  if (!gmv && !inv.equipGmv?.[slot]) return; // nada a mudar: não cria o campo
+  const next = { ...(inv.equipGmv ?? {}) };
+  if (gmv) next[slot] = true; else delete next[slot];
+  inv.equipGmv = next;
+}
+
 const KIND_ORDER = ["weapon", "offhand", "helmet", "armor", "boots", "cape", "potion", "material"];
 /** Organiza a mochila: junta pilhas, ordena por tipo, raridade (maior primeiro) e nome, e encosta tudo no começo. */
 export function sortInventory(inv: Inventory): void {
@@ -194,9 +213,9 @@ export function sortInventory(inv: Inventory): void {
     let left = s.qty;
     for (const m of merged) {
       if (left <= 0) break;
-      if (m.id === s.id && m.qty < def.stack) { const t = Math.min(def.stack - m.qty, left); m.qty += t; left -= t; }
+      if (m.id === s.id && !m.gmv === !s.gmv && m.qty < def.stack) { const t = Math.min(def.stack - m.qty, left); m.qty += t; left -= t; }
     }
-    if (left > 0) merged.push({ id: s.id, qty: left, ...(s.af?.length ? { af: s.af } : {}), ...(s.rf ? { rf: s.rf } : {}) });
+    if (left > 0) merged.push({ id: s.id, qty: left, ...(s.af?.length ? { af: s.af } : {}), ...(s.rf ? { rf: s.rf } : {}), ...(s.gmv ? { gmv: true } : {}) });
   }
   merged.sort((a, b) => {
     const da = ITEMS[a.id], db = ITEMS[b.id];

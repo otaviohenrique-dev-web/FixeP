@@ -37,6 +37,11 @@ export class Player extends Schema {
   @type("boolean") rooted = false; // enraizado (PvP): não anda (o cliente mostra correntes)
   @type("string") party = ""; // id do grupo ("" = sem grupo); o cliente marca a placa de quem é do seu grupo
   @type("string") weaponRarity = ""; // raridade da arma equipada ("" = sem arma): o cliente desenha o brilho público no personagem
+  @type("boolean") gm = false; // Modo Deus ligado (só conta admin): o cliente de admin mostra a marca [GM]
+  @type("boolean") gmInvis = false; // Modo Deus: invisível (o cliente comum esconde; monstros e jogadores não o alcançam)
+  @type("boolean") gmInvuln = false; // Modo Deus: invulnerável
+  @type("number") gmVel = 1; // Modo Deus: multiplicador de velocidade (1 = normal)
+  gmUsado = false; // só no servidor: o personagem já usou moedas, item ou XP do Modo Deus (marca permanente; isola da economia em produção)
 
   // --- só no servidor (não sincronizado) ---
   charId = ""; // linha em `characters`

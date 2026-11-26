@@ -35,8 +35,12 @@ async function chamar<T = any>(jogoToken: string, metodo: MetodoPainel, caminho:
   return json as T;
 }
 
-export function abrirPainel(jogoToken: string): void {
+/** aba que abre primeiro (ex.: F10 abre direto no Modo Deus); vale só na abertura seguinte */
+let abaAoAbrir: string | undefined;
+
+export function abrirPainel(jogoToken: string, abaInicial?: string): void {
   if (fechar) return; // já aberto
+  abaAoAbrir = abaInicial;
   if (!estiloMontado) {
     const st = el("style");
     st.textContent = CSS;
@@ -209,7 +213,8 @@ export function abrirPainel(jogoToken: string): void {
     for (const i of instancias.values()) i.fechar?.();
     instancias.clear();
     abaAtual = null;
-    selecionar(ABAS[0].id);
+    selecionar(abaAoAbrir && ABAS.some((a) => a.id === abaAoAbrir) ? abaAoAbrir : ABAS[0].id);
+    abaAoAbrir = undefined;
   }
 
   // ---- busca rápida (Ctrl+K): jogador pelo nome ou aba

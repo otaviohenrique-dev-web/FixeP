@@ -1,5 +1,6 @@
 import { ITEMS, VAULT_SLOTS, VAULT_COIN_MAX, type InvStack, type VaultSnapshot } from "@frixep/shared";
 import { addItem, validSlot, type Inventory, type Result } from "./inventory.js";
+import { bloqueioGm } from "../gm/modoDeus.js";
 
 /** Baú pessoal do jogador (só existe no servidor; o cliente recebe fotografias). Funções puras: mexem só em memória, o salvamento é feito pela sala. */
 export interface Vault { slots: (InvStack | null)[]; iron: number; obols: number }
@@ -30,6 +31,8 @@ export function deposit(inv: Inventory, v: Vault, slot: unknown, qtyRaw: unknown
   if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
   const st = inv.slots[slot];
   if (!st || !ITEMS[st.id]) return { ok: false, error: "Espaço vazio." };
+  const travado = bloqueioGm(st); // item do Modo Deus não entra no baú compartilhado
+  if (travado) return { ok: false, error: travado };
   const qty = qtyOf(qtyRaw, st.qty);
   if (qty === null) return { ok: false, error: "Quantidade inválida." };
   if (to !== undefined && !validVaultSlot(to)) return { ok: false, error: "Espaço do baú inválido." };
