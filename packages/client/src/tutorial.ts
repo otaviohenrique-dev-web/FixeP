@@ -1,5 +1,5 @@
-import Phaser from "phaser";
-import { zoneNpcs, objetivoAtual, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent } from "@frixep/shared";
+import type Phaser from "phaser";
+import { ZONES, ZONE_NPCS, WORLD_GATE, HUB_ZONE, objetivoAtual, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent } from "@frixep/shared";
 
 /**
  * Tutorial de 5 quests (C1.4): a bandeira no chão apontando o ponto da quest "chegar". O texto do passo atual
@@ -15,6 +15,7 @@ export interface TutorialUi {
   setDefs(ev: QuestDefsEvent): void;
 }
 
+const TOWN = HUB_ZONE; // a cidade segura (onde ficam os NPCs)
 type ToScreen = (x: number, y: number) => { sx: number; sy: number };
 
 /** Ordem dos passos do tutorial: a cadeia de pré-requisitos (a que começa sem pré-requisito, depois a que depende dela...). */
@@ -38,24 +39,53 @@ export function textoPasso(def: QuestDef, estado: QuestEstado["estado"] | undefi
   return null;
 }
 
-/** Destino da trilha: o ponto do passo "chegar", ou o NPC para aceitar/entregar/conversar (só na zona atual). */
-export function destinoTrilha(
-  defs: Map<string, QuestDef>, estados: Map<string, QuestEstado>, zona: number,
-): { x: number; y: number; raio: number } | null {
-  const npc = (id: string | null | undefined) => { const n = id ? zoneNpcs(zona).find((d) => d.id === id) : undefined; return n ? { x: n.x, y: n.y, raio: 2.5 } : null; };
+type Ponto = { x: number; y: number; raio: number };
+
+/** Portal da zona atual que leva na direção de `alvo`: direto; senão o portão da cidade (mapa-mundo); senão volta à cidade. */
+function portalPara(zona: number, alvo: number): Ponto | null {
+  const ps = ZONES[zona]?.portals ?? [];
+  const p = ps.find((q) => q.to === alvo) ?? (alvo !== TOWN ? ps.find((q) => q.to === WORLD_GATE) : undefined) ?? ps.find((q) => q.to === TOWN);
+  return p ? { x: p.x, y: p.y, raio: Math.max(0.6, p.r - 0.4) } : null;
+}
+
+/** Destinos da trilha (o mais perto do jogador é usado): ponto do "chegar", NPC, pontos de caça do "abater";
+ *  se o objetivo é em outra zona, o portal que leva até lá. */
+export function destinoTrilha(defs: Map<string, QuestDef>, estados: Map<string, QuestEstado>, zona: number): Ponto[] {
+  const naZona = (z: number | undefined, pts: Ponto[]): Ponto[] => (z === undefined || z === zona ? pts : (() => { const p = portalPara(zona, z); return p ? [p] : []; })());
+  const zonaDoNpc = (id: string) => Number(Object.keys(ZONE_NPCS).find((z) => ZONE_NPCS[Number(z)].some((n) => n.id === id)) ?? TOWN);
+  const npc = (id: string | null | undefined): Ponto[] => {
+    if (!id) return [];
+    const z = zonaDoNpc(id);
+    const n = (ZONE_NPCS[z] ?? []).find((d) => d.id === id);
+    return n ? naZona(z, [{ x: n.x, y: n.y, raio: 2.5 }]) : [];
+  };
+  const objetivo = (def: QuestDef, est: QuestEstado): Ponto[] => {
+    if (est.estado === "pronta") return npc(def.npc ?? "merchant");
+    const o = def.objetivos[objetivoAtual(def, est.progresso)];
+    if (!o) return [];
+    if (o.tipo === "chegar") return naZona(o.zona, [{ x: o.x, y: o.y, raio: o.raio }]);
+    if (o.tipo === "falar") return npc(o.npc);
+    if (o.tipo === "abater") {
+      const z = o.zona ?? zona;
+      const pts = (ZONES[z]?.enemies ?? []).filter((e) => e.kind === o.kind).map((e) => ({ x: e.x, y: e.y, raio: (e.spread ?? 0) + 1.5 }));
+      return naZona(z, pts);
+    }
+    return [];
+  };
   const passos = passosTutorial(defs.values());
   const pendente = passos.find((d) => estados.get(d.id)?.estado !== "entregue");
   if (pendente) {
     const est = estados.get(pendente.id);
-    if (!est || est.estado === "pronta") return npc(pendente.npc ?? "merchant");
-    const o = pendente.objetivos[objetivoAtual(pendente, est.progresso)];
-    if (o?.tipo === "chegar") return o.zona === zona ? { x: o.x, y: o.y, raio: o.raio } : null;
-    if (o?.tipo === "falar") return npc(o.npc);
-    return null;
+    return est ? objetivo(pendente, est) : npc(pendente.npc ?? "merchant");
   }
-  // fora do tutorial: a primeira missão pronta aponta para quem recebe
-  for (const est of estados.values()) if (est.estado === "pronta") { const d = defs.get(est.id); const alvo = npc(d?.npc); if (alvo) return alvo; }
-  return null;
+  // fora do tutorial: primeiro o que está pronto para entregar, depois a primeira missão ativa
+  const lista = [...estados.values()];
+  for (const est of [...lista.filter((e) => e.estado === "pronta"), ...lista.filter((e) => e.estado === "ativa")]) {
+    const d = defs.get(est.id);
+    const pts = d ? objetivo(d, est) : [];
+    if (pts.length) return pts;
+  }
+  return [];
 }
 
 export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; getZone(): number; getPlayer?(): { x: number; y: number } | null }): TutorialUi {
@@ -79,13 +109,15 @@ export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; 
   let estados = new Map<string, QuestEstado>();
 
   // trilha tracejada no chão até o destino: só mostra o caminho, nunca anda pelo jogador; some ao chegar perto
-  let destino: { x: number; y: number; raio: number } | null = null;
+  let destinos: Ponto[] = [];
   const trilha = opts.scene?.add.graphics().setDepth(0.29);
   if (opts.scene && trilha) {
     const desenhar = (time: number) => {
       trilha.clear();
       const p = opts.getPlayer?.();
-      if (!destino || !p) return;
+      if (!destinos.length || !p) return;
+      let destino = destinos[0];
+      for (const d of destinos) if (Math.hypot(d.x - p.x, d.y - p.y) < Math.hypot(destino.x - p.x, destino.y - p.y)) destino = d;
       const dx = destino.x - p.x, dy = destino.y - p.y;
       const dist = Math.hypot(dx, dy);
       if (dist <= destino.raio + 0.5) return; // chegou
@@ -108,7 +140,7 @@ export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; 
 
   /** a bandeira aparece só no passo "chegar" ativo, na zona onde o ponto está */
   function atualizar() {
-    destino = destinoTrilha(defs, estados, opts.getZone());
+    destinos = destinoTrilha(defs, estados, opts.getZone());
     const passos = passosTutorial(defs.values());
     const pendente = passos.find((d) => estados.get(d.id)?.estado !== "entregue");
     if (!pendente) {
