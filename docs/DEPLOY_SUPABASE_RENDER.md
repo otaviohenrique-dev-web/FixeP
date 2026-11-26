@@ -70,7 +70,15 @@ Em **Environment** do serviço, defina:
 | `DATABASE_CA` | o certificado (Parte 3) |
 | `SERVER_URL` | URL pública do servidor, ex.: `https://frixep-server.onrender.com` |
 | `CLIENT_URL` | URL pública do cliente (a do site do jogo) |
+| `ALLOWED_ORIGINS` | (opcional) origens autorizadas a usar a API e o WebSocket, separadas por vírgula. Veja a nota abaixo |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | as credenciais do Google (use uma chave **nova** em produção) |
+
+**Origens permitidas (anti-clone):** o servidor só aceita requisições HTTP (API, `/auth`, matchmaking) e WebSocket
+cujo cabeçalho `Origin` esteja na lista; qualquer outra origem recebe **403** / conexão negada. Sem `ALLOWED_ORIGINS`,
+a lista é `CLIENT_URL` + `https://frixep.com` + `https://www.frixep.com`. Para mudar, ex.:
+`ALLOWED_ORIGINS=https://frixep.com,https://www.frixep.com`. Requisições **sem** `Origin` (curl, health check, testes)
+passam, e `/health` é sempre liberado. Fora de produção (`NODE_ENV` diferente de `production`), `localhost` e
+`127.0.0.1` em qualquer porta também são aceitos.
 
 Outros pontos:
 
