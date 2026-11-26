@@ -41,10 +41,10 @@ export interface MarketFilter {
   sort?: MarketSort;
   page?: number; // 0, 1, 2...
 }
-export interface MarketListing { id: string; itemId: string; qty: number; price: number; currency: MarketCurrency; seller: string; expiresAt: number; mine: boolean }
+export interface MarketListing { id: string; itemId: string; qty: number; price: number; currency: MarketCurrency; seller: string; expiresAt: number; mine: boolean; af?: string[]; rf?: number; gm?: string[]; gmv?: boolean } // extras do item (afixos, refino, gemas), para a ficha
 export interface MarketPage { items: MarketListing[]; page: number; pages: number; total: number }
 export type MyListingStatus = "active" | "sold" | "expired";
-export interface MyListing { id: string; itemId: string; qty: number; price: number; currency: MarketCurrency; fee: number; status: MyListingStatus; expiresAt: number; buyer?: string }
+export interface MyListing { id: string; itemId: string; qty: number; price: number; currency: MarketCurrency; fee: number; status: MyListingStatus; expiresAt: number; buyer?: string; af?: string[]; rf?: number; gm?: string[]; gmv?: boolean }
 export interface MarketMineEvent { listings: MyListing[]; open: number; max: number }
 /** Uma listagem na janela de preços: só o necessário para comparar (sem dados privados do vendedor além do nome). */
 export interface MarketPriceRow { id: string; qty: number; price: number; currency: MarketCurrency; unit: number; seller: string; mine: boolean }

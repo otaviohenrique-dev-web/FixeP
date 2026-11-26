@@ -1,3 +1,4 @@
+import { extrasDoBanco, extrasParaBanco } from "../db/extras.js";
 import { randomUUID } from "node:crypto";
 import {
   ITEMS, MAX_COINS, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PRICE, MARKET_CURRENCY_NAME, minListingPrice, MARKET_DAYS, MARKET_PAGE, listingFee,
@@ -22,8 +23,10 @@ export type MarketResult = { ok: true; msg: string } | { ok: false; error: strin
 class Abort extends Error {}
 const abort = (m: string): never => { throw new Abort(m); };
 
-interface Row { id: string; seller_id: string; seller_name: string; item_id: string; qty: number; price: number; currency: string; fee: number; status: string; buyer_name: string | null; expires_ms: string | number }
-const COLS = "id, seller_id, seller_name, item_id, qty, price, currency, fee, status, buyer_name, (extract(epoch from expires_at) * 1000)::bigint as expires_ms";
+interface Row { id: string; seller_id: string; seller_name: string; item_id: string; qty: number; price: number; currency: string; fee: number; status: string; buyer_name: string | null; expires_ms: string | number; af: string | null; rf: number | null; gm: string | null; gmv: boolean }
+const COLS = "id, seller_id, seller_name, item_id, qty, price, currency, fee, status, buyer_name, (extract(epoch from expires_at) * 1000)::bigint as expires_ms, af, rf, gm, gmv";
+/** extras do item da listagem (afixos, refino, gemas), para a ficha no mercado e para devolver o item igual (PD-16) */
+const extrasDaLinha = (r: { id: string; item_id: string; af: string | null; rf: number | null; gm: string | null; gmv: boolean }) => extrasDoBanco(r.item_id, r, `mercado:${r.id}`);
 
 export class Market {
   private lastSweep = 0;
@@ -84,14 +87,16 @@ export class Market {
       const st = a.inv.slots[slot];
       if (!st || st.id !== st0.id || st.qty < qty || a.inv[cur] < fee) abort("A mochila mudou. Tente de novo.");
       const itemId = st!.id;
+      const ex = extrasParaBanco(st!); // afixos, refino e gemas vão junto para a listagem (PD-16)
+      const exMem = { af: st!.af, rf: st!.rf, gm: st!.gm, gmv: !!st!.gmv };
       st!.qty -= qty;
       if (st!.qty <= 0) a.inv.slots[slot] = null;
       a.inv[cur] -= fee;
       try {
-        await q("insert into market_listings (id, seller_id, seller_name, item_id, qty, price, currency, fee, expires_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [id, a.charId, a.name, itemId, qty, price, cur, fee, this.iso(this.now() + this.ttlMs)]);
+        await q("insert into market_listings (id, seller_id, seller_name, item_id, qty, price, currency, fee, expires_at, af, rf, gm, gmv) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", [id, a.charId, a.name, itemId, qty, price, cur, fee, this.iso(this.now() + this.ttlMs), ex.af, ex.rf, ex.gm, ex.gmv]);
         await this.persist(q, a);
       } catch (e) {
-        addItem(a.inv, itemId, qty); a.inv[cur] += fee; // devolve na memória
+        addItem(a.inv, itemId, qty, exMem.af, exMem.rf, exMem.gm, exMem.gmv); a.inv[cur] += fee; // devolve na memória, com os extras
         throw e;
       }
       return { ok: true as const, msg: `${ITEMS[itemId].name}${qty > 1 ? ` x${qty}` : ""} à venda por ${price.toLocaleString("pt-BR")} ${cn} (taxa: ${fee}).` };
@@ -104,8 +109,8 @@ export class Market {
     return this.run(async (q) => {
       const now = this.iso(this.now());
       // reivindica: só UMA compra consegue virar 'sold' (as outras veem 0 linhas e perdem com a mensagem abaixo)
-      const got = (await q<{ item_id: string; qty: number; price: number; currency: MarketCurrency; seller_id: string }>(
-        "update market_listings set status = 'sold', buyer_id = $2, buyer_name = $3, sold_at = $4 where id = $1 and status = 'active' and expires_at > $4 and seller_id <> $2 returning item_id, qty, price, currency, seller_id", [id, a.charId, a.name, now])).rows;
+      const got = (await q<{ id: string; item_id: string; qty: number; price: number; currency: MarketCurrency; seller_id: string; af: string | null; rf: number | null; gm: string | null; gmv: boolean }>(
+        "update market_listings set status = 'sold', buyer_id = $2, buyer_name = $3, sold_at = $4 where id = $1 and status = 'active' and expires_at > $4 and seller_id <> $2 returning id, item_id, qty, price, currency, seller_id, af, rf, gm, gmv", [id, a.charId, a.name, now])).rows;
       if (!got.length) {
         const r = (await q<{ status: string; seller_id: string; expires_ms: string }>("select status, seller_id, (extract(epoch from expires_at)*1000)::bigint as expires_ms from market_listings where id = $1", [id])).rows[0];
         if (r && r.seller_id === a.charId) abort("Você não pode comprar a própria listagem.");
@@ -115,7 +120,7 @@ export class Market {
       if (a.inv[l.currency] < l.price) abort(`${MARKET_CURRENCY_NAME[l.currency]} insuficientes (precisa de ${l.price.toLocaleString("pt-BR")}).`);
       if (!canFit(a.inv, l.item_id, l.qty)) abort("Mochila cheia.");
       a.inv[l.currency] -= l.price;
-      addItem(a.inv, l.item_id, l.qty);
+      { const x = extrasDaLinha(l); addItem(a.inv, l.item_id, l.qty, x.af, x.rf, x.gm, !!x.gmv); } // com afixos, refino e gemas (PD-16)
       try { await this.persist(q, a); } catch (e) { this.takeBack(a.inv, { item: { id: l.item_id, qty: l.qty } }); a.inv[l.currency] += l.price; throw e; }
       return { ok: true as const, msg: `Comprou ${ITEMS[l.item_id].name}${l.qty > 1 ? ` x${l.qty}` : ""} por ${l.price.toLocaleString("pt-BR")} ${MARKET_CURRENCY_NAME[l.currency]}.` };
     });
@@ -125,11 +130,11 @@ export class Market {
   async cancel(a: MarketActor, id: unknown): Promise<MarketResult> {
     if (typeof id !== "string" || !/^[0-9a-f-]{36}$/.test(id)) return { ok: false, error: "Listagem inválida." };
     return this.run(async (q) => {
-      const got = (await q<{ item_id: string; qty: number }>("update market_listings set status = 'closed', closed_at = $3 where id = $1 and seller_id = $2 and status = 'active' returning item_id, qty", [id, a.charId, this.iso(this.now())])).rows;
+      const got = (await q<{ id: string; item_id: string; qty: number; af: string | null; rf: number | null; gm: string | null; gmv: boolean }>("update market_listings set status = 'closed', closed_at = $3 where id = $1 and seller_id = $2 and status = 'active' returning id, item_id, qty, af, rf, gm, gmv", [id, a.charId, this.iso(this.now())])).rows;
       if (!got.length) abort("Essa listagem não está mais ativa.");
       const l = got[0]!;
       if (!canFit(a.inv, l.item_id, l.qty)) abort("Mochila cheia: abra espaço para receber o item.");
-      addItem(a.inv, l.item_id, l.qty);
+      { const x = extrasDaLinha(l); addItem(a.inv, l.item_id, l.qty, x.af, x.rf, x.gm, !!x.gmv); } // com afixos, refino e gemas (PD-16)
       try { await this.persist(q, a); } catch (e) { this.takeBack(a.inv, { item: { id: l.item_id, qty: l.qty } }); throw e; }
       return { ok: true as const, msg: `${ITEMS[l.item_id].name}${l.qty > 1 ? ` x${l.qty}` : ""} voltou para a mochila.` };
     });
@@ -171,7 +176,7 @@ export class Market {
     return rows.map((r) => {
       const exp = Number(r.expires_ms);
       const status = r.status === "sold" ? "sold" : exp <= now ? "expired" : "active";
-      return { id: r.id, itemId: r.item_id, qty: r.qty, price: r.price, currency: r.currency as MarketCurrency, fee: r.fee, status, expiresAt: exp, buyer: r.buyer_name ?? undefined } as MyListing;
+      return { id: r.id, itemId: r.item_id, qty: r.qty, price: r.price, currency: r.currency as MarketCurrency, fee: r.fee, status, expiresAt: exp, buyer: r.buyer_name ?? undefined, ...extrasDaLinha(r) } as MyListing;
     });
   }
 
@@ -188,7 +193,7 @@ export class Market {
     const pages = Math.max(1, Math.ceil(total / MARKET_PAGE));
     const page = Math.min(f.page, pages - 1);
     const { rows } = await this.db.query<Row>(`select ${COLS} from market_listings where ${where} order by ${order} limit ${MARKET_PAGE} offset ${page * MARKET_PAGE}`, args);
-    return { items: rows.map((r) => ({ id: r.id, itemId: r.item_id, qty: r.qty, price: r.price, currency: r.currency as MarketCurrency, seller: r.seller_name, expiresAt: Number(r.expires_ms), mine: r.seller_id === viewerCharId })), page, pages, total };
+    return { items: rows.map((r) => ({ id: r.id, itemId: r.item_id, qty: r.qty, price: r.price, currency: r.currency as MarketCurrency, seller: r.seller_name, expiresAt: Number(r.expires_ms), mine: r.seller_id === viewerCharId, ...extrasDaLinha(r) })), page, pages, total };
   }
 
   /** Janela de preços do formulário de venda: listagens ativas de UM item e UMA moeda, pelo preço por unidade (total / qtd.).
