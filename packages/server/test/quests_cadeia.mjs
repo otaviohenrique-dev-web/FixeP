@@ -27,7 +27,7 @@ const ORDEM = [
 ];
 // onde ficam os NPCs (cidade, zona 4; alcance de conversa 3,5 tiles, ver shared/src/economy.ts) e onde parar perto deles
 const PARADA = { merchant: { x: 20.5, y: 24 }, smith: { x: 27, y: 24 }, auctioneer: { x: 24, y: 21 } };
-const GATE = { x: 24, y: 3 }; // dentro do raio do portão da cidade (24, 2): dali o pedido do mapa-mundo vale
+const GATE = { x: 24, y: 1 }; // dentro do raio do portão da cidade (24, 0): dali o pedido do mapa-mundo vale
 // saídas das zonas de combate: [x, y, zona de destino] (ver shared/src/zones.ts)
 const SAIDA = { "1>2": [4, 35, 2], "1>4": [4, 28, 4], "2>1": [4, 4, 1], "2>4": [4, 14, 4] };
 // clareira sem inimigos onde o personagem descansa (chegada de cada zona)

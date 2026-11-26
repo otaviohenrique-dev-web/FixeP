@@ -43,7 +43,7 @@ check("a cidade não tem inimigos nem chefe", enemies(H.r).length === 0 && bossO
 H.r.send("travel", { to: 1 });
 await sleep(400);
 check("pedir uma zona de longe do portão é recusado", H.ev.travel.length === 0 && H.ev.notice.some((t) => t.includes("portão")));
-H.r.send("move_to", { x: 24, y: 2 });
+H.r.send("move_to", { x: 24, y: 0 });
 check("pisar no portão abre o mapa-mundo (e não atravessa sozinho)", (await waitFor(() => H.ev.gate > 0, 14000)) && H.ev.travel.length === 0);
 await sleep(600);
 check("o mapa-mundo abre uma vez só por entrada no portão", H.ev.gate === 1);
@@ -158,10 +158,10 @@ check("o portal da zona 2 para a cidade leva à zona 4", cruzou && D.ev.travel[0
 await D.r.leave(true);
 await sleep(300);
 D = await join("zone4");
-check("volta à cidade já dentro do portão (24; 5), de qualquer zona", D.r.state.zoneId === 4 && near(D.me(), 24, 5, 0.5), `(${D.me().x}, ${D.me().y})`);
+check("volta à cidade já dentro do portão (24; 3), de qualquer zona", D.r.state.zoneId === 4 && near(D.me(), 24, 3, 0.5), `(${D.me().x}, ${D.me().y})`);
 await sleep(800);
 check("e não reabre o mapa-mundo sozinho (fora do raio)", D.ev.gate === 0);
-D.r.send("move_to", { x: 24, y: 2 });
+D.r.send("move_to", { x: 24, y: 0 });
 check("andar até o portão abre o mapa-mundo de novo", await waitFor(() => D.ev.gate > 0, 6000));
 let viajou = false; // recém-chegado: o pedido é recusado até passar a espera; insiste a cada segundo
 for (let i = 0; i < 14 && !viajou; i++) { D.r.send("travel", { to: 3 }); viajou = await waitFor(() => D.ev.travel.length > 0, 1000); }
@@ -174,7 +174,7 @@ console.log("\n== Em combate não se atravessa ==");
   const nm = "Cb" + Math.random().toString(10).slice(2, 8);
   await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${g.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: nm, class: "warrior" }) });
   const h = await join("zone4", g.token);
-  h.r.send("move_to", { x: 24, y: 2 });
+  h.r.send("move_to", { x: 24, y: 0 });
   await waitFor(() => h.ev.gate > 0, 14000);
   h.r.send("travel", { to: 1 });
   await waitFor(() => h.ev.travel.length > 0, 5000);

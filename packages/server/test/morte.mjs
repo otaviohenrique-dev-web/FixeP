@@ -30,8 +30,8 @@ async function enter(acc, room) {
 // ---- 1) morrer numa zona de combate: corpo parado no lugar da queda e ida direta à cidade
 const acc = await account("Mt");
 let Z = await enter(acc, "zone4");
-Z.r.send("move_to", { x: 24, y: 2 });
-await until(() => Math.hypot(Z.me().x - 24, Z.me().y - 2) < 1.5, 20000);
+Z.r.send("move_to", { x: 24, y: 0 });
+await until(() => Math.hypot(Z.me().x - 24, Z.me().y - 0) < 0.5, 20000);
 Z.r.send("travel", { to: 1 });
 await until(() => Z.ev.travel.length > 0, 5000);
 await Z.r.leave(true);
@@ -58,8 +58,8 @@ console.log("\n== Chefe: reset sem ninguém lutando ==");
 {
   const toZone1 = async (a) => {
     const H = await enter(a, "zone4");
-    H.r.send("move_to", { x: 24, y: 2 });
-    await until(() => Math.hypot(H.me().x - 24, H.me().y - 2) < 1.5, 20000);
+    H.r.send("move_to", { x: 24, y: 0 });
+    await until(() => Math.hypot(H.me().x - 24, H.me().y - 0) < 0.5, 20000);
     H.r.send("travel", { to: 1 });
     await until(() => H.ev.travel.length > 0, 5000);
     await H.r.leave(true);
