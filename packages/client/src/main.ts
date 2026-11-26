@@ -336,7 +336,7 @@ class WorldScene extends Phaser.Scene {
     this.joy = mountJoystick();
     this.applyTouch();
     this.paintPortrait();
-    mountGameMenu({
+    const menuJogo = mountGameMenu({
       playerName: this.me()?.name ?? "Portador",
       onLogout: async () => {
         this.leaving = true;
@@ -350,7 +350,7 @@ class WorldScene extends Phaser.Scene {
       ], // Talentos, Variações e Builds ficam no botão "Habilidades" (ao lado do menu), com o ponto verde de pendência
     });
     mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
-    void montarEntradaPainel((this.sys.settings.data as { token: string }).token); // botão "Painel": só aparece para admin (o módulo do painel carrega sob demanda)
+    void montarEntradaPainel((this.sys.settings.data as { token: string }).token, menuJogo.addAcao); // botão "Painel": só aparece para admin (o módulo do painel carrega sob demanda)
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
     this.diario = mountDiario(); // rastreador e diário de quests (C1.3); depois do econ, que injeta o CSS de quests

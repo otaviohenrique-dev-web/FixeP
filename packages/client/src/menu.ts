@@ -113,6 +113,15 @@ export function mountGameMenu(opts: GameMenuOptions) {
   });
 
   card.append(title, who, resume, ...extras, hs, qual, perf, inst, hint, logout);
+  /** adiciona um atalho depois de montado (ex.: "Painel", que só existe para admin) */
+  const addAcao = (label: string, run: () => void | Promise<void>) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "gm-item";
+    b.textContent = label;
+    b.onclick = () => { close(); void run(); };
+    resume.after(b);
+  };
   back.append(card);
   document.body.append(btn, back);
 
@@ -140,4 +149,5 @@ export function mountGameMenu(opts: GameMenuOptions) {
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !isTypingTarget()) (isOpen() ? close : open)();
   });
+  return { addAcao };
 }
