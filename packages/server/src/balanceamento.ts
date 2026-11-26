@@ -2,13 +2,49 @@
  * Balanceamento ao vivo (servidor): carrega os ajustes salvos, aplica no código compartilhado e grava cada mudança
  * no histórico. Toda escrita passa por uma fila: a memória e o banco andam sempre juntos.
  */
-import { aplicarAjustes, mapaAjustes, valoresEfetivos, validarAjuste, valorEfetivo, valorPadrao } from "@frixep/shared";
+import { aplicarAjustes, mapaAjustes, valoresEfetivos, validarAjuste, valorEfetivo, valorPadrao, listarTabelas, mulXp, ZONES, expandSpawns, enemyHp, enemyXp, dmgMult, classAction, ENEMY_KINDS, PLAYABLE_CLASSES, type EnemyKind } from "@frixep/shared";
 import { MOTIVO_MAX } from "./moderacao.js";
 import { registrarAuditoria } from "./painel/auditoria.js";
 import type { Db } from "./db/index.js";
 
 export interface HistoricoItem { id: number; chave: string; antes: number; depois: number; motivo: string; conta: string; criadoEm: string }
 export type Resultado = { ok: true } | { ok: false; erro: string; status?: number };
+
+/** nível de referência de um tipo: o menor nível em que ele aparece nas zonas (ou no chefe) */
+function nivelEZonas(kind: string): { nivel: number; zonas: { id: number; nome: string }[] } {
+  let nivel: number | undefined;
+  const zonas: { id: number; nome: string }[] = [];
+  const ver = (n: number) => { nivel = nivel === undefined ? n : Math.min(nivel, n); };
+  for (const z of Object.values(ZONES)) {
+    let aqui = false;
+    for (const p of expandSpawns(z)) if (p.kind === kind) { ver(p.level); aqui = true; }
+    if (z.boss?.kind === kind) { ver(z.boss.level); aqui = true; }
+    if (aqui) zonas.push({ id: z.id, nome: z.name });
+  }
+  return { nivel: nivel ?? 1, zonas };
+}
+
+/** Estimativa APROXIMADA por tipo: um jogador batendo sem parar no nível do tipo (sem contar o tempo de andar).
+ *  golpes = ataque básico necessário para matar; XP/min = XP do abate pelo ciclo (golpes x cadência + tempo de renascimento). */
+export function estimativas() {
+  return Object.keys(ENEMY_KINDS).map((tipo) => {
+    const K = ENEMY_KINDS[tipo as EnemyKind];
+    const { nivel, zonas } = nivelEZonas(tipo);
+    const vida = enemyHp(nivel, tipo);
+    const xp = Math.max(0, Math.round(enemyXp(nivel) * (K.boss?.xpMul ?? 1) * mulXp(tipo)));
+    const golpes: Record<string, number> = {};
+    const xpPorMinuto: Record<string, number> = {};
+    for (const cls of PLAYABLE_CLASSES) {
+      const a = classAction(cls, "attack", 0);
+      const dano = Math.max(1, (a.dmg ?? 0) * dmgMult(nivel));
+      const n = Math.max(1, Math.ceil(vida / dano));
+      golpes[cls] = n;
+      const cicloS = n * a.cd + K.respawnS;
+      xpPorMinuto[cls] = Math.round((xp * 60 / cicloS) * 10) / 10;
+    }
+    return { tipo, nome: K.name, nivel, zonas, vida, xp, respawnS: K.respawnS, golpes, xpPorMinuto };
+  });
+}
 
 export class Balanceamento {
   private ajustes = new Map<string, number>(); // só os alterados (espelho da tabela balance_ajustes)
@@ -34,6 +70,11 @@ export class Balanceamento {
   listar() {
     const ef = valoresEfetivos();
     return mapaAjustes().map((a) => ({ ...a, atual: ef[a.chave], alterado: ef[a.chave] !== a.padrao }));
+  }
+
+  /** tabelas de drop por tipo de inimigo (chance, quantidade) e estimativas para o painel (golpes por classe e XP/min) */
+  tabelas() {
+    return { drops: listarTabelas(), estimativas: estimativas() };
   }
 
   definir(chave: string, valor: number, motivo: string, conta: string): Promise<Resultado> {

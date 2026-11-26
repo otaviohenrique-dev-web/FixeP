@@ -8,7 +8,7 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
+  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, mulGrupo, mulXp, mulTostoes, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
   VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
   limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId, aplicarSets,
   limparLoadouts, validarLoadout, sanitizarNomeLoadout, loadoutNomePadrao, LOADOUT_SLOTS, LOADOUT_COMBAT_LOCK_S, type Loadouts,
@@ -138,7 +138,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.saver = setInterval(() => void this.saveAll(), 30_000);
     this.setPatchRate(1000 / TICK_RATE);
 
-    expandSpawns(this.zone).forEach((s, i) => {
+    expandSpawns(this.zone, mulGrupo).forEach((s, i) => {
       const e = new Enemy();
       e.kind = s.kind;
       e.x = e.sx = s.x;
@@ -2126,11 +2126,11 @@ export class ZoneRoom extends Room<ZoneState> {
     const K = enemyKind(e.kind);
     const units = new Map<string, [string, Player][]>(); // grupo (ou a sessão, se solo) -> membros elegíveis
     for (const m of els) { const k = m[1].party || `solo:${m[0]}`; units.set(k, [...(units.get(k) ?? []), m]); }
-    const baseXp = enemyXp(e.level) * (K.boss?.xpMul ?? 1);
+    const baseXp = enemyXp(e.level) * (K.boss?.xpMul ?? 1) * mulXp(e.kind); // balanceamento: XP do tipo x geral (1 = padrão)
     for (const members of units.values()) {
       const n = members.length;
       const xpEach = Math.round((baseXp * partyXpMult(n)) / n);
-      const ironEach = Math.max(1, Math.round((K.boss ? bossIron(e.level) : mobIron(e.level)) / n));
+      const ironEach = Math.max(1, Math.round(((K.boss ? bossIron(e.level) : mobIron(e.level)) * mulTostoes(e.kind)) / n));
       for (const [pid, pl] of members) {
         const xpMine = Math.round(xpEach * (1 + pl.gear.af.xpPct / 100)); // Sabedoria (afixo)
         const ironMine = Math.max(1, Math.round(ironEach * (1 + pl.gear.af.goldPct / 100))); // Mão Gananciosa (afixo)
@@ -2148,7 +2148,7 @@ export class ZoneRoom extends Room<ZoneState> {
       }
     }
     if (K.boss) return this.openBossChest(e, bossName, els);
-    const drops = rollMobLoot(this.zone, Math.random, (els[0]?.[1].cls ?? "warrior") as CharClass, e.level);
+    const drops = rollMobLoot(this.zone, Math.random, (els[0]?.[1].cls ?? "warrior") as CharClass, e.level, e.kind);
     if (!els.length) { this.spawnGround(drops, e.x, e.y, "", 0); return; } // ninguém elegível (ex.: dano de quem já saiu): fica livre
     const per = new Map<string, Drop[]>();
     for (const d of drops) { const [sid] = els[this.lootRr++ % els.length]; per.set(sid, [...(per.get(sid) ?? []), d]); }
