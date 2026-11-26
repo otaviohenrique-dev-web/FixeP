@@ -1,5 +1,5 @@
 import {
-  ITEMS, ENEMY_KINDS, COIN_IRON, ZONE_NPCS, nomeNpcPorId, formatarProgresso, escolherRastreada, atualizarOrdem, agruparDiario,
+  ITEMS, ENEMY_KINDS, COIN_IRON, ZONE_NPCS, nomeNpcPorId, formatarProgresso, agruparDiario,
   type Objetivo, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent, type EntradaDiario,
 } from "@frixep/shared";
 import { isTypingTarget } from "./keys";
@@ -93,13 +93,7 @@ export function mountDiario(): DiarioUi {
   style.textContent = CSS;
   document.head.append(style);
 
-  // rastreador de quest (some quando não há quest); o diário abre pelo menu ou pela tecla J
-  const dock = el("div", "qd-dock");
-  const track = el("button", "qd-track");
-  track.type = "button";
-  track.hidden = true;
-  dock.append(track);
-  document.body.append(dock);
+  // o rastreador de missões fica à esquerda (rastreador.ts); o diário abre pelo menu, pela tecla J ou clicando numa missão de lá
 
   // painel do diário
   const back = el("div", "qst-back qd-back");
@@ -112,7 +106,6 @@ export function mountDiario(): DiarioUi {
 
   let estados: QuestEstado[] = [];
   let defs: QuestDef[] = [];
-  let ordem: string[] = [];
   let isOpenFlag = false;
 
   const fechar = () => {
@@ -127,15 +120,6 @@ export function mountDiario(): DiarioUi {
     renderDiario();
     (card.querySelector(".qst-x") as HTMLElement | null)?.focus({ preventScroll: true });
   };
-
-  function renderTrack() {
-    const r = escolherRastreada(defs, estados, ordem, nomeNpc);
-    track.hidden = !r;
-    if (!r) return;
-    track.textContent = r.linha;
-    track.title = r.linha;
-    track.classList.toggle("pronta", r.pronta);
-  }
 
   function renderDiario() {
     if (!isOpenFlag) return;
@@ -170,7 +154,6 @@ export function mountDiario(): DiarioUi {
     card.append(foot);
   }
 
-  track.onclick = () => (isOpenFlag ? fechar() : abrir());
   back.onclick = (e) => { if (e.target === back) fechar(); };
 
   // J abre e fecha; Esc fecha o diário antes de outras janelas (captura, como na caixa do NPC)
@@ -187,13 +170,10 @@ export function mountDiario(): DiarioUi {
   return {
     setQuests(ev) {
       estados = ev?.quests ?? [];
-      ordem = atualizarOrdem(ordem, estados);
-      renderTrack();
       renderDiario();
     },
     setDefs(ev) {
       defs = ev?.defs ?? [];
-      renderTrack();
       renderDiario();
     },
     open: abrir,

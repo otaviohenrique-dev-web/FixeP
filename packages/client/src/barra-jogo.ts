@@ -1,6 +1,6 @@
 /**
- * Atalhos de jogo (Diário, Mochila, Talentos, Variações, Builds): uma barra com ícone e tecla no computador,
- * no topo, no meio da tela. No celular a mesma lista aparece na seção "Jogo" do menu ☰ (a gaveta).
+ * Atalhos de jogo (Diário, Mochila, Talentos, Variações, Builds): no computador, ícones redondos discretos no canto
+ * superior direito, ao lado do ☰, com uma seta que recolhe/expande (a escolha fica salva). A tecla aparece na dica. No celular a mesma lista aparece na seção "Jogo" do menu ☰ (a gaveta).
  * Um ponto verde pulsante aparece no atalho que tem algo pendente. Cada atalho só LÊ o estado do seu painel.
  */
 import { criarPonto, garantirEstiloUtil } from "./utilidades";
@@ -19,19 +19,27 @@ export interface AtalhoJogo {
 }
 
 const CSS = `
-.jg-bar{position:fixed;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:20;display:flex;gap:8px;padding:5px 8px;border-radius:12px;
-  background:linear-gradient(180deg,rgba(20,34,52,.9),rgba(6,12,20,.92));border:1px solid rgba(255,150,70,.4);box-shadow:0 8px 22px rgba(0,0,0,.55),inset 0 1px 0 rgba(180,220,255,.12)}
-.jg-btn{position:relative;width:44px;height:44px;border-radius:8px;display:grid;place-items:center;cursor:pointer;color:#cfe3f8;padding:0;
-  background:linear-gradient(180deg,rgba(24,40,60,.9),rgba(8,14,24,.95));border:1px solid rgba(255,150,70,.35);transition:border-color .18s,box-shadow .18s,color .18s}
-.jg-btn svg{width:23px;height:23px}
-.jg-btn:hover,.jg-btn:focus-visible{color:#fff;border-color:#ff9a4d;box-shadow:0 0 16px rgba(255,120,40,.35)}
+/* computador: fileira discreta de ícones redondos no canto superior direito, ao lado do ☰ (estilo Albion); a seta recolhe e expande */
+.jg-bar{position:fixed;top:calc(max(14px,env(safe-area-inset-top)) + 5px);right:66px;z-index:20;display:flex;align-items:center;gap:6px;pointer-events:none}
+.jg-list{display:flex;gap:6px;overflow:hidden;max-width:260px;transition:max-width .22s ease,opacity .18s ease}
+.jg-bar.rec .jg-list{max-width:0;opacity:0}
+.jg-btn{pointer-events:auto;position:relative;flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#e2c98e;padding:0;
+  background:radial-gradient(circle at 50% 35%,rgba(40,52,72,.92),rgba(10,15,24,.92));border:1.5px solid rgba(201,164,92,.55);box-shadow:0 2px 6px rgba(0,0,0,.55);
+  opacity:.82;transition:opacity .15s,border-color .15s,box-shadow .15s,color .15s}
+.jg-btn svg{width:17px;height:17px}
+.jg-btn:hover,.jg-btn:focus-visible{opacity:1;color:#fff3cf;border-color:#f0cf86;box-shadow:0 0 10px rgba(240,200,120,.35)}
 .jg-btn:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
-.jg-btn.on{border-color:#ffd45e;box-shadow:inset 0 0 0 1px rgba(255,212,94,.55),0 0 12px rgba(255,200,90,.3);color:#fff6dc}
-.jg-key{position:absolute;right:-5px;bottom:-5px;min-width:17px;height:16px;padding:0 4px;border-radius:4px;font:700 10px/16px "Cinzel",Georgia,serif;text-align:center;color:#ffd9a8;background:#1a0f08;border:1px solid rgba(255,150,70,.7);pointer-events:none}
-.jg-btn .ut-dot{position:absolute;top:-4px;right:-4px}
+.jg-btn.on{opacity:1;color:#fff6dc;border-color:#ffd45e;box-shadow:0 0 10px rgba(255,200,90,.4)}
+.jg-btn .ut-dot{position:absolute;top:-3px;right:-3px}
+.jg-tog{pointer-events:auto;flex:none;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid rgba(201,164,92,.5);background:rgba(10,15,24,.75);cursor:pointer;color:#e2c98e;opacity:.85;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.jg-tog:hover,.jg-tog:focus-visible{opacity:1;color:#f0cf86}
+.jg-tog svg{width:13px;height:13px;transition:transform .2s}
+.jg-bar.rec .jg-tog svg{transform:rotate(180deg)}
+/* a carteira fica à esquerda da fileira (acompanha quando ela recolhe) */
+body:not(.mob) .ec-wallet{right:calc(76px + var(--jg-w,0px))}
 body.mob .jg-bar{display:none}
-/* tela estreita (celular, mesmo sem toque detectado): a barra disputaria o canto da HUD; os atalhos ficam no menu ☰ */
-@media (max-width:620px){.jg-bar{display:none}}
+/* tela estreita (celular, mesmo sem toque detectado): os atalhos ficam no menu ☰ */
+@media (max-width:620px){.jg-bar{display:none}body:not(.mob) .ec-wallet{right:170px}}
 /* os botões da bolsa e de Habilidades saíram do topo: ficam na barra (teclas I, T, V e B continuam valendo) */
 .iv-btn,.ut-btn{display:none!important}
 `;
@@ -45,6 +53,7 @@ const ICONE_BUILD = `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6M9 7h3"/
 /** ícones dos atalhos de jogo, reaproveitados pelo menu */
 export const ICONES_JOGO = { diario: ICONE_DIARIO, mochila: ICONE_MOCHILA, talento: ICONE_TALENTO, variacao: ICONE_VARIACAO, build: ICONE_BUILD };
 
+const REC_KEY = "frixep.atalhos.rec";
 let cssPronto = false;
 function garantirCss() {
   if (cssPronto || typeof document === "undefined") return;
@@ -63,6 +72,9 @@ export function mountBarraJogo(itens: AtalhoJogo[]): { atualiza(): void } {
   const barra = document.createElement("nav");
   barra.className = "jg-bar";
   barra.setAttribute("aria-label", "Atalhos de jogo");
+  const lista = document.createElement("div");
+  lista.className = "jg-list";
+  lista.id = "jg-list";
 
   const linhas = itens.map((it) => {
     const b = document.createElement("button");
@@ -72,17 +84,42 @@ export function mountBarraJogo(itens: AtalhoJogo[]): { atualiza(): void } {
     b.setAttribute("aria-label", it.label);
     b.setAttribute("aria-keyshortcuts", it.tecla);
     b.innerHTML = svg(it.icone);
-    const tecla = document.createElement("span");
-    tecla.className = "jg-key";
-    tecla.textContent = it.tecla;
     const dot = criarPonto(false);
     dot.hidden = true;
-    b.append(tecla, dot);
+    b.append(dot);
+    b.addEventListener("pointerdown", (e) => e.stopPropagation()); // não repassa o clique ao jogo
     b.onclick = () => { it.run(); setTimeout(atualiza, 150); };
-    barra.append(b);
+    lista.append(b);
     return { it, b, dot };
   });
+
+  // seta que recolhe/expande a fileira (lembrada entre sessões)
+  let recolhida = (() => { try { return localStorage.getItem(REC_KEY) === "1"; } catch { return false; } })();
+  const tog = document.createElement("button");
+  tog.type = "button";
+  tog.className = "jg-tog";
+  tog.setAttribute("aria-controls", "jg-list");
+  tog.innerHTML = svg(`<path d="M9 6l6 6-6 6"/>`);
+  tog.addEventListener("pointerdown", (e) => e.stopPropagation());
+  const aplicar = () => {
+    barra.classList.toggle("rec", recolhida);
+    lista.toggleAttribute("inert", recolhida);
+    tog.setAttribute("aria-expanded", String(!recolhida));
+    tog.title = tog.ariaLabel = recolhida ? "Mostrar atalhos" : "Recolher atalhos";
+  };
+  tog.onclick = () => {
+    recolhida = !recolhida;
+    try { localStorage.setItem(REC_KEY, recolhida ? "1" : "0"); } catch { /* sem armazenamento */ }
+    aplicar();
+  };
+  aplicar();
+  barra.append(tog, lista);
   document.body.append(barra);
+
+  // a carteira acompanha a largura da fileira (recolhida ou não)
+  const medir = () => document.documentElement.style.setProperty("--jg-w", `${barra.offsetWidth}px`);
+  medir();
+  if (typeof ResizeObserver === "function") new ResizeObserver(medir).observe(barra);
 
   function atualiza() {
     for (const { it, b, dot } of linhas) {

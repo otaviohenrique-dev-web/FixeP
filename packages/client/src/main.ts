@@ -282,7 +282,7 @@ class WorldScene extends Phaser.Scene {
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
-    this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId }); // bandeira do tutorial (C1.4)
+    this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId, getPlayer: () => { const m = this.me(); return m ? { x: Number(m.x), y: Number(m.y) } : null; } }); // bandeira e trilha no chão do tutorial (C1.4)
     this.rastreador = mountRastreador({ onAbrirDiario: () => this.diario.open() }); // rastreador de missões à esquerda (abre o diário ao clicar)
     this.dicas = mountDicas({ enviar: (id) => this.room?.send(Msg.DicaVista, { id }), tutorialAberto: tutorialFaixaAberta }); // dicas contextuais (C1.6)
     this.selG = this.add.graphics().setDepth(0.35);
@@ -388,7 +388,7 @@ class WorldScene extends Phaser.Scene {
     this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? "") });
     this.party.setTouch(this.touchMode);
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
-    this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }) });
+    this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }), game: this.game });
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       if (this.busy) return;
       const npc = this.npcs.hit(ptr.worldX, ptr.worldY); // clicar num NPC: conversa se estiver perto; senão, anda até ele
@@ -1847,8 +1847,18 @@ new Phaser.Game({
         game.scale.resize(Math.round(v.w * rdpr()), Math.round(v.h * rdpr()));
       };
       // limite de FPS (Configurações > Gráficos): o loop do Phaser só desenha quando passou o intervalo
-      const loop = game.loop as unknown as { targetFps: number; _target: number };
-      const limitarFps = () => { const t = config().fpsMax || 240; loop.targetFps = t; loop._target = 1000 / t; };
+      // o Phaser só usa o passo limitado (stepLimitFPS) se o limite existir quando o loop começa: muda os campos e reinicia o loop
+      const loop = game.loop as unknown as { fpsLimit: number; hasFpsLimit: boolean; _limitRate: number; sleep(): void; wake(seamless?: boolean): void; running: boolean };
+      let limiteAtual = -1;
+      const limitarFps = () => {
+        const t = config().fpsMax; // 0 = sem limite
+        if (t === limiteAtual) return;
+        limiteAtual = t;
+        loop.fpsLimit = t;
+        loop.hasFpsLimit = t > 0;
+        loop._limitRate = t > 0 ? 1000 / t : 0;
+        if (loop.running) { loop.sleep(); loop.wake(true); }
+      };
       limitarFps();
       aoMudarConfig(() => { limitarFps(); fit(); }); // aplicar nas Configurações vale na hora
       window.addEventListener("resize", fit);

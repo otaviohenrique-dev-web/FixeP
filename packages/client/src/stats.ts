@@ -33,7 +33,7 @@ const color = (v: number, good: number, ok: number, invert = false) => {
   return bad ? "#ff6a5a" : mid ? "#ffd45e" : "#7dff9a";
 };
 
-export function mountStats(opts: { sendPing(t: number): void }): Stats {
+export function mountStats(opts: { sendPing(t: number): void; game?: Phaser.Game }): Stats {
   const q = new URLSearchParams(location.search).get("stats");
   let saved: string | null = null;
   try { saved = localStorage.getItem(KEY); } catch { /* ignore */ }
@@ -71,9 +71,12 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
   let frames = 0;
   let t0 = performance.now();
   let raf = 0;
+  // conta os quadros que o JOGO desenhou (respeita o limite de FPS); sem o jogo, conta os do navegador
+  const contar = () => { frames++; };
+  opts.game?.events.on("postrender", contar);
   const tick = (now: number) => {
     raf = requestAnimationFrame(tick);
-    frames++;
+    if (!opts.game) frames++;
     if (now - t0 >= 1000) {
       fps = Math.round((frames * 1000) / (now - t0));
       frames = 0;
@@ -110,6 +113,7 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
     },
     destroy() {
       cancelAnimationFrame(raf);
+      opts.game?.events.off("postrender", contar);
       clearInterval(timer);
       pararConfig();
       window.removeEventListener("keydown", onKey);

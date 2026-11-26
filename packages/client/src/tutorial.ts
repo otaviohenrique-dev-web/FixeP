@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import type { QuestDef, QuestEstado, QuestEvent, QuestDefsEvent } from "@frixep/shared";
+import { zoneNpcs, objetivoAtual, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent } from "@frixep/shared";
 
 /**
  * Tutorial de 5 quests (C1.4): a bandeira no chão apontando o ponto da quest "chegar". O texto do passo atual
@@ -38,7 +38,27 @@ export function textoPasso(def: QuestDef, estado: QuestEstado["estado"] | undefi
   return null;
 }
 
-export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; getZone(): number }): TutorialUi {
+/** Destino da trilha: o ponto do passo "chegar", ou o NPC para aceitar/entregar/conversar (só na zona atual). */
+export function destinoTrilha(
+  defs: Map<string, QuestDef>, estados: Map<string, QuestEstado>, zona: number,
+): { x: number; y: number; raio: number } | null {
+  const npc = (id: string | null | undefined) => { const n = id ? zoneNpcs(zona).find((d) => d.id === id) : undefined; return n ? { x: n.x, y: n.y, raio: 2.5 } : null; };
+  const passos = passosTutorial(defs.values());
+  const pendente = passos.find((d) => estados.get(d.id)?.estado !== "entregue");
+  if (pendente) {
+    const est = estados.get(pendente.id);
+    if (!est || est.estado === "pronta") return npc(pendente.npc ?? "merchant");
+    const o = pendente.objetivos[objetivoAtual(pendente, est.progresso)];
+    if (o?.tipo === "chegar") return o.zona === zona ? { x: o.x, y: o.y, raio: o.raio } : null;
+    if (o?.tipo === "falar") return npc(o.npc);
+    return null;
+  }
+  // fora do tutorial: a primeira missão pronta aponta para quem recebe
+  for (const est of estados.values()) if (est.estado === "pronta") { const d = defs.get(est.id); const alvo = npc(d?.npc); if (alvo) return alvo; }
+  return null;
+}
+
+export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; getZone(): number; getPlayer?(): { x: number; y: number } | null }): TutorialUi {
   // a cena é refeita a cada travessia de zona: remove a bandeira e o estilo da montagem anterior
   document.querySelectorAll("style[data-tut]").forEach((e) => e.remove());
 
@@ -58,8 +78,37 @@ export function mountTutorial(opts: { scene?: Phaser.Scene; toScreen: ToScreen; 
   let defs = new Map<string, QuestDef>();
   let estados = new Map<string, QuestEstado>();
 
+  // trilha tracejada no chão até o destino: só mostra o caminho, nunca anda pelo jogador; some ao chegar perto
+  let destino: { x: number; y: number; raio: number } | null = null;
+  const trilha = opts.scene?.add.graphics().setDepth(0.29);
+  if (opts.scene && trilha) {
+    const desenhar = (time: number) => {
+      trilha.clear();
+      const p = opts.getPlayer?.();
+      if (!destino || !p) return;
+      const dx = destino.x - p.x, dy = destino.y - p.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist <= destino.raio + 0.5) return; // chegou
+      const passo = 0.7; // tiles entre os pontos
+      const desloc = ((time / 900) % 1) * passo; // anda devagar na direção do destino
+      const ux = dx / dist, uy = dy / dist;
+      for (let d = 1 + desloc; d < dist - 0.6; d += passo) {
+        const fade = Math.min(1, (d - 0.6) / 1.5) * Math.min(1, (dist - d) / 1.2);
+        const a = toS(p.x + ux * d, p.y + uy * d);
+        const b = toS(p.x + ux * (d + 0.38), p.y + uy * (d + 0.38));
+        trilha.lineStyle(6, 0x000000, 0.35 * fade).lineBetween(a.sx, a.sy + 1, b.sx, b.sy + 1);
+        trilha.lineStyle(3.5, 0xffe08a, 0.95 * fade).lineBetween(a.sx, a.sy, b.sx, b.sy);
+      }
+    };
+    const toS = opts.toScreen;
+    const onUpdate = (time: number) => desenhar(time);
+    opts.scene.events.on("update", onUpdate);
+    opts.scene.events.once("shutdown", () => opts.scene?.events.off("update", onUpdate));
+  }
+
   /** a bandeira aparece só no passo "chegar" ativo, na zona onde o ponto está */
   function atualizar() {
+    destino = destinoTrilha(defs, estados, opts.getZone());
     const passos = passosTutorial(defs.values());
     const pendente = passos.find((d) => estados.get(d.id)?.estado !== "entregue");
     if (!pendente) {
