@@ -59,7 +59,7 @@ export interface ZoneBoss {
 
 export const PORTAL_RADIUS = 1.6; // tamanho da passagem (desenho do portão)
 /** Gatilho da travessia (tiles do centro do portão): só atravessa quem encosta na passagem, não alguns tiles antes. */
-export const PORTAL_TRIGGER_RADIUS = 1;
+export const PORTAL_TRIGGER_RADIUS = 0.1;
 
 /** A cidade segura: onde todo personagem novo nasce, onde se renasce depois de morrer e onde ficam os NPCs de ofício e o baú. */
 export const HUB_ZONE = 4;

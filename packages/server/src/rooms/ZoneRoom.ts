@@ -181,6 +181,9 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
       pl.tx = clamp(p.x, 0, this.zone.w - 1);
       pl.ty = clamp(p.y, 0, this.zone.h - 1);
+      // clicou na passagem de um portão: vai até o centro dela (o gatilho é de PORTAL_TRIGGER_RADIUS, encostado)
+      const pt = this.zone.portals.find((q) => dist(pl.tx, pl.ty, q.x, q.y) <= q.r);
+      if (pt) { pl.tx = pt.x; pl.ty = pt.y; }
     });
 
     // O cliente terminou de carregar e o jogador já controla o personagem: a bolha de chegada começa a contar agora (não durante o load).
@@ -202,7 +205,8 @@ export class ZoneRoom extends Room<ZoneState> {
         const gate = this.zone.portals.find((q) => q.to === WORLD_GATE);
         const dest = ZONES[p.to as number];
         if (!gate || !dest || dest.safe) return void client.send(Evt.TravelDenied, {});
-        if (dist(pl.x, pl.y, gate.x, gate.y) > PORTAL_TRIGGER_RADIUS + 0.5) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
+        // com o mapa-mundo aberto há pouco (30 s), uns passos a mais não fazem a escolha falhar
+        if (dist(pl.x, pl.y, gate.x, gate.y) > PORTAL_TRIGGER_RADIUS + 0.5 && !(this.t - pl.mapaAt < 30 && dist(pl.x, pl.y, gate.x, gate.y) <= 3)) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
         return void this.travel(client.sessionId, pl, { to: dest.id });
       }
       const portal = this.zone.portals.find((q) => q.to === p.to);
@@ -1654,7 +1658,7 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!p.dead && !p.traveling) { // pisou num portal: atravessa (sem apertar nada)
         const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= PORTAL_TRIGGER_RADIUS); // só quem encosta na passagem
         if (portal && portal.to === WORLD_GATE) { // portão da cidade: abre o mapa-mundo uma vez por entrada no raio
-          if (!p.atGate) { p.atGate = true; this.clients.getById(id)?.send(Evt.WorldMap, {}); }
+          if (!p.atGate) { p.atGate = true; p.mapaAt = this.t; p.tx = p.x; p.ty = p.y; this.clients.getById(id)?.send(Evt.WorldMap, {}); } // para o personagem enquanto escolhe
         } else if (portal) void this.travel(id, p, portal);
         else p.atGate = false;
       }
