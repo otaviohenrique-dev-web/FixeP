@@ -171,10 +171,11 @@ export const ZONES: Record<number, ZoneDef> = {
 
 /** Lista final de inimigos da zona: cada ponto de caça vira `count` inimigos espalhados (posições determinísticas: servidor e cliente concordam, sem sorteio).
  *  Os pontos de 1 inimigo ficam exatamente onde estão, então os ids antigos (e1, e2...) não mudam. */
-export function expandSpawns(zone: Pick<ZoneDef, "enemies" | "w" | "h">): EnemyPlacement[] {
+export function expandSpawns(zone: Pick<ZoneDef, "enemies" | "w" | "h">, mult: (kind: EnemyKind) => number = () => 1): EnemyPlacement[] {
   const out: EnemyPlacement[] = [];
   for (const s of zone.enemies) {
-    const n = Math.max(1, Math.floor(s.count ?? 1));
+    // `mult` é o balanceamento ao vivo do tamanho do grupo (1 = padrão); só mexe em pontos de grupo
+    const n = s.count ? Math.max(1, Math.round(Math.floor(s.count) * mult(s.kind))) : 1;
     for (let i = 0; i < n; i++) {
       if (n === 1) { out.push({ kind: s.kind, x: s.x, y: s.y, level: s.level }); continue; }
       const ang = i * 2.399963; // ângulo áureo: espalha sem formar fileira

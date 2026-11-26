@@ -48,7 +48,7 @@ export function apiRouter(repo: Repo, balance: Balanceamento): Router {
     res.status(out.status ?? 400).json({ error: out.erro });
   };
   r.get("/admin/balanceamento", limit(120, 60_000), ...ADMIN_ROTAS, (_req, res) => {
-    res.json({ ajustes: balance.listar() });
+    res.json({ ajustes: balance.listar(), ...balance.tabelas() }); // tabelas: { drops, estimativas }
   });
   r.put("/admin/balanceamento/:chave", limit(60, 60_000), ...ADMIN_ROTAS, async (req, res) => {
     try {
