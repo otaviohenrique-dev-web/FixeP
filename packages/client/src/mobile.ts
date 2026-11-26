@@ -63,16 +63,19 @@ body.mob .pt-tg-chip{left:calc(${SAFE_L} + 170px*var(--hs));top:${SAFE_T};height
 body.mob .pt-tg-chip .pt-lv{min-width:calc(20px*var(--hs));height:calc(20px*var(--hs));font-size:calc(10px*var(--hs))}
 body.mob .pt-tg-chip .nm{font-size:calc(10px*var(--hs));max-width:calc(120px*var(--hs))}
 body.mob .pt-tg-chip .sub{font-size:calc(8px*var(--hs))}
-/* ---------- chat: botão discreto sobre o joystick; o histórico só aparece quando aberto ---------- */
-body.mob .ch{left:${SAFE_L};bottom:calc(${SAFE_B} + 150px);width:min(300px,calc(100vw - 190px))}
-body.mob .ch-btn{width:calc(34px*var(--hs));height:calc(34px*var(--hs));border-radius:9px;opacity:.78}
-body.mob .ch-btn svg{width:18px;height:18px}
-body.mob .ch-log{max-height:90px}
+/* ---------- chat: embaixo, no meio, discreto; o botão abre (balão) e fecha (✕) ---------- */
+body.mob .ch{left:50%;right:auto;transform:translateX(-50%);bottom:calc(${SAFE_B} + 4px);width:min(230px,56vw);padding-bottom:calc(30px*var(--hs) + 6px)}
+body.mob .ch.open{width:min(320px,calc(100vw - 24px))}
+body.mob .ch-btn{left:50%;bottom:0;transform:translateX(-50%);width:calc(30px*var(--hs));height:calc(30px*var(--hs));border-radius:50%;border-width:1.5px;opacity:.6}
+body.mob .ch.open .ch-btn{opacity:1;color:#ffd2a3}
+body.mob .ch-btn svg{width:15px;height:15px}
+body.mob .ch-log{max-height:84px}
+body.mob .ch:not(.open) .ch-line{font-size:10px;background:rgba(8,12,20,.45);margin:0 auto;opacity:.85}
+body.mob .ch-row{margin-top:4px}
 /* ---------- aviso "Falar com..." menor, fora do centro ---------- */
 body.mob .ec-near{left:${SAFE_L};transform:none;bottom:calc(${SAFE_B} + 196px);max-width:calc(100vw - 190px);min-height:34px;padding:0 12px;font-size:11px;letter-spacing:.06em;line-height:1.15;border-radius:17px;opacity:.94}
 @media (orientation:landscape){
-  body.mob .ch{bottom:calc(${SAFE_B} + 112px);width:min(300px,38vw)}
-  body.mob .ch-log{max-height:64px}
+  body.mob .ch-log{max-height:60px}
   body.mob .ec-near{bottom:calc(${SAFE_B} + 112px);left:calc(max(8px,env(safe-area-inset-left)) + 44px*var(--hs));max-width:34vw}
   body.mob .hd.touch .hd-chan{bottom:calc(${SAFE_B} + 20px);left:50%}
 }
