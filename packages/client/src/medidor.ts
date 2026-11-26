@@ -210,6 +210,7 @@ export function mountMedidor(opts: MedidorOpts): Medidor {
     aberto = false;
     win.classList.remove("open");
   };
+  const fecharNaMao = () => { fechouNaMao = true; fechar(); };
 
   // ---- eventos
   const add = (mapa: Map<string, number>, id: string, v: number) => {
@@ -223,7 +224,7 @@ export function mountMedidor(opts: MedidorOpts): Medidor {
     win.classList.toggle("rec", recolhido);
     try { localStorage.setItem(KEY_REC, recolhido ? "1" : "0"); } catch { /* ignore */ }
   };
-  win.querySelector<HTMLButtonElement>(".md-fechar")!.onclick = () => fechar();
+  win.querySelector<HTMLButtonElement>(".md-fechar")!.onclick = () => fecharNaMao();
   win.querySelector<HTMLButtonElement>(".md-zero")!.onclick = () => {
     dano.clear();
     cura.clear();
@@ -274,7 +275,7 @@ export function mountMedidor(opts: MedidorOpts): Medidor {
   // ---- tecla M (abre/fecha); não abre por cima de outra janela
   window.addEventListener("keydown", (e) => {
     if (e.code !== "KeyM" || e.repeat || isTypingTarget()) return;
-    if (aberto) { e.preventDefault(); fechar(); return; }
+    if (aberto) { e.preventDefault(); fecharNaMao(); return; }
     if (document.querySelector(".gm-back.open, .iv-back.open, .ec-back.open, .qst-back.open")) return;
     e.preventDefault();
     abrir();
@@ -283,18 +284,26 @@ export function mountMedidor(opts: MedidorOpts): Medidor {
   // o tempo e as taxas andam sozinhos enquanto a janela está aberta
   window.setInterval(() => { if (aberto) render(); }, 1000);
 
+  // abre sozinho quando a luta começa (você ou alguém do grupo causou dano ou curou), como o medidor do Albion;
+  // se o jogador fechou (✕ ou M), não reabre sozinho até recarregar a página
+  let fechouNaMao = false;
+  const doGrupo = (id: string) => opts.grupo().some((m) => m.id === id);
+  const autoAbrir = (id: string) => { if (!aberto && !fechouNaMao && doGrupo(id)) abrir(); };
+
   return {
     dano(by, valor) {
       add(dano, by, valor);
       marcar();
+      autoAbrir(by);
       render();
     },
     cura(by, valor) {
       add(cura, by, valor);
       marcar();
+      autoAbrir(by);
       render();
     },
-    toggle: () => (aberto ? fechar() : abrir()),
+    toggle: () => (aberto ? fecharNaMao() : abrir()),
     open: abrir,
     close: fechar,
     isOpen: () => aberto,
