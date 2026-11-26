@@ -6,6 +6,12 @@
   "npc": "auctioneer",
   "preRequisitos": ["cadeia_02_pocoes"],
   "objetivos": [{ "tipo": "falar", "npc": "auctioneer" }],
+  "fala": [
+    "Ah, um rosto novo. Sente-se, sente-se. Sou Ossian.",
+    "Aqui, aventureiros vendem o que não usam a quem precisa. Eu só guardo as moedas no meio do caminho.",
+    "Para pôr um item à venda eu cobro uma pequena taxa, e ela não volta. Mas o que você vender é todo seu.",
+    "E se procura algo raro, olhe as ofertas com frequência. O que some do leilão raramente volta."
+  ],
   "recompensa": { "xp": 152, "ferro": 15, "itens": [{ "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Ossian fica ao norte da praça, perto da fonte. Toque nele.", "teclado": "Ossian fica ao norte da praça, perto da fonte. Clique nele." }
 }

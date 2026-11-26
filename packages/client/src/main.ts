@@ -46,7 +46,7 @@ import { limparTalentos, pontosLivres, podeSubirTalento, talentosDaClasse, VARIA
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountRastreador, type RastreadorUi } from "./rastreador";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
-import type { DicasVistasEvent, ActiveBuff } from "@frixep/shared";
+import type { DicasVistasEvent, ActiveBuff, QuestDef, QuestEstado } from "@frixep/shared";
 import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
@@ -162,6 +162,10 @@ class WorldScene extends Phaser.Scene {
   private talentos!: TalentosUi;
   private builds!: BuildsUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
+  private qDefs = new Map<string, QuestDef>(); // definições das missões (para o "?" dourado dos NPCs)
+  private qEstados: QuestEstado[] = [];
+  private nivelMarcas = 0; // nível usado na última conta das marcas (subir de nível pode liberar missões)
+  private selGrupo = false; // a seleção veio da lista do grupo (não se desfaz pela distância)
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
   private lockKey = ""; // alvo travado ("e:id" ou "p:id"; toque ou clique): as ações mirram nele
@@ -282,7 +286,8 @@ class WorldScene extends Phaser.Scene {
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
-    this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId }); // bandeira do tutorial (C1.4)
+    this.marcarEntregas(); // a camada de NPCs é refeita a cada zona: reaplica as marcas
+    this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId, getPlayer: () => { const m = this.me(); return m ? { x: Number(m.x), y: Number(m.y) } : null; } }); // bandeira e trilha no chão do tutorial (C1.4)
     this.rastreador = mountRastreador({ onAbrirDiario: () => this.diario.open() }); // rastreador de missões à esquerda (abre o diário ao clicar)
     this.dicas = mountDicas({ enviar: (id) => this.room?.send(Msg.DicaVista, { id }), tutorialAberto: tutorialFaixaAberta }); // dicas contextuais (C1.6)
     this.selG = this.add.graphics().setDepth(0.35);
@@ -290,7 +295,7 @@ class WorldScene extends Phaser.Scene {
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
     if (!this.uiMounted) { this.mountUi(); this.uiMounted = true; }
-    else { this.econ.closeNpc(); this.vault.close(); this.econ.setTrade({ open: false }); this.party.clearTarget(); this.selId = ""; this.lockKey = ""; this.pendingNpc = null; this.pendingVault = false; }
+    else { this.econ.closeNpc(); this.vault.close(); this.econ.setTrade({ open: false }); this.party.clearTarget(); this.selId = ""; this.selGrupo = false; this.lockKey = ""; this.pendingNpc = null; this.pendingVault = false; }
     this.bindRoom(room, zone);
     T.mark("mundo");
     // 3) câmera exatamente sobre o personagem (sem deslizar), no zoom certo, antes de revelar
@@ -385,10 +390,10 @@ class WorldScene extends Phaser.Scene {
       },
     });
     this.chatUi = chat;
-    this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? "") });
+    this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? ""), onFocus: (nome) => this.focarMembro(nome) });
     this.party.setTouch(this.touchMode);
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
-    this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }) });
+    this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }), game: this.game });
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       if (this.busy) return;
       const npc = this.npcs.hit(ptr.worldX, ptr.worldY); // clicar num NPC: conversa se estiver perto; senão, anda até ele
@@ -410,6 +415,7 @@ class WorldScene extends Phaser.Scene {
       if (other) {
         const p = other.p;
         this.selId = other.id;
+        this.selGrupo = !!p.party && String(p.party) === String(this.me()?.party ?? ""); // aliado do grupo: o foco não cai pela distância
         this.party.selectPlayer({ name: String(p.name), level: Number(p.level) || 1, cls: String(p.cls), inParty: !!p.party });
         if (ptr.wasTouch || this.touchMode) this.lockKey = `p:${other.id}`;
         return;
@@ -422,8 +428,8 @@ class WorldScene extends Phaser.Scene {
       }
       // no computador: clicar num inimigo trava o foco nele (sem andar até ele); clicar no chão mantém o foco (Esc solta)
       const foe = this.enemyAt(ptr.worldX, ptr.worldY);
-      if (foe) { this.lockKey = foe; this.chase = null; if (this.selId) this.deselect(); return; }
-      if (this.selId) this.deselect();
+      if (foe) { this.lockKey = foe; this.chase = null; return; } // travar um inimigo não tira o foco do aliado (o curador segue com ele)
+      // clicar no chão só anda: o aliado selecionado continua em foco (Esc ou clicar em outro jogador troca)
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
       const near = this.ground.nearest(x, y, 0.9); // clicar num item no chão também pede para pegá-lo (se estiver ao alcance)
       const me = this.me();
@@ -587,8 +593,8 @@ class WorldScene extends Phaser.Scene {
       else this.inv.toast(t[0], t[1]);
     });
     room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); if (!m.ok) this.dicaDoAviso(String(m.text)); });
-    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); this.rastreador.setQuests(m); });
-    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); this.rastreador.setDefs(m); });
+    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.qEstados = m?.quests ?? []; this.marcarEntregas(); this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); this.rastreador.setQuests(m); });
+    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.qDefs = new Map((m?.defs ?? []).map((d) => [d.id, d])); this.marcarEntregas(); this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); this.rastreador.setDefs(m); });
     room.onMessage(Evt.DicasVistas, (m: DicasVistasEvent) => this.dicas.carregar(m)); // dicas já vistas por este personagem (C1.6)
     this.room.send(Msg.InvSync, {});
     this.room.send(Msg.QuestSync, {}); // pede o estado e as definições das quests (depois de registrar os receptores)
@@ -709,8 +715,35 @@ class WorldScene extends Phaser.Scene {
     if (!this.touchMode) this.lockKey = "";
   }
 
+  /** marcas nos NPCs: "!" dourado = missão pronta para entregar; "?" = missão que já dá para aceitar (requisitos e nível) */
+  private marcarEntregas() {
+    const est = new Map(this.qEstados.map((q) => [q.id, q.estado]));
+    const nivel = Number(this.me()?.level) || 1;
+    this.nivelMarcas = nivel;
+    const entregar: string[] = [], aceitar: string[] = [];
+    for (const d of this.qDefs.values()) {
+      if (!d.npc) continue;
+      const e = est.get(d.id);
+      if (e === "pronta") entregar.push(d.npc);
+      else if (!e && nivel >= d.nivelMin && d.preRequisitos.every((p) => est.get(p) === "entregue")) aceitar.push(d.npc);
+    }
+    this.npcs?.setMarcas(entregar, aceitar);
+  }
+
+  /** clicar no nome de um membro do grupo: seleciona ele (círculo verde, linha até ele e cartão do alvo); serve à Cura Focada */
+  private focarMembro(nome: string) {
+    let achou = "";
+    this.state?.players?.forEach((p: any, id: string) => { if (!achou && String(p.name) === nome) achou = id; });
+    if (!achou) { this.inv.toast(`${nome} não está nesta zona.`, "#ffb3a6"); return; }
+    const p = this.state.players.get(achou);
+    this.selId = achou;
+    this.selGrupo = true;
+    this.party.selectPlayer({ name: String(p.name), level: Number(p.level) || 1, cls: String(p.cls), inParty: !!p.party });
+  }
+
   private deselect() {
     this.selId = "";
+    this.selGrupo = false;
     this.party.clearTarget();
   }
 
@@ -1020,8 +1053,11 @@ class WorldScene extends Phaser.Scene {
       this.floatText(m.x, m.y - 0.6, "RENASCEU", "#fff2a8", 20, true);
       if (m.id === this.room.sessionId) { this.cameras.main.flash(250, 255, 240, 160); sfx.heal(); }
     } else {
-      if (config().numCura) this.floatText(m.x, m.y - 1.1, `+${m.amount}`, "#7dff9a", 20, true); // acima da cabeça (e do nome)
-      if (m.id === this.room.sessionId) { sfx.heal(); this.hud.showHeal(m.amount); }
+      if (m.amount > 0) {
+        if (config().numCura) this.healText(m.x, m.y - 1.1, `+${m.amount}`, false); // acima da cabeça (e do nome)
+        if (m.id === this.room.sessionId) { sfx.heal(); this.hud.showHeal(m.amount); }
+      } else if (m.excesso && config().numCura) this.healText(m.x, m.y - 1.1, `+${m.excesso}`, true); // vida cheia: a cura de habilidade aparece mais clara e menor
+
     }
   }
 
@@ -1186,6 +1222,21 @@ class WorldScene extends Phaser.Scene {
         break;
       }
     }
+  }
+
+  /** número de cura: mais caprichado que o de dano (brilho verde, cruz, sobe devagar balançando) */
+  private healText(gx: number, gy: number, txt: string, excesso: boolean) {
+    if (this.floatUsed > 40) return;
+    const { sx, sy } = toScreen(gx, gy);
+    const cor = excesso ? "#c4f5d0" : "#8dffab";
+    const t = this.add.text(sx, sy - 26, `✚ ${txt}`, { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: excesso ? "16px" : "22px", color: cor, stroke: "#0a2a14", strokeThickness: 5 })
+      .setOrigin(0.5).setDepth(1e6).setScale(0.4).setAlpha(excesso ? 0.85 : 1);
+    t.setShadow(0, 0, "#3dff7a", excesso ? 6 : 14, true, true);
+    this.floatUsed++;
+    const lado = Math.random() < 0.5 ? -1 : 1;
+    this.tweens.add({ targets: t, scale: excesso ? 1 : 1.15, duration: 180, ease: "Back.easeOut", onComplete: () => { if (t.scene) this.tweens.add({ targets: t, scale: 1, duration: 160 }); } });
+    this.tweens.add({ targets: t, x: sx + lado * 8, duration: 1100, ease: "Sine.easeInOut" });
+    this.tweens.add({ targets: t, y: t.y - 46, alpha: 0, duration: 1100, delay: 200, ease: "Cubic.easeOut", onComplete: () => { this.floatUsed--; t.destroy(); } });
   }
 
   private floatText(gx: number, gy: number, txt: string, color: string, size: number, pop: boolean) {
@@ -1376,7 +1427,7 @@ class WorldScene extends Phaser.Scene {
     const me = this.me();
     if (me && this.selId) {
       const s = this.state.players.get(this.selId);
-      if (!s || Math.hypot(s.x - me.x, s.y - me.y) > TARGET_RANGE) this.deselect();
+      if (!s || (!this.selGrupo && Math.hypot(s.x - me.x, s.y - me.y) > TARGET_RANGE)) this.deselect(); // foco num membro do grupo vale na zona toda
     }
     if (!this.lockKey) { if (this.touchMode) this.assistTarget("attack"); return; } // sem foco: no celular já mostra o mais próximo ao alcance do ataque
     const t = this.targets().find((x) => x.key === this.lockKey);
@@ -1396,6 +1447,7 @@ class WorldScene extends Phaser.Scene {
       al.sort((a, b) => dist(a.p) - dist(b.p));
       const nx = al[(al.findIndex((x) => x.id === this.selId) + 1) % al.length];
       this.selId = nx.id;
+      this.selGrupo = false;
       this.party.selectPlayer({ name: String(nx.p.name), level: Number(nx.p.level) || 1, cls: String(nx.p.cls), inParty: !!nx.p.party });
       navigator.vibrate?.(8);
       return;
@@ -1646,6 +1698,7 @@ class WorldScene extends Phaser.Scene {
     if (!SEM_DESENHOS) timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
     const meNow = this.me();
     if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
+      if ((Number(meNow.level) || 1) !== this.nivelMarcas) this.marcarEntregas();
       timed("npcs", () => this.npcs.update(time, meNow.x, meNow.y));
       const near = this.npcs.inReach(meNow.x, meNow.y);
       this.econ.setNearNpc(near);
@@ -1847,8 +1900,18 @@ new Phaser.Game({
         game.scale.resize(Math.round(v.w * rdpr()), Math.round(v.h * rdpr()));
       };
       // limite de FPS (Configurações > Gráficos): o loop do Phaser só desenha quando passou o intervalo
-      const loop = game.loop as unknown as { targetFps: number; _target: number };
-      const limitarFps = () => { const t = config().fpsMax || 240; loop.targetFps = t; loop._target = 1000 / t; };
+      // o Phaser só usa o passo limitado (stepLimitFPS) se o limite existir quando o loop começa: muda os campos e reinicia o loop
+      const loop = game.loop as unknown as { fpsLimit: number; hasFpsLimit: boolean; _limitRate: number; sleep(): void; wake(seamless?: boolean): void; running: boolean };
+      let limiteAtual = -1;
+      const limitarFps = () => {
+        const t = config().fpsMax; // 0 = sem limite
+        if (t === limiteAtual) return;
+        limiteAtual = t;
+        loop.fpsLimit = t;
+        loop.hasFpsLimit = t > 0;
+        loop._limitRate = t > 0 ? 1000 / t : 0;
+        if (loop.running) { loop.sleep(); loop.wake(true); }
+      };
       limitarFps();
       aoMudarConfig(() => { limitarFps(); fit(); }); // aplicar nas Configurações vale na hora
       window.addEventListener("resize", fit);

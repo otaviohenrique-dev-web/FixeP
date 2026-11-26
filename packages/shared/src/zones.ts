@@ -57,7 +57,9 @@ export interface ZoneBoss {
   chest: { count: number; min: Rarity; weights: Partial<Record<Rarity, number>> };
 }
 
-export const PORTAL_RADIUS = 1.6;
+export const PORTAL_RADIUS = 1.6; // tamanho da passagem (desenho do portão)
+/** Gatilho da travessia (tiles do centro do portão): só atravessa quem encosta na passagem, não alguns tiles antes. */
+export const PORTAL_TRIGGER_RADIUS = 0.1;
 
 /** A cidade segura: onde todo personagem novo nasce, onde se renasce depois de morrer e onde ficam os NPCs de ofício e o baú. */
 export const HUB_ZONE = 4;
@@ -67,7 +69,7 @@ export const ZONES: Record<number, ZoneDef> = {
     id: 1, name: "Cinzas", theme: "ash", w: 40, h: 40,
     // Os dois portões ficam na muralha oeste, no canto sudoeste, e quem chega aparece ARRIVAL_GATE_DIST tiles à frente deles, numa clareira sem inimigos (raio ARRIVAL_SAFE_RADIUS).
     spawn: { x: 12, y: 31 },
-    arrive: { 2: { x: 9.5, y: 35 }, 4: { x: 9.5, y: 28 } },
+    arrive: { 2: { x: 7, y: 35 }, 4: { x: 7, y: 28 } },
     portals: [{ x: 4, y: 35, r: PORTAL_RADIUS, to: 2 }, { x: 4, y: 28, r: PORTAL_RADIUS, to: 4 }],
     enemies: [
       // todos a mais de ARRIVAL_SAFE_RADIUS (14) tiles do spawn e dos pontos de chegada (aggro de 7 a 11): o jogador nasce em segurança (teste: zones.mjs).
@@ -90,7 +92,7 @@ export const ZONES: Record<number, ZoneDef> = {
   2: {
     id: 2, name: "Floresta Gélida", theme: "frost", w: 44, h: 44,
     spawn: { x: 8, y: 8 },
-    arrive: { 1: { x: 8.5, y: 8.5 }, 3: { x: 36, y: 36 }, 4: { x: 9.5, y: 14 } },
+    arrive: { 1: { x: 6.2, y: 6.2 }, 3: { x: 37.9, y: 37.9 }, 4: { x: 7, y: 14 } },
     portals: [
       { x: 4, y: 4, r: PORTAL_RADIUS, to: 1 },
       { x: 4, y: 14, r: PORTAL_RADIUS, to: 4 },
@@ -119,7 +121,7 @@ export const ZONES: Record<number, ZoneDef> = {
   3: {
     id: 3, name: "Catacumbas", theme: "crypt", w: 44, h: 44,
     spawn: { x: 8, y: 8 },
-    arrive: { 2: { x: 8.5, y: 8.5 }, 4: { x: 9.5, y: 14 } },
+    arrive: { 2: { x: 6.2, y: 6.2 }, 4: { x: 7, y: 14 } },
     portals: [{ x: 4, y: 4, r: PORTAL_RADIUS, to: 2 }, { x: 4, y: 14, r: PORTAL_RADIUS, to: 4 }],
     enemies: [
       { kind: "skeleton", x: 24, y: 12, level: 12 },
@@ -147,7 +149,7 @@ export const ZONES: Record<number, ZoneDef> = {
     spawn: { x: 24, y: 30 },
     // a cidade tem UM só portão (norte, na muralha) e ele leva ao mapa-mundo: cada zona nova entra na lista do mapa, sem abrir portais novos na cidade.
     // chegando de qualquer zona de combate o jogador aparece logo dentro do portão (fora do raio dele)
-    arrive: { 1: { x: 24, y: 7.5 }, 2: { x: 24, y: 7.5 }, 3: { x: 24, y: 7.5 }, 5: { x: 24, y: 7.5 } },
+    arrive: { 1: { x: 24, y: 5 }, 2: { x: 24, y: 5 }, 3: { x: 24, y: 5 }, 5: { x: 24, y: 5 } },
     portals: [{ x: 24, y: 2, r: PORTAL_RADIUS, to: WORLD_GATE }],
     enemies: [],
     lootMult: 0,
@@ -160,7 +162,7 @@ export const ZONES: Record<number, ZoneDef> = {
     // Acesso: pelo mapa-mundo do portão de Brasalume (a arena entra na lista como qualquer zona de combate).
     id: 5, name: "Arena Sangrenta", theme: "ash", w: 36, h: 36,
     spawn: { x: 30, y: 18 }, // renascer depois de morrer (dentro da arena, sem perda)
-    arrive: { 4: { x: 18, y: 27.5 } }, // chegando de Brasalume: junto do portão sul que leva de volta (a 5,5 tiles, como nas outras zonas)
+    arrive: { 4: { x: 18, y: 30 } }, // chegando de Brasalume: junto do portão sul que leva de volta (a 3 tiles, como nas outras zonas)
     portals: [{ x: 18, y: 33, r: PORTAL_RADIUS, to: 4 }],
     enemies: [],
     lootMult: 0,

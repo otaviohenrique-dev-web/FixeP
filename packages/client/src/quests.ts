@@ -35,6 +35,12 @@ const CSS = `
 .qst-q p{margin:0 0 6px;font:400 13px/1.45 Georgia,serif;color:#dbeaff}
 .qst-q ul{margin:0 0 6px;padding-left:18px;font:400 12px/1.5 Georgia,serif;color:#bcd8f5}
 .qst-rew{font:400 12px/1.45 Georgia,serif;color:#e6c27a}
+/* conversa do NPC (missões de conversar): uma fala por vez */
+.qst-fala{margin:8px 0 2px;padding:10px 12px;border-radius:8px;background:linear-gradient(180deg,rgba(40,30,16,.55),rgba(14,10,6,.6));border:1px solid rgba(201,164,92,.45);border-left:3px solid #c9a45c}
+.qst-fala b{display:block;margin-bottom:4px;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:#e9cf8f}
+.qst-fala p{margin:0;font:italic 400 14px/1.5 Georgia,serif;color:#f4ecd8;animation:qst-fala-in .35s ease-out}
+.qst-fala small{display:block;margin-top:6px;font:400 10px/1 Georgia,serif;color:#8fa6c0;text-align:right}
+@keyframes qst-fala-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 .qst-aviso{margin:0;padding:10px;border-radius:6px;font:400 13px/1.45 Georgia,serif;color:#c9b98f;border:1px dashed rgba(201,164,92,.45);background:rgba(6,12,20,.5)}
 .qst-q .qst-act{margin-top:8px}
 .qst-btn{min-height:44px;padding:0 16px;border-radius:6px;cursor:pointer;font:700 12px/1 "Cinzel",Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:#eaf4ff;
@@ -114,6 +120,10 @@ export function mountQuests(opts: {
     return [...todas.filter((d) => d.id.startsWith("tutorial_")), ...todas.filter((d) => !d.id.startsWith("tutorial_"))];
   };
   const nomeQuest = (qid: string) => defs.get(qid)?.nome ?? qid;
+  // conversa das missões de conversar: em que fala o jogador está e quais conversas ele já ouviu até o fim
+  const falaPos = new Map<string, number>();
+  const falaLida = new Set<string>();
+  const temConversa = (d: QuestDef) => !!d.fala?.length && !!npc && d.objetivos.some((o) => o.tipo === "falar" && o.npc === npc!.id);
 
   function render() {
     if (!npc || !back.classList.contains("open")) return;
@@ -179,6 +189,21 @@ export function mountQuests(opts: {
     blk.append(el("p", "qst-rew", `Recompensa: ${partes.join(" · ")}`));
 
     const act = el("div", "qst-act");
+    // missão de conversar: depois de aceitar, o NPC fala (uma fala por vez); só no fim aparece "Entregar"
+    if ((estado === "ativa" || estado === "pronta") && temConversa(d) && !falaLida.has(d.id)) {
+      const falas = d.fala!;
+      const i = Math.min(falaPos.get(d.id) ?? 0, falas.length - 1);
+      const box = el("div", "qst-fala");
+      box.append(el("b", "", npc!.name), el("p", "", `“${falas[i]}”`), el("small", "", `${i + 1}/${falas.length}`));
+      blk.append(box);
+      const ultima = i >= falas.length - 1;
+      const b = el("button", "qst-btn primary", ultima ? "Encerrar conversa" : "Continuar");
+      b.type = "button";
+      b.onclick = () => { if (ultima) falaLida.add(d.id); else falaPos.set(d.id, i + 1); render(); };
+      act.append(b);
+      blk.append(act);
+      return blk;
+    }
     if (!estado) {
       const b = el("button", "qst-btn primary", "Aceitar");
       b.type = "button";

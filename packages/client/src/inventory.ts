@@ -40,7 +40,8 @@ const CSS = `
 .iv-poder{display:flex;flex-direction:column;align-items:center;gap:2px;margin:4px 0 2px;padding:6px 8px;border-radius:8px;background:linear-gradient(180deg,rgba(20,30,46,.7),rgba(8,12,20,.7));border:1px solid rgba(201,168,90,.35)}
 .iv-poder .iv-pl{font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.22em;color:#c9b07a;text-transform:uppercase}
 .iv-poder .pw-n{font:800 30px/1 Georgia,serif;color:#f3d77a;text-shadow:0 2px 6px #000}
-.iv-wallet{display:flex;gap:14px;align-items:center;margin:0 0 8px;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9}
+.iv-tw{display:flex;flex-direction:column;gap:6px}
+.iv-wallet{display:flex;gap:14px;align-items:center;margin:0;font:700 12px/1 "Cinzel",Georgia,serif;color:#e6eef9}
 .iv-wallet span{display:flex;align-items:center;gap:5px}
 .iv-wallet img{width:20px;height:20px;image-rendering:pixelated}
 .iv-sort{width:34px;height:34px;border-radius:50%;cursor:pointer;color:#8fb0cf;background:transparent;border:1px solid rgba(160,200,240,.18);display:grid;place-items:center;margin-right:8px;opacity:.75}
@@ -329,10 +330,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
   back.className = "iv-back";
   back.innerHTML = `
     <div class="iv-card" role="dialog" aria-modal="true" aria-label="Mochila">
-      <div class="iv-head"><div class="iv-id"><div class="iv-medal"><canvas width="47" height="47" aria-hidden="true"></canvas></div><h2 class="iv-title">Mochila</h2></div><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
+      <div class="iv-head"><div class="iv-id"><div class="iv-medal"><canvas width="47" height="47" aria-hidden="true"></canvas></div><div class="iv-tw"><h2 class="iv-title">Mochila</h2><div class="iv-wallet" aria-label="Moedas"></div></div></div><div class="iv-head-r"><button type="button" class="iv-sort" aria-label="Organizar mochila" title="Organizar mochila">${SORT}</button><button type="button" class="iv-x" aria-label="Fechar">&times;</button></div></div>
       <div class="iv-body">
         <div class="iv-left"><div class="iv-doll"></div><div class="iv-acc"></div><div class="iv-poder pw-host" aria-label="Poder total"><span class="iv-pl">Poder</span><b class="pw-n">0</b></div></div>
-        <div><div class="iv-wallet" aria-label="Moedas"></div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
+        <div><div class="iv-grid" role="group" aria-label="Espaços da mochila"></div><div class="iv-det"></div></div>
       </div>
       <details class="iv-stats-d"><summary>Atributos</summary><div class="iv-stats" aria-label="Atributos"></div></details>
     </div>`;

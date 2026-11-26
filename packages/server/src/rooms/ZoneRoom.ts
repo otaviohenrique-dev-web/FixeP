@@ -8,7 +8,7 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, mulGrupo, mulXp, mulTostoes, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
+  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, TRAVEL_COOLDOWN_S, ARRIVAL_SHIELD_CD_S, PORTAL_TRIGGER_RADIUS, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, mulGrupo, mulXp, mulTostoes, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
   VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
   limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId, aplicarSets,
   limparLoadouts, validarLoadout, sanitizarNomeLoadout, loadoutNomePadrao, LOADOUT_SLOTS, LOADOUT_COMBAT_LOCK_S, type Loadouts,
@@ -92,6 +92,7 @@ export type GmResultado =
   | { ok: true; resumo: string; antes?: unknown; depois?: unknown; detalhes?: Record<string, unknown> }
   | { ok: false; status: 400 | 403 | 404 | 409; erro: string };
 const arrivals = new Map<string, number>(); // personagem -> zona de origem da travessia (consumido ao entrar)
+const ultimaBolha = new Map<string, number>(); // personagem -> quando (ms) ganhou a última bolha de chegada por portal (ARRIVAL_SHIELD_CD_S)
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 /** DANO_FIXO_TEST=1 (só fora de produção): sem crítico e sem variação de dano, para os testes de números exatos não sortearem. */
@@ -180,6 +181,9 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
       pl.tx = clamp(p.x, 0, this.zone.w - 1);
       pl.ty = clamp(p.y, 0, this.zone.h - 1);
+      // clicou na passagem de um portão: vai até o centro dela (o gatilho é de PORTAL_TRIGGER_RADIUS, encostado)
+      const pt = this.zone.portals.find((q) => dist(pl.tx, pl.ty, q.x, q.y) <= q.r);
+      if (pt) { pl.tx = pt.x; pl.ty = pt.y; }
     });
 
     // O cliente terminou de carregar e o jogador já controla o personagem: a bolha de chegada começa a contar agora (não durante o load).
@@ -201,7 +205,8 @@ export class ZoneRoom extends Room<ZoneState> {
         const gate = this.zone.portals.find((q) => q.to === WORLD_GATE);
         const dest = ZONES[p.to as number];
         if (!gate || !dest || dest.safe) return void client.send(Evt.TravelDenied, {});
-        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
+        // com o mapa-mundo aberto há pouco (30 s), uns passos a mais não fazem a escolha falhar
+        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5 && !(this.t - pl.mapaAt < 30 && dist(pl.x, pl.y, gate.x, gate.y) <= 3)) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
         return void this.travel(client.sessionId, pl, { to: dest.id });
       }
       const portal = this.zone.portals.find((q) => q.to === p.to);
@@ -501,6 +506,11 @@ export class ZoneRoom extends Room<ZoneState> {
       const wait = TRAVEL_COMBAT_LOCK_S - (this.t - p.combatAt);
       if (wait > 0) {
         if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Em combate: espere ${Math.ceil(wait)}s para atravessar.`); this.clients.getById(id)?.send(Evt.TravelDenied, {}); }
+        return;
+      }
+      const espera = p.travelOkAt - this.t; // acabou de chegar por um portal: espera antes de atravessar de novo
+      if (espera > 0) {
+        if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Recém-chegado: espere ${Math.ceil(espera)}s para viajar de novo.`); this.clients.getById(id)?.send(Evt.TravelDenied, {}); }
         return;
       }
     }
@@ -1104,7 +1114,15 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.y = pl.ty = at.y;
     // o cliente de verdade avisa que vai carregar (options.load): a bolha já vale durante o load e só começa a contar no Msg.Ready.
     // Sem o aviso (bots e testes antigos) não há bolha: ninguém ganha proteção sem o cliente confirmar que a tela está pronta.
-    if (options?.load === true) { pl.shield = true; pl.shieldPending = true; pl.shieldUntil = this.t + ARRIVAL_SHIELD_WAIT_S; }
+    const porPortal = from !== undefined && from !== 0; // 0 = renasceu na cidade (morte): não é travessia
+    if (porPortal) pl.travelOkAt = this.t + TRAVEL_COOLDOWN_S;
+    // a bolha de chegada por portal tem intervalo: atravessar de novo logo em seguida não renova a proteção (login e morte sempre dão)
+    const agora = Date.now();
+    const bolhaLivre = !porPortal || agora - (ultimaBolha.get(auth.character.id) ?? -Infinity) >= ARRIVAL_SHIELD_CD_S * 1000;
+    if (options?.load === true && bolhaLivre) {
+      pl.shield = true; pl.shieldPending = true; pl.shieldUntil = this.t + ARRIVAL_SHIELD_WAIT_S;
+      if (porPortal) ultimaBolha.set(auth.character.id, agora);
+    }
     pl.name = auth.character.name;
     pl.charId = auth.character.id;
     pl.cls = auth.character.class;
@@ -1638,9 +1656,9 @@ export class ZoneRoom extends Room<ZoneState> {
       this.updatePvp(id, p);
       this.autoPotTick(id, p);
       if (!p.dead && !p.traveling) { // pisou num portal: atravessa (sem apertar nada)
-        const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= q.r);
+        const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= PORTAL_TRIGGER_RADIUS); // só quem encosta na passagem
         if (portal && portal.to === WORLD_GATE) { // portão da cidade: abre o mapa-mundo uma vez por entrada no raio
-          if (!p.atGate) { p.atGate = true; this.clients.getById(id)?.send(Evt.WorldMap, {}); }
+          if (!p.atGate) { p.atGate = true; p.mapaAt = this.t; p.tx = p.x; p.ty = p.y; this.clients.getById(id)?.send(Evt.WorldMap, {}); } // para o personagem enquanto escolhe
         } else if (portal) void this.travel(id, p, portal);
         else p.atGate = false;
       }
@@ -2092,7 +2110,7 @@ export class ZoneRoom extends Room<ZoneState> {
         let healed = 0;
         this.state.players.forEach((o, oid) => {
           if (o.dead || this.hostile(id, p, oid, o) || dist(o.x, o.y, p.x, p.y) > (def.radius ?? 0)) return;
-          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o))); // área: sem "from" (só a cura focada desenha o raio do curandeiro)
+          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o)), undefined, true); // área: sem "from" (só a cura focada desenha o raio do curandeiro)
           if (def.guardPct) this.grantGuard(o, def.guardPct, def.guardS ?? 0);
           if (def.cleanse) { o.stunUntil = 0; o.rootUntil = 0; } // purifica: aliado curado sai do atordoamento e das raízes
           healed++;
@@ -2111,7 +2129,7 @@ export class ZoneRoom extends Room<ZoneState> {
           if (d <= 2.2 && d < bestD) { bestD = d; target = [oid, o]; }
         });
         const [tid, t] = target;
-        this.healPlayer(tid, t, Math.round((def.heal ?? 0) * power * this.healStackMult(t)), id); // acúmulos atuais valem para esta cura
+        this.healPlayer(tid, t, Math.round((def.heal ?? 0) * power * this.healStackMult(t)), id, true); // acúmulos atuais valem para esta cura
         if (def.stackMax) this.addHealStack(t, def.stackMax, def.stackPct ?? 0, def.stackS ?? 0); // e este uso soma mais um
         break;
       }
@@ -2147,11 +2165,14 @@ export class ZoneRoom extends Room<ZoneState> {
     return focused;
   }
 
-  private healPlayer(id: string, p: Player, amount: number, from?: string) {
+  /** `habilidade`: cura de habilidade (área/focada) avisa mesmo com a vida cheia: amount 0 e `excesso` = o que curaria (o número aparece para todos) */
+  private healPlayer(id: string, p: Player, amount: number, from?: string, habilidade = false) {
     const before = p.hp;
-    p.hp = Math.min(p.maxHp, p.hp + Math.round(amount * (1 + p.gear.af.healPct / 100))); // Bênção (afixo): cura mais
+    const bruto = Math.round(amount * (1 + p.gear.af.healPct / 100)); // Bênção (afixo): cura mais
+    p.hp = Math.min(p.maxHp, p.hp + bruto);
     const healed = p.hp - before;
     if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y, from });
+    else if (habilidade && bruto > 0) this.broadcast(Evt.Heal, { id, amount: 0, excesso: bruto, x: p.x, y: p.y, from });
   }
 
   /** Atordoa o inimigo (não age até acabar; cancela o golpe que preparava). Chefes resistem: a duração cai para BOSS_CC_RESIST. */
