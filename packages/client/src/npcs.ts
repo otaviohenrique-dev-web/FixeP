@@ -19,10 +19,11 @@ const SPRITE_SCALE = 1.5;
 
 export class NpcLayer {
   private views = new Map<string, View>();
-  private entregas = new Set<string>(); // NPCs que recebem uma missão pronta do jogador
+  private entregas = new Set<string>(); // NPCs que recebem uma missão pronta do jogador ("!" dourado)
+  private ofertas = new Set<string>(); // NPCs com missão que o jogador pode aceitar agora ("?")
 
-  /** NPCs com missão pronta para entregar: o "?" fica dourado e aparece mesmo de longe */
-  setEntregas(ids: Iterable<string>) { this.entregas = new Set(ids); }
+  /** marcas sobre os NPCs: "!" dourado = missão para entregar; "?" = missão para aceitar (ambas visíveis de longe) */
+  setMarcas(entregas: Iterable<string>, ofertas: Iterable<string>) { this.entregas = new Set(entregas); this.ofertas = new Set(ofertas); }
 
   constructor(private scene: Phaser.Scene, private toScreen: ToScreen, npcs: readonly NpcDef[], private atlases: ReadonlyMap<string, ActorAtlas> = new Map()) {
     for (const n of npcs) this.build(n);
@@ -160,14 +161,16 @@ export class NpcLayer {
       }
       v.ring.clear();
       const perto = Math.hypot(v.def.x - gx, v.def.y - gy) <= NPC_REACH;
-      const ouro = this.entregas.has(v.def.id);
+      const entregar = this.entregas.has(v.def.id), aceitar = this.ofertas.has(v.def.id);
       if (!v.mark) {
         v.mark = this.scene.add.text(8, -138, "?", { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "26px", color: "#d9dee6", stroke: "#000", strokeThickness: 4 }).setOrigin(0.5, 1);
         v.body.add(v.mark);
       }
-      v.mark.setVisible(perto || ouro);
+      // entregar: "!" dourado; aceitar: "?" dourado; só conversar (perto, sem missão): "?" prateado
+      v.mark.setVisible(entregar || aceitar || perto);
       if (v.mark.visible) {
-        v.mark.setColor(ouro ? "#ffd24a" : "#d9dee6").setY(-138 + Math.sin(time / 320) * 3);
+        const ouro = entregar || aceitar;
+        v.mark.setText(entregar ? "!" : "?").setColor(ouro ? "#ffd24a" : "#d9dee6").setY(-138 + Math.sin(time / 320) * 3);
         v.mark.setShadow(0, 0, ouro ? "#ffb000" : "#9aa6b8", ouro ? 10 : 4, true, true);
       }
       if (perto) {

@@ -164,6 +164,7 @@ class WorldScene extends Phaser.Scene {
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private qDefs = new Map<string, QuestDef>(); // definições das missões (para o "?" dourado dos NPCs)
   private qEstados: QuestEstado[] = [];
+  private nivelMarcas = 0; // nível usado na última conta das marcas dos NPCs
   private selGrupo = false; // a seleção veio da lista do grupo (não se desfaz pela distância)
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -714,10 +715,18 @@ class WorldScene extends Phaser.Scene {
     if (!this.touchMode) this.lockKey = "";
   }
 
-  /** "?" dourado nos NPCs que recebem uma missão pronta */
+  /** marcas dos NPCs: "!" dourado para entregar missão pronta; "?" dourado para missão que dá para aceitar agora */
   private marcarEntregas() {
-    const ids = this.qEstados.filter((q) => q.estado === "pronta").map((q) => this.qDefs.get(q.id)?.npc).filter((x): x is string => !!x);
-    this.npcs?.setEntregas(ids);
+    const est = new Map(this.qEstados.map((q) => [q.id, q.estado]));
+    const nivel = Number(this.me()?.level) || 1;
+    const entregas: string[] = [], ofertas: string[] = [];
+    for (const d of this.qDefs.values()) {
+      if (!d.npc) continue;
+      const e = est.get(d.id);
+      if (e === "pronta") entregas.push(d.npc);
+      else if (!e && nivel >= d.nivelMin && d.preRequisitos.every((p) => est.get(p) === "entregue")) ofertas.push(d.npc);
+    }
+    this.npcs?.setMarcas(entregas, ofertas);
   }
 
   /** clicar no nome de um membro do grupo: seleciona ele (círculo verde, linha até ele e cartão do alvo); serve à Cura Focada */
@@ -1670,6 +1679,7 @@ class WorldScene extends Phaser.Scene {
     if (!SEM_DESENHOS) timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
     const meNow = this.me();
     if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
+      if (Number(meNow.level) !== this.nivelMarcas) { this.nivelMarcas = Number(meNow.level); this.marcarEntregas(); } // subiu de nível: novas missões liberadas
       timed("npcs", () => this.npcs.update(time, meNow.x, meNow.y));
       const near = this.npcs.inReach(meNow.x, meNow.y);
       this.econ.setNearNpc(near);
