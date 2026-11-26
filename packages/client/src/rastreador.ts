@@ -27,7 +27,7 @@ const CSS = `
   text-shadow:0 1px 2px #000,0 0 6px rgba(0,0,0,.85)}
 .rq[hidden]{display:none}
 .rq-hd{display:flex;align-items:center;gap:6px;min-height:22px}
-.rq-tit{font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#c9a45c}
+.rq-tit{pointer-events:auto;cursor:pointer;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:#c9a45c}
 .rq-n{font:600 10px/1 Georgia,serif;color:#8fa6c0}
 .rq-n:empty{display:none}
 .rq-tog{pointer-events:auto;margin-left:auto;width:20px;height:20px;padding:0;border:1px solid rgba(201,164,92,.55);border-radius:50%;background:rgba(10,16,26,.5);color:#e0c27a;
@@ -37,6 +37,10 @@ const CSS = `
 .rq-tut small{display:block;margin-bottom:2px;font:700 9px/1 "Cinzel",Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:#ffb072}
 .rq-tut p{margin:0;font:400 12px/1.35 Georgia,serif;color:#f4e6b8}
 .rq-m{display:flex;flex-direction:column;gap:1px;padding-left:7px;border-left:2px solid rgba(201,164,92,.35)}
+.rq-click{pointer-events:auto;cursor:pointer;border-radius:4px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.rq-click:hover{background:rgba(255,220,150,.06)}
+.rq-click:hover .rq-nome{color:#fff3cf}
+.rq-click:focus-visible{outline:1px solid #ffd2a3;outline-offset:2px}
 .rq-m.pronta{border-left-color:#ffd27a}
 .rq-nome{pointer-events:auto;align-self:flex-start;max-width:100%;padding:0;margin:0;border:0;background:none;cursor:pointer;text-align:left;
   font:700 12px/1.25 "Cinzel",Georgia,serif;letter-spacing:.02em;color:#e9cf8f;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -73,6 +77,17 @@ const el = (tag: string, cls = "", text = ""): HTMLElement => {
   return e;
 };
 
+/** o elemento inteiro abre o diário (clique no PC, toque no celular, Enter no teclado) sem repassar o toque ao jogo */
+function clicavel(e: HTMLElement, abrir: () => void, rotulo: string) {
+  e.classList.add("rq-click");
+  e.tabIndex = 0;
+  e.setAttribute("role", "button");
+  e.title = rotulo;
+  e.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+  e.addEventListener("click", (ev) => { ev.stopPropagation(); abrir(); });
+  e.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); abrir(); } });
+}
+
 export function mountRastreador(opts: RastreadorOpts): RastreadorUi {
   // a cena é refeita a cada travessia de zona: remove o rastreador e o estilo da montagem anterior
   document.querySelectorAll(".rq, style[data-rq]").forEach((e) => e.remove());
@@ -105,11 +120,7 @@ export function mountRastreador(opts: RastreadorOpts): RastreadorUi {
 
   function itemMissao(def: QuestDef, est: QuestEstado): HTMLElement {
     const item = el("div", "rq-m" + (est.estado === "pronta" ? " pronta" : ""));
-    const nome = el("button", "rq-nome", def.nome) as HTMLButtonElement;
-    nome.type = "button";
-    nome.title = `Abrir o diário: ${def.nome}`;
-    nome.addEventListener("pointerdown", (e) => e.stopPropagation()); // não repassa o toque ao jogo (não anda nem ataca)
-    nome.onclick = () => opts.onAbrirDiario();
+    const nome = el("span", "rq-nome", def.nome);
     let linha: string;
     if (est.estado === "pronta") linha = def.npc ? `Entregar a ${nomeNpc(def.npc)}` : "Entregar a missão";
     else {
@@ -117,6 +128,7 @@ export function mountRastreador(opts: RastreadorOpts): RastreadorUi {
       linha = i < 0 ? "Concluída" : linhaObjetivo(def.objetivos[i], est.progresso[i] ?? 0);
     }
     item.append(nome, el("p", "rq-obj", linha));
+    clicavel(item, opts.onAbrirDiario, `Abrir o diário: ${def.nome}`);
     return item;
   }
 
@@ -148,13 +160,17 @@ export function mountRastreador(opts: RastreadorOpts): RastreadorUi {
       try { localStorage.setItem(REC_KEY, recolhido ? "1" : "0"); } catch { /* sem armazenamento */ }
       render();
     };
-    hd.append(el("span", "rq-tit", "Missões"), el("span", "rq-n", missoes.length ? String(missoes.length) : ""), tog);
+    const tit = el("span", "rq-tit", "Missões");
+    tit.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+    tit.addEventListener("click", () => opts.onAbrirDiario());
+    hd.append(tit, el("span", "rq-n", missoes.length ? String(missoes.length) : ""), tog);
     painel.replaceChildren(hd);
     if (recolhido) return;
 
     const corpo = el("div", "rq-body");
     if (pendente && textoT) {
       const bloco = el("div", "rq-tut");
+      clicavel(bloco, opts.onAbrirDiario, "Abrir o diário");
       bloco.append(el("small", "", `Tutorial · ${passos.indexOf(pendente) + 1}/${passos.length}`), el("p", "", textoT));
       corpo.append(bloco);
     }
