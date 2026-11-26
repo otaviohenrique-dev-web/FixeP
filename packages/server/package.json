@@ -43,6 +43,7 @@
     "test:dicas:unit": "tsx test/dicas.unit.ts",
     "test:autopocao:unit": "tsx test/autopocao.unit.ts",
     "test:autopocao": "node test/autopocao.mjs",
+    "test:cura-numeros": "node test/cura-numeros.mjs",
     "test:autopocao:disparo": "node test/autopocao-disparo.mjs",
     "test:variacoes:unit": "tsx test/variacoes.unit.ts",
     "test:loadouts:unit": "tsx test/loadouts.unit.ts",

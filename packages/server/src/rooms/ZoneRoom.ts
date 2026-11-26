@@ -417,7 +417,7 @@ export class ZoneRoom extends Room<ZoneState> {
       const p = this.state.players.get(client.sessionId);
       if (p) this.sendInv(client.sessionId, p);
     });
-    this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(pl, p?.slot)));
+    this.onMessage(Msg.InvUse, (client, p: { slot?: unknown }) => this.invOp(client, (pl) => this.usePotion(client.sessionId, pl, p?.slot)));
 
     // Baú da cidade: o servidor confere a distância a CADA pedido, valida os espaços e grava bolsa+baú numa transação só
     this.onMessage(Msg.VaultOpen, (client) => void this.vaultOp(client, () => ({ ok: true })));
@@ -948,7 +948,7 @@ export class ZoneRoom extends Room<ZoneState> {
     this.questsDaMochila(client.sessionId, p); // equipar e coletar acompanham o que o personagem tem agora
   }
 
-  private usePotion(p: Player, slot: unknown): { ok: true } | { ok: false; error: string } {
+  private usePotion(id: string, p: Player, slot: unknown): { ok: true } | { ok: false; error: string } {
     if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
     const stack = p.inv.slots[slot];
     const def = stack ? ITEMS[stack.id] : undefined;
@@ -957,7 +957,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (p.hp >= p.maxHp) return { ok: false, error: "Sua vida já está cheia." };
     consumeOne(p.inv, slot);
     p.potionCdUntil = this.t + POTION_COOLDOWN_S;
-    p.hp = Math.min(p.maxHp, p.hp + (def.heal ?? 0));
+    this.healPlayer(id, p, def.heal ?? 0); // Bênção soma; limita à vida máxima e avisa o valor efetivo (poção não é bloqueada por combate)
     return { ok: true };
   }
 
@@ -967,7 +967,7 @@ export class ZoneRoom extends Room<ZoneState> {
     if (this.t < p.potionCdUntil) return; // recarga das poções
     const slot = p.inv.slots.findIndex((s) => s && ITEMS[s.id]?.kind === "potion");
     if (slot < 0) return; // sem poção: não faz nada (sem aviso repetido)
-    if (!this.usePotion(p, slot).ok) return;
+    if (!this.usePotion(id, p, slot).ok) return;
     p.invDirty = true;
     this.refreshStats(p);
     this.sendInv(id, p);

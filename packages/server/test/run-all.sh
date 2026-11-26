@@ -45,7 +45,7 @@ config_suite() {
     # Economia, mercado e cidade (kit inicial; mercado com TTL curto).
     test/economy.mjs|test/market.mjs) echo "ECON_TEST=1 LOOT_TEST=1 MARKET_TTL_S=4|" ;;
     test/cidade.mjs) echo "ECON_TEST=1|" ;;
-    test/autopocao.mjs|test/autopocao-disparo.mjs) echo "ECON_TEST=1 TEST_START_ZONE=1 API_RATE_MULT=100|" ;;
+    test/autopocao.mjs|test/autopocao-disparo.mjs|test/cura-numeros.mjs) echo "ECON_TEST=1 TEST_START_ZONE=1 API_RATE_MULT=100|" ;;
     # Classes e inventário com loot garantido. DANO_FIXO_TEST=1: sem crítico nem variação (PD-01/PD-02).
     test/inventory.mjs|test/classes.mjs|test/mago.mjs|test/guerreiro.mjs|test/curandeiro.mjs|test/rebalance.mjs|test/poder.mjs)
       echo "LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1 DANO_FIXO_TEST=1|" ;;

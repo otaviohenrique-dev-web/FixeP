@@ -1014,8 +1014,8 @@ class WorldScene extends Phaser.Scene {
       this.floatText(m.x, m.y - 0.6, "RENASCEU", "#fff2a8", 20, true);
       if (m.id === this.room.sessionId) { this.cameras.main.flash(250, 255, 240, 160); sfx.heal(); }
     } else {
-      this.floatText(m.x, m.y, `+${m.amount}`, "#7dff9a", 18, true);
-      if (m.id === this.room.sessionId) sfx.heal();
+      this.floatText(m.x, m.y - 1.1, `+${m.amount}`, "#7dff9a", 20, true); // acima da cabeça (e do nome)
+      if (m.id === this.room.sessionId) { sfx.heal(); this.hud.showHeal(m.amount); }
     }
   }
 

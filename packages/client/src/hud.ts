@@ -37,6 +37,8 @@ export interface Hud {
   clearCd(a: ActionId): void;
   /** barra de vida vermelha (com a sombra que desce devagar ao levar dano) e os números "67/170" */
   setHp(hp: number, max: number): void;
+  /** cura recebida: "+N" verde sobe ao lado da barra de vida */
+  showHeal(amount: number): void;
   /** bolha de chegada: segundos restantes (-1 = protegido durante o carregamento, sem contagem; null = sem bolha) */
   setShield(secondsLeft: number | null): void;
   setMana(cur: number, max: number): void;
@@ -124,8 +126,12 @@ const CSS = `
 .hd-lag{background:rgba(255,230,180,.5);transition:transform .7s .25s}
 /* vida: vermelha, no padrão clássico de RPG (a mesma cor da placa do jogador); a sombra clara é o dano recém-levado, que desce mais devagar */
 .hd-hp .hd-track{height:20px;border-color:#6b1d24;background:#12060a}
-.hd-hp .hd-hpf{background:linear-gradient(180deg,#ff6b74 0%,#e5202e 46%,#9d1220 100%);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
-.hd-hp .hd-hlag{position:absolute;inset:0;transform-origin:left;transform:scaleX(1);background:linear-gradient(180deg,#ffd9a8,#e59a62);opacity:.9;transition:transform .8s ease-out .3s}
+.hd-hp .hd-hpf{background:linear-gradient(180deg,#ff6b74 0%,#e5202e 46%,#9d1220 100%);transition:transform .7s cubic-bezier(.25,.8,.3,1)}
+.hd-hp .hd-hlag{position:absolute;inset:0;transform-origin:left;transform:scaleX(1);background:linear-gradient(180deg,#ffd9a8,#e59a62);opacity:.9;transition:transform 1.3s ease-out .45s}
+.hd-hp{position:relative}
+.hd-hp .hd-hgain{position:absolute;inset:0;transform-origin:left;transform:scaleX(0);background:linear-gradient(180deg,#d6ffd9,#4fd66a);opacity:.95}
+.hd-hp .hd-plus{position:absolute;right:4px;top:-4px;font:700 12px Cinzel,Georgia,serif;color:#7dff9a;text-shadow:0 0 3px #000,0 1px 2px #000;pointer-events:none;animation:hd-plus 1.1s ease-out forwards}
+@keyframes hd-plus{0%{opacity:0;transform:translateY(4px)}15%{opacity:1}100%{opacity:0;transform:translateY(-16px)}}
 .hd-hp .hd-txt{font-size:11px;letter-spacing:.05em;color:#fff4f2}
 .hd-hp.low .hd-track{animation:hd-hplow 1s ease-in-out infinite}
 @keyframes hd-hplow{0%,100%{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 0 rgba(255,40,50,0)}50%{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),0 0 10px rgba(255,40,50,.7)}}
@@ -293,7 +299,7 @@ export function mountHud(opts: HudOptions): Hud {
       <div class="hd-pwrap t0"><div class="hd-frame hd-portrait"><canvas width="48" height="48"></canvas><span class="hd-ini"></span></div><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-gem"></i><span class="hd-lvb">1</span></div>
       <div class="hd-bars">
         <div class="hd-name"><span class="hd-nm"></span><small>${cdef.name}</small></div>
-        <div class="hd-meter hd-hp"><span class="ic" style="color:#ff5a64">${ICON.heart}</span><div class="hd-track"><div class="hd-hlag"></div><div class="hd-fill hd-hpf" style="transform:scaleX(0)"></div><div class="hd-txt hd-hp-t">—</div></div></div>
+        <div class="hd-meter hd-hp"><span class="ic" style="color:#ff5a64">${ICON.heart}</span><div class="hd-track"><div class="hd-hlag"></div><div class="hd-hgain"></div><div class="hd-fill hd-hpf" style="transform:scaleX(0)"></div><div class="hd-txt hd-hp-t">—</div></div></div>
         <div class="hd-meter hd-tr"><div class="hd-thin"><div class="hd-fill"></div></div><span class="hd-tt"></span></div>
         <div class="hd-meter hd-rs"><span class="ic" style="color:${resColor}">${ICON[res.icon] ?? ""}</span><div class="hd-track"><div class="hd-fill" style="background:linear-gradient(180deg,${resColor},color-mix(in srgb,${resColor} 45%,#000))"></div><div class="hd-txt hd-rs-t"></div></div></div>
         <div class="hd-buffs"></div>
@@ -332,6 +338,7 @@ export function mountHud(opts: HudOptions): Hud {
   const hpRoot = q(".hd-hp");
   const hpFill = q(".hd-hpf");
   const hpLag = q(".hd-hlag");
+  const hpGain = q(".hd-hgain");
   const hpTxt = q(".hd-hp-t");
   const shdEl = q(".hd-shd");
   let hpRatio = -1;
@@ -623,16 +630,38 @@ export function mountHud(opts: HudOptions): Hud {
     clearCd(a) { delete cdUntil[a]; },
     setHp(hp, max) {
       const m = Math.max(1, max), r = Math.max(0, Math.min(1, hp / m));
+      hpFill.style.transition = r < hpRatio ? "transform .15s" : ""; // dano: barra cai logo; cura: enche devagar atrás da sombra verde
       hpFill.style.transform = `scaleX(${r})`;
-      if (r >= hpRatio) { // ganhou vida (ou primeira leitura): a sombra acompanha na hora; ao perder, ela fica para trás e desce devagar
+      if (r > hpRatio && hpRatio > 0) { // curou: sombra VERDE vai na frente até o valor novo e a barra enche devagar atrás
+        hpGain.style.transform = `scaleX(${r})`;
         hpLag.style.transition = "none";
         hpLag.style.transform = `scaleX(${r})`;
         void hpLag.offsetWidth;
         hpLag.style.transition = "";
-      } else hpLag.style.transform = `scaleX(${r})`;
+      } else if (r >= hpRatio) { // primeira leitura: tudo na hora
+        hpGain.style.transform = `scaleX(${r})`;
+        hpFill.style.transition = "none";
+        hpFill.style.transform = `scaleX(${r})`;
+        hpLag.style.transition = "none";
+        hpLag.style.transform = `scaleX(${r})`;
+        void hpLag.offsetWidth;
+        hpFill.style.transition = "";
+        hpLag.style.transition = "";
+      } else { // dano: a sombra vermelha fica para trás e desce devagar
+        hpGain.style.transform = `scaleX(${r})`;
+        hpLag.style.transform = `scaleX(${r})`;
+      }
       hpRatio = r;
       hpTxt.textContent = `${Math.max(0, Math.ceil(hp))}/${m}`;
       hpRoot.classList.toggle("low", r <= 0.2 && hp > 0);
+    },
+    showHeal(amount) {
+      if (amount <= 0) return;
+      const el = document.createElement("span");
+      el.className = "hd-plus";
+      el.textContent = `+${amount}`;
+      hpRoot.appendChild(el);
+      setTimeout(() => el.remove(), 1200);
     },
     setShield(s) {
       shdEl.classList.toggle("on", s !== null);
