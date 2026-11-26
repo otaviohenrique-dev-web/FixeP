@@ -1,6 +1,12 @@
 name: CI
 
-# Roda em todo pull request e em todo push na main: instalação limpa, conferência de tipos e todas as suítes do servidor.
+# Roda em todo pull request e em todo push na main.
+# - mudancas: detecta se o PR mexe só em docs/**, assets/** ou *.md (aí as suítes de servidor são puladas).
+#   No push para a main roda SEMPRE tudo.
+# - typecheck: conferência de tipos + suítes unitárias (sem servidor).
+# - servidor: suítes com servidor de teste, divididas em 4 grupos fixos em paralelo (test/run-all.sh --grupo N --de 4).
+# - "Typecheck e suítes do servidor": job agregador (checagem obrigatória da main). Passa se os outros passaram
+#   ou foram pulados de propósito; falha se algum falhou ou foi cancelado.
 on:
   pull_request:
   push:
@@ -8,25 +14,94 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: Typecheck e suítes do servidor
+  mudancas:
+    name: Detectar mudanças
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    outputs:
+      codigo: ${{ github.event_name == 'push' || steps.filtro.outputs.codigo == 'true' }}
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filtro
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: every
+          filters: |
+            codigo:
+              - '**'
+              - '!docs/**'
+              - '!assets/**'
+              - '!**/*.md'
 
+  typecheck:
+    name: Typecheck e unitárias
+    needs: mudancas
+    if: needs.mudancas.outputs.codigo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Instalar dependências (npm ci)
         run: npm ci
-
       - name: Conferir tipos (typecheck)
         run: npm run typecheck
+      - name: Suítes unitárias (sem servidor)
+        run: bash test/run-all.sh --so-unit
+        working-directory: packages/server
 
-      - name: Suítes do servidor
-        run: npm run test:ci -w @frixep/server
+  servidor:
+    name: Suítes do servidor (grupo ${{ matrix.grupo }}/4)
+    needs: mudancas
+    if: needs.mudancas.outputs.codigo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        grupo: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instalar dependências (npm ci)
+        run: npm ci
+      - name: Suítes com servidor de teste
+        run: bash test/run-all.sh --grupo ${{ matrix.grupo }} --de 4
+        working-directory: packages/server
+
+  resultado:
+    name: Typecheck e suítes do servidor
+    needs: [mudancas, typecheck, servidor]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir resultado dos jobs
+        env:
+          MUDANCAS: ${{ needs.mudancas.result }}
+          CODIGO: ${{ needs.mudancas.outputs.codigo }}
+          TYPECHECK: ${{ needs.typecheck.result }}
+          SERVIDOR: ${{ needs.servidor.result }}
+        run: |
+          echo "mudancas=$MUDANCAS codigo=$CODIGO typecheck=$TYPECHECK servidor=$SERVIDOR"
+          [ "$MUDANCAS" = success ] || { echo "Detector de mudanças não passou"; exit 1; }
+          if [ "$CODIGO" = true ]; then
+            [ "$TYPECHECK" = success ] && [ "$SERVIDOR" = success ] || { echo "Algum job falhou ou foi cancelado"; exit 1; }
+          else
+            # pulados de propósito (PR só de docs/assets/*.md)
+            for r in "$TYPECHECK" "$SERVIDOR"; do [ "$r" = skipped ] || { echo "Resultado inesperado: $r"; exit 1; }; done
+            echo "PR só de docs/assets/*.md: suítes puladas de propósito."
+          fi
