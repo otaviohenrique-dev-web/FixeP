@@ -32,7 +32,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 - UI legível em tela pequena: botões de habilidade com pelo menos 48 x 48 px de área de toque.
 - Efeitos (hit, magia, partículas) como spritesheets curtos, em fundo transparente.
 - Cosméticos raros (auras, capas, pets) precisam de silhueta fácil de reconhecer.
-- **Ícones de item:** `assets/items/item_<id>.png`, 48 x 48 px, com a cor da raridade na borda ou no brilho. Sem iluminação pintada no sprite.
+- **Ícones de item:** `assets/items/item_<família>_<raridade>.png`, mestre 512 px e 48 x 48 px no jogo. Fundo sólido `#12121a` e moldura arredondada na cor da raridade (ver `docs/DIRECAO_ARTE.md`, seções 2.3 e 3). Sem iluminação pintada no sprite.
 
 ## 6. Entrega técnica
 - Fonte editável em `assets/source/` (`.aseprite` ou equivalente). Exportados em `assets/<categoria>/`.
@@ -44,7 +44,9 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 - Geradores de arte provisória ficam em `tools/` (ex.: `gen_placeholder_bodies.py`, `gen_npcs.py`, `gen_wolf.py`). Eles reescrevem `assets/placeholder/` e `assets/items/`: rode-os de novo só se quiser refazer esses arquivos.
 
 ## 7. Ordem de produção
-1. **Validar o estilo:** 1 classe (Guerreiro) completa + 1 monstro + chão da Cinzas + efeito de hit.
+> Direção geral, paleta, raridades e fila detalhada: ver [DIRECAO_ARTE.md](DIRECAO_ARTE.md). Esta seção é o resumo.
+
+1. **Validar o estilo:** 1 classe (Guerreiro) completa + 1 monstro + chão da Cinzas + efeito de hit; depois 1 família de ícones (Espada de Uma Mão) nas 8 raridades.
 2. **Próximas classes e zonas:** Arqueiro e Clérigo, Mago, Floresta Gélida, Catacumbas.
 3. **Bosses e cidade:** arte própria do Rei Ossudo, do Soberano das Catacumbas e da cidade de Brasalume.
 4. **Acabamento:** dia e noite (camadas emissivas), clima e cosméticos raros.
