@@ -44,7 +44,7 @@ const mixWhite = (n: number, t: number) => {
 };
 
 const CSS = `
-.pt{position:fixed;z-index:15;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 172px);width:min(232px,54vw);
+.pt{position:fixed;z-index:15;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 128px);width:min(232px,54vw);
   font-family:"Cinzel",Georgia,serif;color:#e6eef9;pointer-events:none;--gold:#c9a45c;--gold-d:#7a5f2e;--ink:#0c121c;--ink2:#161f2e}
 .pt-tog{pointer-events:auto;position:relative;display:grid;place-items:center;width:30px;height:30px;padding:0;border-radius:8px;cursor:pointer;color:#e9c98a;
   background:linear-gradient(180deg,rgba(34,48,74,.88),rgba(13,21,34,.88));border:2px solid var(--gold-d);box-shadow:0 0 0 1px #000,0 2px 6px rgba(0,0,0,.55);

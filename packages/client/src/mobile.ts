@@ -32,9 +32,8 @@ body.mob .hd-tr .hd-thin{height:calc(3px*var(--hs))}
 body.mob .hd-tt{font-size:calc(7px*var(--hs))}
 body.mob .hd-shd{font-size:calc(7px*var(--hs));letter-spacing:.12em}
 body.mob .hd-tr .hd-txt{letter-spacing:.08em}
-body.mob .hd-pvp{left:${SAFE_L};top:calc(${SAFE_T} + 70px*var(--hs));height:calc(26px*var(--hs));padding:0 8px 0 6px;font-size:calc(9px*var(--hs));gap:4px;border-radius:8px;opacity:.82}
-body.mob .hd-pvp.on,body.mob .hd-pvp.chan{opacity:1}
-body.mob .hd-pvp svg{width:12px;height:12px}
+body.mob .hd-pvp{width:calc(20px*var(--hs));height:calc(20px*var(--hs))}
+body.mob .hd-pvp svg{width:calc(11px*var(--hs));height:calc(11px*var(--hs))}
 body.mob .hd-alert{top:${SAFE_T};max-width:calc(100vw - 300px);font-size:11px;padding:6px 10px;text-align:center} /* aviso no centro da faixa de cima: fica entre o canto esquerdo e os botões da direita */
 body.mob .hd-lv{left:${SAFE_L};bottom:calc(max(2px,env(safe-area-inset-bottom)) + 7px);font-size:8px;opacity:.7}
 /* ---------- canto inferior direito: arco de botões compacto sob o polegar ---------- */
@@ -58,7 +57,7 @@ body.mob .ec-wallet img,body.mob .ec-wallet .ec-coin{width:calc(14px*var(--hs));
 /* métricas (FPS/ping/online): canto direito, logo abaixo da carteira, em linhas curtas; longe da barra de habilidades e do joystick */
 body.mob .st{top:calc(${SAFE_T} + 70px*var(--hs));right:${SAFE_R};left:auto;bottom:auto;transform:none;padding:3px 6px;font-size:9px;line-height:1.3;opacity:.8;text-align:right}
 /* ---------- grupo: recolhido sob o PvP ---------- */
-body.mob .pt{top:calc(${SAFE_T} + 98px*var(--hs));left:${SAFE_L};width:min(220px,52vw)}
+body.mob .pt{top:calc(${SAFE_T} + 70px*var(--hs));left:${SAFE_L};width:min(220px,52vw)}
 body.mob .pt-tog{width:calc(26px*var(--hs));height:calc(26px*var(--hs));font-size:15px;opacity:.7}
 body.mob .pt-tg-chip{left:calc(${SAFE_L} + 170px*var(--hs));top:${SAFE_T};height:calc(38px*var(--hs));gap:calc(5px*var(--hs))}
 body.mob .pt-tg-chip .pt-lv{min-width:calc(20px*var(--hs));height:calc(20px*var(--hs));font-size:calc(10px*var(--hs))}

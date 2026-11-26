@@ -247,15 +247,18 @@ const CSS = `
 .hd.touch .hd-cost{left:0;right:0;bottom:5px;text-align:center}
 .hd-btn.ult{border-color:#f0cf86;box-shadow:inset 0 0 0 1px rgba(255,225,160,.35),0 0 10px rgba(255,190,90,.25)}
 /* ---------- PvP: botão sob o retrato, barra de canalização e avisos ---------- */
-.hd-pvp{position:absolute;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 124px);pointer-events:auto;display:flex;align-items:center;gap:6px;
-  height:30px;padding:0 12px 0 8px;border-radius:10px;cursor:pointer;color:#e9c98a;font:700 11px/1 "Cinzel",Georgia,serif;letter-spacing:.16em;text-transform:uppercase;
-  background:linear-gradient(180deg,#22304a,#0d1522);border:2px solid var(--gold-d);box-shadow:inset 0 0 0 1px rgba(255,225,160,.2),0 2px 6px rgba(0,0,0,.6);
-  touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;transition:border-color .15s,box-shadow .15s,color .15s}
-.hd-pvp:hover{border-color:#f0cf86}
-.hd-pvp:active{transform:scale(.96)}
+.hd-name{display:flex;align-items:center;gap:6px;min-width:0}
+.hd-nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.hd-name small{flex:none}
+.hd-pvp{flex:none;position:relative;width:22px;height:22px;padding:0;margin-left:2px;border-radius:50%;display:grid;place-items:center;cursor:pointer;pointer-events:auto;color:#c9b07a;
+  background:radial-gradient(circle at 50% 35%,#26324a,#0d1522);border:1.5px solid var(--gold-d);box-shadow:0 1px 4px rgba(0,0,0,.6);opacity:.85;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:border-color .15s,box-shadow .15s,color .15s,opacity .15s}
+.hd-pvp svg{width:13px;height:13px}
+.hd-pvp:hover{opacity:1;color:#f0dfb8;border-color:#f0cf86}
+.hd-pvp:active{transform:scale(.92)}
 .hd-pvp:focus-visible{outline:2px solid #ffd9a0;outline-offset:2px}
-.hd-pvp.chan{color:#ffd9a0;border-color:#f0cf86;animation:hd-pvpc 1s ease-in-out infinite}
-.hd-pvp.on{color:#ffb0a0;border-color:#c0392b;background:linear-gradient(180deg,#4a1a1a,#1a0b0b);box-shadow:inset 0 0 0 1px rgba(255,150,130,.3),0 0 14px rgba(220,60,40,.45)}
+.hd-pvp.chan{opacity:1;color:#ffd9a0;border-color:#f0cf86;animation:hd-pvpc 1s ease-in-out infinite}
+.hd-pvp.on{opacity:1;color:#ffb0a0;border-color:#c0392b;background:radial-gradient(circle at 50% 35%,#5a1f1f,#1a0b0b);box-shadow:0 0 10px rgba(220,60,40,.55)}
 @keyframes hd-pvpc{50%{box-shadow:inset 0 0 0 1px rgba(255,225,160,.3),0 0 14px rgba(255,200,110,.55)}}
 .hd-chan{position:absolute;left:50%;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 100px);transform:translateX(-50%);width:min(260px,60vw);display:none;flex-direction:column;gap:4px;align-items:center;pointer-events:none}
 .hd-chan.on{display:flex}
@@ -298,7 +301,7 @@ export function mountHud(opts: HudOptions): Hud {
     <div class="hd-unit">
       <div class="hd-pwrap t0"><div class="hd-frame hd-portrait"><canvas width="48" height="48"></canvas><span class="hd-ini"></span></div><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-riv"></i><i class="hd-gem"></i><span class="hd-lvb">1</span></div>
       <div class="hd-bars">
-        <div class="hd-name"><span class="hd-nm"></span><small>${cdef.name}</small></div>
+        <div class="hd-name"><span class="hd-nm"></span><small>${cdef.name}</small><button type="button" class="hd-pvp" aria-label="Modo PvP"><span class="ic"></span></button></div>
         <div class="hd-meter hd-hp"><span class="ic" style="color:#ff5a64">${ICON.heart}</span><div class="hd-track"><div class="hd-hlag"></div><div class="hd-hgain"></div><div class="hd-fill hd-hpf" style="transform:scaleX(0)"></div><div class="hd-txt hd-hp-t">—</div></div></div>
         <div class="hd-meter hd-tr"><div class="hd-thin"><div class="hd-fill"></div></div><span class="hd-tt"></span></div>
         <div class="hd-meter hd-rs"><span class="ic" style="color:${resColor}">${ICON[res.icon] ?? ""}</span><div class="hd-track"><div class="hd-fill" style="background:linear-gradient(180deg,${resColor},color-mix(in srgb,${resColor} 45%,#000))"></div><div class="hd-txt hd-rs-t"></div></div></div>
@@ -307,7 +310,6 @@ export function mountHud(opts: HudOptions): Hud {
         <div class="hd-shd"></div>
       </div>
     </div>
-    <button type="button" class="hd-pvp" aria-label="Modo PvP"><span class="ic"></span><span class="hd-pvp-t">PvP</span></button>
     <div class="hd-chan"><div class="hd-chan-t"></div><div class="hd-track"><div class="hd-chan-f"></div></div></div>
     <div class="hd-alert" role="status"></div>
     <div class="hd-bar"></div>
@@ -359,17 +361,11 @@ export function mountHud(opts: HudOptions): Hud {
   const bar = q(".hd-bar");
   const pvpBtn = q<HTMLButtonElement>(".hd-pvp");
   pvpBtn.querySelector(".ic")!.innerHTML = ICON.swords;
-  const pvpTxt = q(".hd-pvp-t");
   const chanBox = q(".hd-chan");
   const chanTxt = q(".hd-chan-t");
   const chanFill = q(".hd-chan-f");
   const alertEl = q(".hd-alert");
   let pvpOn = false, pvpChan = 0, chanStart = 0, alertTimer: ReturnType<typeof setTimeout> | undefined;
-  // um clique: se está no modo (ou saindo), pede para sair; senão pede para entrar. Durante a canalização, o clique pede o contrário e cancela.
-  pvpBtn.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    opts.onPvp?.(pvpChan === 1 ? false : pvpChan === 2 ? true : !pvpOn);
-  });
   const deadSub = dead.querySelector("p")!;
 
   const defs: Record<ActionId, ActionDef> = { ...cdef.actions };
@@ -442,6 +438,20 @@ export function mountHud(opts: HudOptions): Hud {
     el.addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") end(true); });
     el.addEventListener("pointercancel", () => end(false));
   }
+
+  // PvP (ícone ao lado do nome): clique/toque alterna (durante a canalização, cancela); passar o mouse ou segurar o dedo explica
+  const pvpVerbo = matchMedia("(pointer: coarse)").matches ? "Toque" : "Clique";
+  const pvpTip = () => {
+    const [titulo, estado, texto] = pvpChan === 1
+      ? ["Entrando no PvP", "Canalizando", `${pvpVerbo} de novo para cancelar.`]
+      : pvpChan === 2
+        ? ["Saindo do PvP", "Canalizando", `${pvpVerbo} de novo para continuar no PvP.`]
+        : pvpOn
+          ? ["PvP ativo", "Hostil", `Você pode atacar outros jogadores nas regiões PvP, e eles também podem atacar você. ${pvpVerbo} para voltar ao modo pacífico.`]
+          : ["Modo pacífico", "PvP desligado", `${pvpVerbo} para mudar para hostil. Se trocar para hostil, poderá atacar todos os jogadores de regiões PvP. Eles também poderão atacar você.`];
+    return `<div class="hd-tip-h"><b>${titulo}</b></div><div class="hd-tip-t">${estado}</div><p>${texto}</p>`;
+  };
+  pressable(pvpBtn, () => opts.onPvp?.(pvpChan === 1 ? false : pvpChan === 2 ? true : !pvpOn), pvpTip);
 
   // ordem visual: esquiva, skills, ataque (maior) à direita
   const order: ActionId[] = ["dodge", "skill1", "skill2", "skill3", "ultimate", "attack"];
@@ -715,7 +725,8 @@ export function mountHud(opts: HudOptions): Hud {
       root.classList.toggle("pvp", on);
       pvpBtn.classList.toggle("on", on && chan === 0);
       pvpBtn.classList.toggle("chan", chan !== 0);
-      pvpTxt.textContent = chan === 1 ? "Entrando…" : chan === 2 ? "Saindo…" : on ? "PvP ativo" : "PvP";
+      pvpBtn.setAttribute("aria-label", chan === 1 ? "PvP: entrando" : chan === 2 ? "PvP: saindo" : on ? "PvP ativo" : "Modo pacífico (PvP desligado)");
+      if (tipFor === pvpBtn) tipEl.innerHTML = pvpTip(); // balão aberto acompanha a mudança
       pvpBtn.setAttribute("aria-pressed", String(on));
       chanBox.classList.toggle("on", chan !== 0);
       chanBox.classList.toggle("out", chan === 2);
