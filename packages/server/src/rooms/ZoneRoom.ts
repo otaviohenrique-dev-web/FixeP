@@ -206,11 +206,11 @@ export class ZoneRoom extends Room<ZoneState> {
         const dest = ZONES[p.to as number];
         if (!gate || !dest || dest.safe) return void client.send(Evt.TravelDenied, {});
         // com o mapa-mundo aberto há pouco (30 s), uns passos a mais não fazem a escolha falhar
-        if (dist(pl.x, pl.y, gate.x, gate.y) > PORTAL_TRIGGER_RADIUS + 0.5 && !(this.t - pl.mapaAt < 30 && dist(pl.x, pl.y, gate.x, gate.y) <= 3)) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
+        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5 && !(this.t - pl.mapaAt < 30 && dist(pl.x, pl.y, gate.x, gate.y) <= 3)) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
         return void this.travel(client.sessionId, pl, { to: dest.id });
       }
       const portal = this.zone.portals.find((q) => q.to === p.to);
-      if (!portal || dist(pl.x, pl.y, portal.x, portal.y) > PORTAL_TRIGGER_RADIUS + 0.5) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portal."); }
+      if (!portal || dist(pl.x, pl.y, portal.x, portal.y) > portal.r + 0.5) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portal."); }
       void this.travel(client.sessionId, pl, portal);
     });
 
