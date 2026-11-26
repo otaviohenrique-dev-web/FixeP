@@ -60,7 +60,7 @@ const SLOT_HABILIDADE: Record<string, string> = { skill1: "1 (Q)", skill2: "2 (W
 const SLOT_NOME: Record<string, string> = { weapon: "uma arma", armor: "uma armadura", helmet: "um elmo", boots: "botas", cape: "uma capa" };
 
 /** texto de um objetivo com o progresso atual, ex.: "Esqueleto (zona 1): 1/3" */
-function linhaObjetivo(o: Objetivo, valor: number): string {
+export function linhaObjetivo(o: Objetivo, valor: number): string {
   if (o.tipo === "abater") {
     const nome = ENEMY_KINDS[o.kind as keyof typeof ENEMY_KINDS]?.name ?? o.kind;
     return `Derrotar ${nome}${o.zona !== undefined ? ` na zona ${o.zona}` : ""}: ${Math.min(valor, o.qtd)}/${o.qtd}`;

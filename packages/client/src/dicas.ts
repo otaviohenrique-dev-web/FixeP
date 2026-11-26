@@ -45,10 +45,10 @@ const CSS = `
 @media (max-width:640px){.dica{font-size:11px;max-width:calc(100vw - 24px)}}
 `;
 
-/** A faixa do tutorial está aberta (não minimizada) na tela? Lê o próprio elemento, sem depender do módulo tutorial. */
+/** O passo do tutorial está aberto (rastreador expandido, com o passo visível)? Lê o próprio elemento, sem depender do módulo tutorial. */
 export function tutorialFaixaAberta(): boolean {
-  const b = document.querySelector<HTMLElement>(".tut");
-  return !!b && !b.hidden && !b.classList.contains("min");
+  const passo = document.querySelector<HTMLElement>(".rq:not([hidden]) .rq-tut");
+  return !!passo && passo.getClientRects().length > 0; // position:fixed não tem offsetParent; getClientRects mostra se está na tela
 }
 
 /** Monta o balão de dicas. Sem dependências do jogo: quem usa passa `enviar` e `tutorialAberto`. */

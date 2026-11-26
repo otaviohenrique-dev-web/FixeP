@@ -30,8 +30,6 @@ const CSS = `
 .jg-key{position:absolute;right:-5px;bottom:-5px;min-width:17px;height:16px;padding:0 4px;border-radius:4px;font:700 10px/16px "Cinzel",Georgia,serif;text-align:center;color:#ffd9a8;background:#1a0f08;border:1px solid rgba(255,150,70,.7);pointer-events:none}
 .jg-btn .ut-dot{position:absolute;top:-4px;right:-4px}
 body.mob .jg-bar{display:none}
-/* computador: o aviso do tutorial (centro, logo abaixo do topo) desce para não ficar atrás da barra */
-body:not(.mob) .tut{top:calc(max(6px,env(safe-area-inset-top)) + 82px)}
 /* tela estreita (celular, mesmo sem toque detectado): a barra disputaria o canto da HUD; os atalhos ficam no menu ☰ */
 @media (max-width:620px){.jg-bar{display:none}}
 /* os botões da bolsa e de Habilidades saíram do topo: ficam na barra (teclas I, T, V e B continuam valendo) */
