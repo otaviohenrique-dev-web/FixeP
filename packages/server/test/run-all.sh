@@ -130,6 +130,9 @@ RAN=0
 PORT_NEXT=3400
 LOG_DIR="${TMPDIR:-/tmp}/frixep-test-logs"
 mkdir -p "$LOG_DIR"
+# Os arquivos de código do painel (PAINEL_CODIGO_ARQUIVO) ficam em ../../.data: num checkout limpo a pasta não existe,
+# e o servidor não consegue gravar o código (o teste ficava sem token). Cria antes de qualquer suíte.
+mkdir -p ../../.data
 
 # Sobe o servidor de teste numa porta. Argumentos: porta, variáveis do servidor (string, ex. "LOOT_TEST=1 X=1").
 start_server() {
