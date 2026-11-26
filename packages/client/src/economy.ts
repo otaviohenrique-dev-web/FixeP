@@ -173,7 +173,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
 
   let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null }, iron: 0, obols: 0 };
 
-  // ---- saldo na HUD
+  // ---- saldo: não fica mais fixo na tela (aparece na Mochila, ao lado do título); o elemento segue existindo, fora da página
   const wallet = el("div", "ec-wallet");
   wallet.setAttribute("aria-label", "Moedas");
   const wIron = el("span"), wObol = el("span", "o");
@@ -183,7 +183,6 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   wIron.append(coinImg("iron"), wIronN);
   wObol.append(coinImg("obols"), wObolN);
   wallet.append(wIron, wObol);
-  document.body.append(wallet);
 
   // ---- botão "Falar com ..." (aparece perto de um NPC; serve ao toque e ao teclado)
   const near = el("button", "ec-near");

@@ -35,11 +35,9 @@ const CSS = `
 .jg-tog:hover,.jg-tog:focus-visible{opacity:1;color:#f0cf86}
 .jg-tog svg{width:13px;height:13px;transition:transform .2s}
 .jg-bar.rec .jg-tog svg{transform:rotate(180deg)}
-/* a carteira fica à esquerda da fileira (acompanha quando ela recolhe) */
-body:not(.mob) .ec-wallet{right:calc(76px + var(--jg-w,0px))}
 body.mob .jg-bar{display:none}
 /* tela estreita (celular, mesmo sem toque detectado): os atalhos ficam no menu ☰ */
-@media (max-width:620px){.jg-bar{display:none}body:not(.mob) .ec-wallet{right:170px}}
+@media (max-width:620px){.jg-bar{display:none}}
 /* os botões da bolsa e de Habilidades saíram do topo: ficam na barra (teclas I, T, V e B continuam valendo) */
 .iv-btn,.ut-btn{display:none!important}
 `;
@@ -115,11 +113,6 @@ export function mountBarraJogo(itens: AtalhoJogo[]): { atualiza(): void } {
   aplicar();
   barra.append(tog, lista);
   document.body.append(barra);
-
-  // a carteira acompanha a largura da fileira (recolhida ou não)
-  const medir = () => document.documentElement.style.setProperty("--jg-w", `${barra.offsetWidth}px`);
-  medir();
-  if (typeof ResizeObserver === "function") new ResizeObserver(medir).observe(barra);
 
   function atualiza() {
     for (const { it, b, dot } of linhas) {
