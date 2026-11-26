@@ -90,6 +90,7 @@ const CSS = `
 let tip: HTMLDivElement | null = null;
 let owner: HTMLElement | null = null; // item cuja dica está aberta
 let abertaNoToque = false; // a dica atual foi aberta por segurar (celular), não pelo mouse
+let fixada = false; // aberta por clique (openItemTip): não some ao tirar o mouse, só ao clicar fora
 let ctx: ItemTipCtx = { getClass: () => "warrior", getLevel: () => 1 };
 
 /** quem está jogando (para a classe e o nível da dica): ligado uma vez, ao montar a mochila */
@@ -195,6 +196,7 @@ export function hideItemTip(): void {
   if (tip) tip.style.display = "none";
   owner = null;
   abertaNoToque = false;
+  fixada = false;
 }
 
 /** a dica aberta por segurar (celular) pertence a este elemento: um toque nele fecha a dica sem selecionar o item */
@@ -206,6 +208,7 @@ export function dicaDeToqueAberta(el: HTMLElement): boolean {
 export function openItemTip(el: HTMLElement, data: ItemTipData): void {
   build(data);
   owner = el;
+  fixada = true;
   ensure().style.display = "block";
   const r = el.getBoundingClientRect();
   place(r.left + r.width / 2, r.top, true);
@@ -214,13 +217,15 @@ export function openItemTip(el: HTMLElement, data: ItemTipData): void {
 /** liga a dica a um elemento: mouse (passar) e toque (tocar) */
 export function bindItemTip(el: HTMLElement, get: () => ItemTipData): void {
   el.addEventListener("mouseenter", (e) => {
+    if (fixada && owner === el) return; // já fixada neste item pelo clique
     build(get());
     owner = el;
+    fixada = false;
     ensure().style.display = "block";
     place(e.clientX, e.clientY, false);
   });
-  el.addEventListener("mousemove", (e) => { if (owner === el) place(e.clientX, e.clientY, false); });
-  el.addEventListener("mouseleave", () => { if (owner === el) hideItemTip(); });
+  el.addEventListener("mousemove", (e) => { if (owner === el && !fixada) place(e.clientX, e.clientY, false); });
+  el.addEventListener("mouseleave", () => { if (owner === el && !fixada) hideItemTip(); });
   // toque: a dica abre ao SEGURAR (0,45 s) e fica aberta; o toque curto só seleciona o item (antes a dica abria no
   // toque e sumia ao selecionar, e o arrastar nativo do celular cancelava o segurar)
   let timer = 0, x0 = 0, y0 = 0;

@@ -3,7 +3,7 @@ import {
   EQUIP_SLOT_NAME, CLASS_DEFS, itemValue, listingFee, suggestedPrice,
   type InventorySnapshot, type ItemDef, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type MarketFilter, type MarketPricesEvent, type MyListing, type MarketCurrency, type CharClass, type ItemKind, type Rarity,
 } from "@frixep/shared";
-import { bindItemTip, openItemTip, COARSE } from "./itemtip";
+import { bindItemTip, openItemTip, hideItemTip, type ItemTipData } from "./itemtip";
 
 /**
  * Janela do leiloeiro (mercado dos jogadores), em DOM. O servidor decide tudo (taxa, custódia, limites, quem comprou primeiro):
@@ -155,9 +155,21 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
   }
   back.onclick = (e) => { if (e.target === back) close(); };
 
+  /** ficha completa do item no ícone e no nome, nas 3 abas: passar o mouse mostra, clicar fixa; no celular, segurar o dedo */
+  function fichaEm(ic: HTMLElement, info: HTMLElement, tipData: () => ItemTipData) {
+    for (const alvo of [ic, info]) {
+      bindItemTip(alvo, tipData);
+      alvo.style.cursor = "help";
+      // clique do mouse (não toque: o toque curto não abre, o segurar já faz isso) fixa a ficha acima do item
+      // (pelo tipo do ponteiro, não por COARSE: notebook com tela de toque também tem mouse)
+      alvo.addEventListener("click", (e) => { if ((e as PointerEvent).pointerType !== "touch") openItemTip(alvo, tipData()); });
+    }
+  }
+
   // ---------------------------------------------------------------- estrutura
   function render() {
     if (!npc) return;
+    hideItemTip(); // a lista é recriada: a ficha do elemento antigo ficaria solta na tela
     if (tab !== "sell") formCtx = null;
     // não refaz a tela enquanto o jogador digita num campo (perderia o foco)
     const ae = document.activeElement as HTMLInputElement | null;
@@ -268,9 +280,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
       act.append(pr, b);
       // ficha completa do item (atributos, classe, nível) antes de comprar; compara com o equipado do mesmo tipo
       const ic = iconBox(l.itemId, l.qty);
-      const tipData = () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null });
-      bindItemTip(ic, tipData);
-      bindItemTip(info, tipData);
+      fichaEm(ic, info, () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
       row.append(ic, info, act);
       list.append(row);
     }
@@ -310,14 +320,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
       act.append(b);
       // ficha completa (afixos, refino, gemas): passar o mouse, clicar, ou segurar o dedo no celular
       const ic = iconBox(st.id, st.qty);
-      const tipData = () => ({ def: d, af: st.af, rf: st.rf, gm: st.gm, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null });
-      bindItemTip(ic, tipData);
-      bindItemTip(info, tipData);
-      // clique com o mouse abre a ficha; no toque o segurar já faz isso (o toque curto não deve abrir)
-      if (!COARSE) {
-        ic.addEventListener("click", () => openItemTip(ic, tipData()));
-        info.addEventListener("click", () => openItemTip(info, tipData()));
-      }
+      fichaEm(ic, info, () => ({ def: d, af: st.af, rf: st.rf, gm: st.gm, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
       row.append(ic, info, act);
       if (listSlot === i) row.append(listForm(i, st.id, st.qty));
       list.append(row);
@@ -412,7 +415,9 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     b.title = l.status === "active" ? "O item volta para a mochila; a taxa de listagem não é devolvida." : l.status === "sold" ? "Receber os tostões da venda." : "Receber o item de volta.";
     b.onclick = () => { busy = true; send(l.status === "sold" ? Msg.MarketClaim : Msg.MarketCancel, { id: l.id }); render(); };
     act.append(b);
-    row.append(iconBox(l.itemId, l.qty), info, act);
+    const ic = iconBox(l.itemId, l.qty);
+    if (d) fichaEm(ic, info, () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
+    row.append(ic, info, act);
     return row;
   }
 
