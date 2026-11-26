@@ -46,7 +46,7 @@ import { limparTalentos, pontosLivres, podeSubirTalento, talentosDaClasse, VARIA
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountRastreador, type RastreadorUi } from "./rastreador";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
-import type { DicasVistasEvent, ActiveBuff } from "@frixep/shared";
+import type { DicasVistasEvent, ActiveBuff, QuestDef, QuestEstado } from "@frixep/shared";
 import { mountVault, type VaultUi } from "./vault";
 import { drawTown, type TownLayer } from "./town";
 import { revealItem, showRarityReveal } from "./loot-fx";
@@ -162,6 +162,8 @@ class WorldScene extends Phaser.Scene {
   private talentos!: TalentosUi;
   private builds!: BuildsUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
+  private qDefs = new Map<string, QuestDef>(); // definições das missões (para o "?" dourado dos NPCs)
+  private qEstados: QuestEstado[] = [];
   private selGrupo = false; // a seleção veio da lista do grupo (não se desfaz pela distância)
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -283,6 +285,7 @@ class WorldScene extends Phaser.Scene {
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
+    this.marcarEntregas(); // a camada de NPCs é refeita a cada zona: reaplica o "?" dourado
     this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId, getPlayer: () => { const m = this.me(); return m ? { x: Number(m.x), y: Number(m.y) } : null; } }); // bandeira e trilha no chão do tutorial (C1.4)
     this.rastreador = mountRastreador({ onAbrirDiario: () => this.diario.open() }); // rastreador de missões à esquerda (abre o diário ao clicar)
     this.dicas = mountDicas({ enviar: (id) => this.room?.send(Msg.DicaVista, { id }), tutorialAberto: tutorialFaixaAberta }); // dicas contextuais (C1.6)
@@ -411,7 +414,7 @@ class WorldScene extends Phaser.Scene {
       if (other) {
         const p = other.p;
         this.selId = other.id;
-        this.selGrupo = false;
+        this.selGrupo = !!p.party && String(p.party) === String(this.me()?.party ?? ""); // aliado do grupo: o foco não cai pela distância
         this.party.selectPlayer({ name: String(p.name), level: Number(p.level) || 1, cls: String(p.cls), inParty: !!p.party });
         if (ptr.wasTouch || this.touchMode) this.lockKey = `p:${other.id}`;
         return;
@@ -424,8 +427,8 @@ class WorldScene extends Phaser.Scene {
       }
       // no computador: clicar num inimigo trava o foco nele (sem andar até ele); clicar no chão mantém o foco (Esc solta)
       const foe = this.enemyAt(ptr.worldX, ptr.worldY);
-      if (foe) { this.lockKey = foe; this.chase = null; if (this.selId) this.deselect(); return; }
-      if (this.selId) this.deselect();
+      if (foe) { this.lockKey = foe; this.chase = null; return; } // travar um inimigo não tira o foco do aliado (o curador segue com ele)
+      // clicar no chão só anda: o aliado selecionado continua em foco (Esc ou clicar em outro jogador troca)
       const { x, y } = toGrid(ptr.worldX, ptr.worldY);
       const near = this.ground.nearest(x, y, 0.9); // clicar num item no chão também pede para pegá-lo (se estiver ao alcance)
       const me = this.me();
@@ -589,8 +592,8 @@ class WorldScene extends Phaser.Scene {
       else this.inv.toast(t[0], t[1]);
     });
     room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); if (!m.ok) this.dicaDoAviso(String(m.text)); });
-    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); this.rastreador.setQuests(m); });
-    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); this.rastreador.setDefs(m); });
+    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.qEstados = m?.quests ?? []; this.marcarEntregas(); this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); this.rastreador.setQuests(m); });
+    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.qDefs = new Map((m?.defs ?? []).map((d) => [d.id, d])); this.marcarEntregas(); this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); this.rastreador.setDefs(m); });
     room.onMessage(Evt.DicasVistas, (m: DicasVistasEvent) => this.dicas.carregar(m)); // dicas já vistas por este personagem (C1.6)
     this.room.send(Msg.InvSync, {});
     this.room.send(Msg.QuestSync, {}); // pede o estado e as definições das quests (depois de registrar os receptores)
@@ -709,6 +712,12 @@ class WorldScene extends Phaser.Scene {
     this.uiScale = Math.min(1.25, 1 / zoom);
     setMobileUi(this.touchMode);
     if (!this.touchMode) this.lockKey = "";
+  }
+
+  /** "?" dourado nos NPCs que recebem uma missão pronta */
+  private marcarEntregas() {
+    const ids = this.qEstados.filter((q) => q.estado === "pronta").map((q) => this.qDefs.get(q.id)?.npc).filter((x): x is string => !!x);
+    this.npcs?.setEntregas(ids);
   }
 
   /** clicar no nome de um membro do grupo: seleciona ele (círculo verde, linha até ele e cartão do alvo); serve à Cura Focada */

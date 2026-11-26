@@ -961,8 +961,8 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     questNotice: (text, ok) => quest.notice(text, ok),
     setNearNpc(n) {
       nearNpc = n;
-      near.classList.toggle("show", !!n && !tradeOpen && !back.classList.contains("open") && !market.isOpen());
-      if (n) { near.replaceChildren(el("kbd", "", "G"), document.createTextNode(`Falar com ${n.name} (${n.title})`)); }
+      // sem botão "Falar com..." na tela: o NPC mostra um "?" acima da placa; clicar/tocar nele ou apertar G abre a conversa
+      near.classList.remove("show");
     },
     setTrade,
     showTradeInvite,

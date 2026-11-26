@@ -11,6 +11,7 @@ type ToScreen = (x: number, y: number) => { sx: number; sy: number };
 interface View {
   def: NpcDef; sx: number; sy: number; ring: Phaser.GameObjects.Graphics; body: Phaser.GameObjects.Container;
   sprite?: Phaser.GameObjects.Sprite; atlas?: ActorAtlas; dir: Dir; cur: string; busyUntil: number; nextAct: number;
+  mark?: Phaser.GameObjects.Text; // "?" acima da placa: prata = dá para conversar (perto); ouro = tem missão para entregar
 }
 /** animação de ofício de cada NPC (tocada de tempos em tempos) e escala do sprite (o quadro de 64 px é do tamanho dos personagens) */
 const ACT: Record<string, string> = { smith: "work", merchant: "count", auctioneer: "gavel" };
@@ -18,6 +19,10 @@ const SPRITE_SCALE = 1.5;
 
 export class NpcLayer {
   private views = new Map<string, View>();
+  private entregas = new Set<string>(); // NPCs que recebem uma missão pronta do jogador
+
+  /** NPCs com missão pronta para entregar: o "?" fica dourado e aparece mesmo de longe */
+  setEntregas(ids: Iterable<string>) { this.entregas = new Set(ids); }
 
   constructor(private scene: Phaser.Scene, private toScreen: ToScreen, npcs: readonly NpcDef[], private atlases: ReadonlyMap<string, ActorAtlas> = new Map()) {
     for (const n of npcs) this.build(n);
@@ -154,7 +159,18 @@ export class NpcLayer {
         }
       }
       v.ring.clear();
-      if (Math.hypot(v.def.x - gx, v.def.y - gy) <= NPC_REACH) {
+      const perto = Math.hypot(v.def.x - gx, v.def.y - gy) <= NPC_REACH;
+      const ouro = this.entregas.has(v.def.id);
+      if (!v.mark) {
+        v.mark = this.scene.add.text(8, -138, "?", { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: "26px", color: "#d9dee6", stroke: "#000", strokeThickness: 4 }).setOrigin(0.5, 1);
+        v.body.add(v.mark);
+      }
+      v.mark.setVisible(perto || ouro);
+      if (v.mark.visible) {
+        v.mark.setColor(ouro ? "#ffd24a" : "#d9dee6").setY(-138 + Math.sin(time / 320) * 3);
+        v.mark.setShadow(0, 0, ouro ? "#ffb000" : "#9aa6b8", ouro ? 10 : 4, true, true);
+      }
+      if (perto) {
         const a = 0.55 + 0.25 * Math.sin(time / 260);
         v.ring.lineStyle(3, 0xf0cf86, a).strokeEllipse(v.sx, v.sy + 2, 54, 24);
       }
