@@ -23,19 +23,20 @@ const CSS = `
 .gm-btn:hover,.gm-btn:focus-visible{color:#fff;border-color:#ff9a4d;box-shadow:0 0 16px rgba(255,120,40,.35)}
 .gm-btn:focus-visible,.gm-item:focus-visible,.gm-tile:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
 .gm-btn svg{width:22px;height:22px}
-.gm-back{position:fixed;inset:0;z-index:21;display:none;flex-direction:column;align-items:center;overflow-y:auto;background:rgba(2,5,11,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);padding:12px;font-family:"Cinzel",Georgia,serif}
+.gm-back{position:fixed;inset:0;z-index:21;display:none;flex-direction:column;align-items:center;overflow-x:hidden;overflow-y:auto;background:rgba(2,5,11,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);padding:12px;font-family:"Cinzel",Georgia,serif}
 .gm-back.open{display:flex;animation:gm-in .18s ease-out}
-.gm-card{flex:none;margin:auto 0;width:min(340px,100%);padding:16px 18px 14px;border-radius:8px;color:#dbeaff;text-align:center;
+.gm-card{flex:none;margin:auto 0;width:min(340px,calc(100% - 4px));min-width:0;box-sizing:border-box;padding:16px 18px 14px;border-radius:8px;color:#dbeaff;text-align:center;
   background:linear-gradient(180deg,rgba(20,34,52,.96),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4);box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 1px 0 rgba(180,220,255,.12)}
 .gm-title{margin:0;font-size:15px;font-weight:700;letter-spacing:.4em;text-indent:.4em;text-transform:uppercase;color:#ffb072;text-shadow:0 0 14px rgba(255,120,40,.5)}
 .gm-who{margin:6px 0 4px;font:400 13px/1.3 Georgia,serif;color:#8fb0cf;word-break:break-word}
 .gm-sec{margin-top:14px;text-align:left}
 .gm-sec[hidden]{display:none}
 .gm-sec h3{margin:0 0 7px;font:700 10px/1 "Cinzel",Georgia,serif;letter-spacing:.28em;text-transform:uppercase;color:#d9a46a;padding-bottom:5px;border-bottom:1px solid rgba(255,150,70,.25)}
-.gm-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.gm-tile{display:flex;align-items:center;gap:9px;min-height:46px;padding:0 10px;border-radius:6px;cursor:pointer;position:relative;color:#eaf4ff;font:700 12px/1.1 "Cinzel",Georgia,serif;letter-spacing:.08em;text-align:left;
+.gm-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px}
+.gm-tile{display:flex;align-items:center;gap:7px;min-width:0;min-height:46px;padding:0 9px;border-radius:6px;cursor:pointer;position:relative;color:#eaf4ff;font:700 12px/1.1 "Cinzel",Georgia,serif;letter-spacing:.08em;text-align:left;
   background:linear-gradient(180deg,rgba(24,40,60,.85),rgba(7,13,22,.92));border:1px solid rgba(255,150,70,.36);transition:border-color .18s,box-shadow .18s,transform .18s}
-.gm-tile svg{width:20px;height:20px;flex:none;color:#ffb072}
+.gm-tile svg{width:18px;height:18px;flex:none;color:#ffb072}
+.gm-tile .gm-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;letter-spacing:.01em}
 .gm-tile.gm-on{border-color:#ffd45e;box-shadow:inset 0 0 0 1px rgba(255,212,94,.5)}
 .gm-tile:hover,.gm-tile:focus-visible{border-color:#ff9a4d;box-shadow:0 0 18px rgba(255,120,40,.3);transform:translateY(-1px)}
 .gm-tile kbd{margin-left:auto;flex:none;font:700 10px/1 "Cinzel",Georgia,serif;color:#ffd9a8;padding:3px 5px;border-radius:4px;background:#1a0f08;border:1px solid rgba(255,150,70,.6)}
@@ -104,6 +105,7 @@ export function mountGameMenu(opts: GameMenuOptions) {
     b.innerHTML = svg(it.icone);
     const nome = document.createElement("span");
     nome.textContent = it.label;
+    nome.className = "gm-nome";
     const tecla = document.createElement("kbd");
     tecla.textContent = it.tecla;
     b.append(nome, tecla);
