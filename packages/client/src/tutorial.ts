@@ -76,7 +76,7 @@ export function destinoTrilha(defs: Map<string, QuestDef>, estados: Map<string, 
   const pendente = passos.find((d) => estados.get(d.id)?.estado !== "entregue");
   if (pendente) {
     const est = estados.get(pendente.id);
-    return est ? objetivo(pendente, est) : npc(pendente.npc ?? "merchant");
+    return est ? objetivo(pendente, est) : []; // só depois de aceitar a missão (antes disso o "?" do NPC já indica)
   }
   // fora do tutorial: primeiro o que está pronto para entregar, depois a primeira missão ativa
   const lista = [...estados.values()];

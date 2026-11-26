@@ -1054,9 +1054,9 @@ class WorldScene extends Phaser.Scene {
       if (m.id === this.room.sessionId) { this.cameras.main.flash(250, 255, 240, 160); sfx.heal(); }
     } else {
       if (m.amount > 0) {
-        if (config().numCura) this.floatText(m.x, m.y - 1.1, `+${m.amount}`, "#7dff9a", 20, true); // acima da cabeça (e do nome)
+        if (config().numCura) this.healText(m.x, m.y - 1.1, `+${m.amount}`, false); // acima da cabeça (e do nome)
         if (m.id === this.room.sessionId) { sfx.heal(); this.hud.showHeal(m.amount); }
-      } else if (m.excesso && config().numCura) this.floatText(m.x, m.y - 1.1, `+${m.excesso}`, "#c4f5d0", 16, true); // vida cheia: a cura de habilidade aparece mais clara e menor
+      } else if (m.excesso && config().numCura) this.healText(m.x, m.y - 1.1, `+${m.excesso}`, true); // vida cheia: a cura de habilidade aparece mais clara e menor
 
     }
   }
@@ -1222,6 +1222,21 @@ class WorldScene extends Phaser.Scene {
         break;
       }
     }
+  }
+
+  /** número de cura: mais caprichado que o de dano (brilho verde, cruz, sobe devagar balançando) */
+  private healText(gx: number, gy: number, txt: string, excesso: boolean) {
+    if (this.floatUsed > 40) return;
+    const { sx, sy } = toScreen(gx, gy);
+    const cor = excesso ? "#c4f5d0" : "#8dffab";
+    const t = this.add.text(sx, sy - 26, `✚ ${txt}`, { fontFamily: "Cinzel, Georgia, serif", fontStyle: "bold", fontSize: excesso ? "16px" : "22px", color: cor, stroke: "#0a2a14", strokeThickness: 5 })
+      .setOrigin(0.5).setDepth(1e6).setScale(0.4).setAlpha(excesso ? 0.85 : 1);
+    t.setShadow(0, 0, "#3dff7a", excesso ? 6 : 14, true, true);
+    this.floatUsed++;
+    const lado = Math.random() < 0.5 ? -1 : 1;
+    this.tweens.add({ targets: t, scale: excesso ? 1 : 1.15, duration: 180, ease: "Back.easeOut", onComplete: () => { if (t.scene) this.tweens.add({ targets: t, scale: 1, duration: 160 }); } });
+    this.tweens.add({ targets: t, x: sx + lado * 8, duration: 1100, ease: "Sine.easeInOut" });
+    this.tweens.add({ targets: t, y: t.y - 46, alpha: 0, duration: 1100, delay: 200, ease: "Cubic.easeOut", onComplete: () => { this.floatUsed--; t.destroy(); } });
   }
 
   private floatText(gx: number, gy: number, txt: string, color: string, size: number, pop: boolean) {
