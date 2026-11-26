@@ -61,7 +61,7 @@ const CSS = `
 .ec-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.18)}
 .ec-row.sel{border-color:#ffd08a;box-shadow:0 0 12px rgba(255,170,80,.3)}
 .ec-row.dis{opacity:.5}
-.ec-ic{width:40px;height:40px;flex:none;image-rendering:pixelated;object-fit:contain}
+.ec-ic{width:60px;height:60px;flex:none;image-rendering:auto;object-fit:contain}
 .ec-info{flex:1;min-width:0}
 .ec-info b{display:block;font:700 12px/1.25 "Cinzel",Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ec-info small{display:block;font:400 11px/1.3 Georgia,serif;color:#9fc0e0}
