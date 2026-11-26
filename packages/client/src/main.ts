@@ -164,7 +164,7 @@ class WorldScene extends Phaser.Scene {
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private qDefs = new Map<string, QuestDef>(); // definições das missões (para o "?" dourado dos NPCs)
   private qEstados: QuestEstado[] = [];
-  private nivelMarcas = 0; // nível usado na última conta das marcas dos NPCs
+  private nivelMarcas = 0; // nível usado na última conta das marcas (subir de nível pode liberar missões)
   private selGrupo = false; // a seleção veio da lista do grupo (não se desfaz pela distância)
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
@@ -286,7 +286,7 @@ class WorldScene extends Phaser.Scene {
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
-    this.marcarEntregas(); // a camada de NPCs é refeita a cada zona: reaplica o "?" dourado
+    this.marcarEntregas(); // a camada de NPCs é refeita a cada zona: reaplica as marcas
     this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId, getPlayer: () => { const m = this.me(); return m ? { x: Number(m.x), y: Number(m.y) } : null; } }); // bandeira e trilha no chão do tutorial (C1.4)
     this.rastreador = mountRastreador({ onAbrirDiario: () => this.diario.open() }); // rastreador de missões à esquerda (abre o diário ao clicar)
     this.dicas = mountDicas({ enviar: (id) => this.room?.send(Msg.DicaVista, { id }), tutorialAberto: tutorialFaixaAberta }); // dicas contextuais (C1.6)
@@ -715,18 +715,19 @@ class WorldScene extends Phaser.Scene {
     if (!this.touchMode) this.lockKey = "";
   }
 
-  /** marcas dos NPCs: "!" dourado para entregar missão pronta; "?" dourado para missão que dá para aceitar agora */
+  /** marcas nos NPCs: "!" dourado = missão pronta para entregar; "?" = missão que já dá para aceitar (requisitos e nível) */
   private marcarEntregas() {
     const est = new Map(this.qEstados.map((q) => [q.id, q.estado]));
     const nivel = Number(this.me()?.level) || 1;
-    const entregas: string[] = [], ofertas: string[] = [];
+    this.nivelMarcas = nivel;
+    const entregar: string[] = [], aceitar: string[] = [];
     for (const d of this.qDefs.values()) {
       if (!d.npc) continue;
       const e = est.get(d.id);
-      if (e === "pronta") entregas.push(d.npc);
-      else if (!e && nivel >= d.nivelMin && d.preRequisitos.every((p) => est.get(p) === "entregue")) ofertas.push(d.npc);
+      if (e === "pronta") entregar.push(d.npc);
+      else if (!e && nivel >= d.nivelMin && d.preRequisitos.every((p) => est.get(p) === "entregue")) aceitar.push(d.npc);
     }
-    this.npcs?.setMarcas(entregas, ofertas);
+    this.npcs?.setMarcas(entregar, aceitar);
   }
 
   /** clicar no nome de um membro do grupo: seleciona ele (círculo verde, linha até ele e cartão do alvo); serve à Cura Focada */
@@ -1679,7 +1680,7 @@ class WorldScene extends Phaser.Scene {
     if (!SEM_DESENHOS) timed("armas", () => this.weaponAuras?.update(time, st.players, this.sprites));
     const meNow = this.me();
     if (meNow && this.npcs) { // NPCs: anel e botão "Falar" ao alcance; a conversa fecha se o jogador se afastar
-      if (Number(meNow.level) !== this.nivelMarcas) { this.nivelMarcas = Number(meNow.level); this.marcarEntregas(); } // subiu de nível: novas missões liberadas
+      if ((Number(meNow.level) || 1) !== this.nivelMarcas) this.marcarEntregas();
       timed("npcs", () => this.npcs.update(time, meNow.x, meNow.y));
       const near = this.npcs.inReach(meNow.x, meNow.y);
       this.econ.setNearNpc(near);
