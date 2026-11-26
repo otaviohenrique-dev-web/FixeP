@@ -1,8 +1,9 @@
 import type { AbaPainel, InstanciaAba, Painel } from "../tipos";
-import { el, botao, linha, secao, vazio, fmtNum, fmtData, ACOES_LEGIVEIS } from "../ui";
+import { el, botao, linha, secao, vazio, fmtNum, fmtData, ACOES_LEGIVEIS, tabela, gaveta, confirmar, selo, carregando } from "../ui";
 
 /**
- * Jogadores: busca por nome e ficha (só leitura), com as sanções. O e-mail aparece mascarado; "Revelar" mostra o
+ * Jogadores: busca por nome em tabela (ordenação e filtro). Clicar numa linha abre a FICHA em gaveta lateral, com as
+ * sanções. Toda sanção pede confirmação mostrando o antes e o depois. O e-mail aparece mascarado; "Revelar" mostra o
  * completo, um por vez, e o servidor registra cada revelação na auditoria.
  */
 
@@ -22,19 +23,22 @@ interface Ficha {
   historico: { id: number; criado_em: string; admin: string | null; acao: string; detalhes: Record<string, unknown> }[];
 }
 
+const OPCOES_SANCAO: [string, string][] = [
+  ["silenciar", "Silenciar"], ["dessilenciar", "Retirar silêncio"], ["banir", "Banir"], ["desbanir", "Desbanir"], ["expulsar", "Expulsar da sessão"],
+];
+
 export const abaJogadores: AbaPainel = {
   id: "jogadores",
   titulo: "Jogadores",
   montar(p: Painel): InstanciaAba {
     const raiz = el("div");
-    const busca = el("div");
-    const ficha = el("div", "pn-hide");
-    raiz.append(busca, ficha);
 
     // o e-mail revelado por último (só um por vez): ao revelar outro, o anterior volta a ser mascarado
     let ocultarUltimo: (() => void) | null = null;
+    // fecha a gaveta da ficha aberta, se houver
+    let fecharFicha: (() => void) | null = null;
 
-    /** e-mail mascarado + botão Revelar/Ocultar. Usado na lista e na ficha. */
+    /** e-mail mascarado + botão Revelar/Ocultar. Usado na ficha. */
     function blocoEmail(id: string, mascarado: string | null, temEmail: boolean): { el: HTMLElement; valor: HTMLElement; botao: HTMLButtonElement } {
       const valor = el("span", "pn-val", mascarado ?? "sem e-mail");
       const b = botao("Revelar", () => {
@@ -66,58 +70,62 @@ export const abaJogadores: AbaPainel = {
     entrada.placeholder = "Nome do jogador (2 letras ou mais)";
     entrada.setAttribute("aria-label", "Buscar jogador pelo nome");
     entrada.autocomplete = "off";
-    const resultados = el("div");
     const formBusca = el("form", "pn-row");
     formBusca.append(entrada, botao("Buscar", () => void buscar()));
     formBusca.onsubmit = (e) => { e.preventDefault(); void buscar(); };
-    busca.append(formBusca, resultados);
+    const estado = el("div");
+
+    const tab = tabela<Item>({
+      colunas: [
+        { chave: "nome", rotulo: "Jogador", ordenar: (i) => i.nome.toLowerCase(), render: (i) => i.nome },
+        { chave: "classe", rotulo: "Classe", ordenar: (i) => CLASSES[i.classe] ?? i.classe, render: (i) => CLASSES[i.classe] ?? i.classe },
+        { chave: "nivel", rotulo: "Nível", ordenar: (i) => i.nivel, render: (i) => String(i.nivel) },
+        { chave: "zona", rotulo: "Zona", ordenar: (i) => i.zona, render: (i) => String(i.zona) },
+        { chave: "situacao", rotulo: "Situação", ordenar: (i) => (i.online ? 1 : 0), render: (i) => selo(i.online ? "online" : "offline", i.online ? "ok" : "neutro") },
+      ],
+      filtroRotulo: "Filtrar resultados",
+      filtrarPor: (i) => `${i.nome} ${CLASSES[i.classe] ?? i.classe}`,
+      aoClicarLinha: (i) => void abrirFicha(i.id),
+      vazioTexto: "Digite pelo menos 2 letras do nome e busque.",
+    });
+    raiz.append(formBusca, estado, tab.el);
 
     async function buscar() {
       const q = entrada.value.trim();
-      if (q.length < 2) return resultados.replaceChildren(vazio("Digite pelo menos 2 letras do nome."));
+      if (q.length < 2) return p.aviso("Digite pelo menos 2 letras do nome.", "erro");
+      estado.replaceChildren(carregando("Buscando…"));
       try {
         const { itens } = await p.api<{ itens: Item[] }>("GET", `/jogadores?q=${encodeURIComponent(q)}`);
-        resultados.replaceChildren(...(itens.length ? itens.map(linhaJogador) : [vazio("Nenhum jogador com esse nome.")]));
+        tab.definir(itens);
       } catch (e) {
         p.aviso((e as Error).message, "erro");
+      } finally {
+        estado.replaceChildren();
       }
     }
 
-    function linhaJogador(it: Item): HTMLElement {
-      const linhaEl = el("div", "pn-item");
-      const nome = el("button", "pn-btn");
-      nome.type = "button";
-      nome.textContent = `${it.nome}`;
-      nome.setAttribute("aria-label", `Abrir ficha de ${it.nome}`);
-      nome.onclick = () => void abrirFicha(it.id);
-      const info = el("span", "pn-small", `${CLASSES[it.classe] ?? it.classe} · nível ${it.nivel} · zona ${it.zona}`);
-      const estado = el("span", it.online ? "pn-tag" : "pn-tag off", it.online ? "online" : "offline");
-      linhaEl.append(nome, info, estado, blocoEmail(it.id, it.emailMascarado, !!it.emailMascarado).el);
-      return linhaEl;
-    }
-
-    // ---- ficha
+    // ---- ficha (gaveta)
     async function abrirFicha(id: string) {
       try {
         const f = await p.api<Ficha>("GET", `/jogadores/${id}`);
+        fecharFicha?.();
         ocultarUltimo?.();
-        ficha.replaceChildren(...montarFicha(f));
-        busca.classList.add("pn-hide");
-        ficha.classList.remove("pn-hide");
+        const conteudo = el("div");
+        conteudo.append(...montarFicha(f));
+        fecharFicha = gaveta(f.nome, conteudo);
       } catch (e) {
         p.aviso((e as Error).message, "erro");
       }
-    }
-
-    function voltarBusca() {
-      ocultarUltimo?.();
-      ficha.classList.add("pn-hide");
-      busca.classList.remove("pn-hide");
     }
 
     function montarFicha(f: Ficha): HTMLElement[] {
       const topo = el("div", "pn-row");
-      topo.append(botao("← Voltar à busca", voltarBusca), el("b", "", f.nome));
+      topo.append(
+        selo(f.online ? "online" : "offline", f.online ? "ok" : "neutro"),
+        selo(CLASSES[f.classe] ?? f.classe, "atencao"),
+        selo(`nível ${f.nivel}`, "neutro"),
+        selo(resumoSancao(f), f.sancao.banido || temSilencio(f) ? "perigo" : "ok"),
+      );
 
       const personagem = secao("Personagem",
         linha("Classe", CLASSES[f.classe] ?? f.classe), linha("Nível", f.nivel), linha("XP", fmtNum(f.xp)),
@@ -144,7 +152,7 @@ export const abaJogadores: AbaPainel = {
       const logins = secao("Últimos logins", f.logins.length ? listaSimples(f.logins.map((l) => fmtData(l))) : vazio("Nenhum login registrado."));
 
       const grade = el("div", "pn-grid");
-      grade.style.gridTemplateColumns = "repeat(auto-fit,minmax(260px,1fr))";
+      grade.style.gridTemplateColumns = "repeat(auto-fit,minmax(220px,1fr))";
       grade.append(personagem, conta, recursos, equip, inv, logins);
 
       return [topo, grade, sancoesSecao(f), historicoSecao(f), acaoSecao(f)];
@@ -160,7 +168,7 @@ export const abaJogadores: AbaPainel = {
       const s = f.sancao;
       const ativos: string[] = [];
       if (s.banido) ativos.push(s.banidoAte ? `Banido até ${fmtData(s.banidoAte)}` : "Banido (permanente)");
-      if (s.silenciadoAte && new Date(s.silenciadoAte).getTime() > Date.now()) ativos.push(`Silenciado até ${fmtData(s.silenciadoAte)}`);
+      if (temSilencio(f)) ativos.push(`Silenciado até ${fmtData(s.silenciadoAte)}`);
       return secao("Sanções ativas", ...(ativos.length ? ativos.map((t) => el("p", "", t)) : [vazio("Sem sanções ativas.")]));
     }
 
@@ -176,8 +184,7 @@ export const abaJogadores: AbaPainel = {
     function acaoSecao(f: Ficha): HTMLElement {
       const acao = el("select", "pn-sel");
       acao.setAttribute("aria-label", "Ação de sanção");
-      const opcoes: [string, string][] = [["silenciar", "Silenciar"], ["dessilenciar", "Retirar silêncio"], ["banir", "Banir"], ["desbanir", "Desbanir"], ["expulsar", "Expulsar da sessão"]];
-      for (const [v, t] of opcoes) { const o = el("option", "", t); o.value = v; acao.append(o); }
+      for (const [v, t] of OPCOES_SANCAO) { const o = el("option", "", t); o.value = v; acao.append(o); }
 
       const minutos = el("input", "pn-in");
       minutos.type = "number"; minutos.min = "1"; minutos.placeholder = "minutos"; minutos.setAttribute("aria-label", "Minutos");
@@ -189,7 +196,7 @@ export const abaJogadores: AbaPainel = {
       caixaPerm.append(permanente, rotPerm);
       const motivo = el("input", "pn-in");
       motivo.placeholder = "motivo (opcional)"; motivo.maxLength = 200; motivo.setAttribute("aria-label", "Motivo");
-      const enviar = botao("Aplicar", () => void aplicar(), "pn-btn perigo");
+      const enviar = botao("Aplicar…", () => void aplicar(), "pn-btn perigo");
 
       const ajustarCampos = () => {
         const v = acao.value;
@@ -209,12 +216,24 @@ export const abaJogadores: AbaPainel = {
           corpo.minutos = n;
         }
         if (v === "banir") corpo.permanente = permanente.checked;
-        if (v === "banir" && !window.confirm(`Banir ${f.nome}${permanente.checked ? " para sempre" : ""}?`)) return;
-        if (v === "expulsar" && !window.confirm(`Expulsar ${f.nome} da sessão? O jogador pode entrar de novo.`)) return;
+
+        const rotulo = OPCOES_SANCAO.find(([k]) => k === v)?.[1] ?? v;
+        const ok = await confirmar({
+          titulo: `${rotulo}: ${f.nome}?`,
+          texto: v === "expulsar" ? "O jogador sai da sessão e pode entrar de novo." : "A mudança vale na hora e fica no histórico de ações.",
+          antes: resumoSancao(f),
+          depois: depoisSancao(v, Number(minutos.value), permanente.checked),
+          confirmar: rotulo,
+          perigoso: v === "banir" || v === "expulsar" || v === "silenciar",
+        });
+        if (!ok) return;
+
         enviar.disabled = true;
         try {
           const out = await p.api<{ resumo: string }>("POST", `/jogadores/${f.id}/sancao`, corpo);
           p.aviso(`${f.nome}: ${out.resumo}.`, "ok");
+          fecharFicha?.();
+          fecharFicha = null;
           await abrirFicha(f.id);
         } catch (e) {
           p.aviso((e as Error).message, "erro");
@@ -231,15 +250,39 @@ export const abaJogadores: AbaPainel = {
       abrir(param?: unknown) {
         const id = (param as { ficha?: string } | undefined)?.ficha;
         if (id) { void abrirFicha(id); return; }
-        voltarBusca();
         entrada.focus();
       },
       fechar() {
         ocultarUltimo?.();
+        fecharFicha?.();
+        fecharFicha = null;
       },
     };
   },
 };
+
+function temSilencio(f: Ficha): boolean {
+  return !!f.sancao.silenciadoAte && new Date(f.sancao.silenciadoAte).getTime() > Date.now();
+}
+
+/** resumo curto das sanções ativas (para o selo e o "antes" da confirmação) */
+function resumoSancao(f: Ficha): string {
+  if (f.sancao.banido) return f.sancao.banidoAte ? `banido até ${fmtData(f.sancao.banidoAte)}` : "banido";
+  if (temSilencio(f)) return `silenciado até ${fmtData(f.sancao.silenciadoAte)}`;
+  return "sem sanções";
+}
+
+/** como fica o jogador depois da ação escolhida (para o "depois" da confirmação) */
+function depoisSancao(v: string, minutos: number, permanente: boolean): string {
+  switch (v) {
+    case "silenciar": return `silenciado por ${Number.isInteger(minutos) && minutos > 0 ? minutos : "?"} min`;
+    case "dessilenciar": return "sem silêncio";
+    case "banir": return permanente ? "banido (permanente)" : `banido por ${Number.isInteger(minutos) && minutos > 0 ? minutos : "?"} min`;
+    case "desbanir": return "sem banimento";
+    case "expulsar": return "fora da sessão";
+    default: return "—";
+  }
+}
 
 function listaSimples(itens: string[]): HTMLElement {
   const ul = el("ul", "pn-list");

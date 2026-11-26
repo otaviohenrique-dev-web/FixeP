@@ -1,5 +1,5 @@
 import type { AbaPainel, InstanciaAba, Painel } from "../tipos";
-import { el, botao, vazio, fmtData } from "../ui";
+import { el, botao, fmtData, carregando, estadoVazio, selo, confirmar } from "../ui";
 
 interface Denuncia { id: number; criadoEm: string; nome: string; personagemId: string | null; motivo: string; resolvida: boolean }
 
@@ -12,6 +12,7 @@ export const abaDenuncias: AbaPainel = {
   titulo: "Denúncias",
   montar(p: Painel): InstanciaAba {
     const raiz = el("div");
+    const topo = el("div", "pn-row");
     const filtro = el("select", "pn-sel");
     filtro.setAttribute("aria-label", "Filtrar denúncias");
     for (const [v, t] of [["abertas", "Abertas"], ["resolvidas", "Resolvidas"]]) {
@@ -20,23 +21,28 @@ export const abaDenuncias: AbaPainel = {
       filtro.append(o);
     }
     filtro.onchange = () => void carregar();
-    const atualizar = botao("Atualizar", () => void carregar());
+    topo.append(filtro, botao("Atualizar", () => void carregar()));
     const lista = el("div");
-    raiz.append(el("div", "pn-row", ""), lista);
-    raiz.firstElementChild!.append(filtro, atualizar);
+    raiz.append(topo, lista);
 
     async function carregar() {
+      lista.replaceChildren(carregando());
       try {
         const { itens } = await p.api<{ itens: Denuncia[] }>("GET", `/denuncias?estado=${filtro.value}`);
-        lista.replaceChildren(...(itens.length ? itens.map((d) => cartaoDenuncia(d)) : [vazio(filtro.value === "abertas" ? "Nenhuma denúncia aberta." : "Nenhuma denúncia resolvida.")]));
+        lista.replaceChildren(...(itens.length
+          ? itens.map((d) => cartaoDenuncia(d))
+          : [estadoVazio(filtro.value === "abertas" ? "Nenhuma denúncia aberta." : "Nenhuma denúncia resolvida.")]));
       } catch (e) {
+        lista.replaceChildren();
         p.aviso((e as Error).message, "erro");
       }
     }
 
     function cartaoDenuncia(d: Denuncia): HTMLElement {
       const c = el("div", "pn-sec");
-      c.append(el("b", "", `#${d.id} · ${d.nome}`), el("p", "", d.motivo), el("p", "pn-small", fmtData(d.criadoEm)));
+      const cab = el("div", "pn-row");
+      cab.append(el("b", "", `#${d.id} · ${d.nome}`), selo(d.resolvida ? "resolvida" : "aberta", d.resolvida ? "ok" : "atencao"));
+      c.append(cab, el("p", "", d.motivo), el("p", "pn-small", fmtData(d.criadoEm)));
       const acoes = el("div", "pn-row");
       if (d.personagemId) {
         acoes.append(botao("Ver ficha e sancionar", () => p.irPara("jogadores", { ficha: d.personagemId })));
@@ -44,16 +50,24 @@ export const abaDenuncias: AbaPainel = {
         acoes.append(el("span", "pn-small", "Personagem apagado: só dá para resolver."));
       }
       if (!d.resolvida) {
-        acoes.append(botao("Marcar como resolvida", () => void resolver(d.id)));
+        acoes.append(botao("Marcar como resolvida", () => void resolver(d)));
       }
       c.append(acoes);
       return c;
     }
 
-    async function resolver(id: number) {
+    async function resolver(d: Denuncia) {
+      const ok = await confirmar({
+        titulo: `Resolver a denúncia #${d.id}?`,
+        texto: "Resolver não aplica sanção. Se o jogador precisar de punição, faça isso na ficha dele.",
+        antes: "aberta",
+        depois: "resolvida",
+        confirmar: "Resolver",
+      });
+      if (!ok) return;
       try {
-        await p.api("POST", `/denuncias/${id}/resolver`);
-        p.aviso(`Denúncia #${id} marcada como resolvida.`, "ok");
+        await p.api("POST", `/denuncias/${d.id}/resolver`);
+        p.aviso(`Denúncia #${d.id} marcada como resolvida.`, "ok");
         await carregar();
       } catch (e) {
         p.aviso((e as Error).message, "erro");
