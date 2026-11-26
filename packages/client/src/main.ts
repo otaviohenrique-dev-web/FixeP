@@ -162,6 +162,7 @@ class WorldScene extends Phaser.Scene {
   private talentos!: TalentosUi;
   private builds!: BuildsUi;
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
+  private selGrupo = false; // a seleção veio da lista do grupo (não se desfaz pela distância)
   private selG!: Phaser.GameObjects.Graphics; // círculo de seleção (verde) e alvo travado (vermelho)
   private selId = ""; // jogador selecionado com o clique (só mostra o círculo e as opções ao lado do retrato)
   private lockKey = ""; // alvo travado ("e:id" ou "p:id"; toque ou clique): as ações mirram nele
@@ -290,7 +291,7 @@ class WorldScene extends Phaser.Scene {
     if (import.meta.env.DEV) (window as any).__frixep = { scene: this }; // gancho de depuração: só no desenvolvimento
     this.cls = ((this.me()?.cls as CharClass) ?? "warrior");
     if (!this.uiMounted) { this.mountUi(); this.uiMounted = true; }
-    else { this.econ.closeNpc(); this.vault.close(); this.econ.setTrade({ open: false }); this.party.clearTarget(); this.selId = ""; this.lockKey = ""; this.pendingNpc = null; this.pendingVault = false; }
+    else { this.econ.closeNpc(); this.vault.close(); this.econ.setTrade({ open: false }); this.party.clearTarget(); this.selId = ""; this.selGrupo = false; this.lockKey = ""; this.pendingNpc = null; this.pendingVault = false; }
     this.bindRoom(room, zone);
     T.mark("mundo");
     // 3) câmera exatamente sobre o personagem (sem deslizar), no zoom certo, antes de revelar
@@ -385,7 +386,7 @@ class WorldScene extends Phaser.Scene {
       },
     });
     this.chatUi = chat;
-    this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? "") });
+    this.party = mountParty({ send: (t, p) => this.room?.send(t, p), getZone: () => this.zoneId, myName: String(this.me()?.name ?? ""), onFocus: (nome) => this.focarMembro(nome) });
     this.party.setTouch(this.touchMode);
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
     this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }), game: this.game });
@@ -410,6 +411,7 @@ class WorldScene extends Phaser.Scene {
       if (other) {
         const p = other.p;
         this.selId = other.id;
+        this.selGrupo = false;
         this.party.selectPlayer({ name: String(p.name), level: Number(p.level) || 1, cls: String(p.cls), inParty: !!p.party });
         if (ptr.wasTouch || this.touchMode) this.lockKey = `p:${other.id}`;
         return;
@@ -709,8 +711,20 @@ class WorldScene extends Phaser.Scene {
     if (!this.touchMode) this.lockKey = "";
   }
 
+  /** clicar no nome de um membro do grupo: seleciona ele (círculo verde, linha até ele e cartão do alvo); serve à Cura Focada */
+  private focarMembro(nome: string) {
+    let achou = "";
+    this.state?.players?.forEach((p: any, id: string) => { if (!achou && String(p.name) === nome) achou = id; });
+    if (!achou) { this.inv.toast(`${nome} não está nesta zona.`, "#ffb3a6"); return; }
+    const p = this.state.players.get(achou);
+    this.selId = achou;
+    this.selGrupo = true;
+    this.party.selectPlayer({ name: String(p.name), level: Number(p.level) || 1, cls: String(p.cls), inParty: !!p.party });
+  }
+
   private deselect() {
     this.selId = "";
+    this.selGrupo = false;
     this.party.clearTarget();
   }
 
@@ -1376,7 +1390,7 @@ class WorldScene extends Phaser.Scene {
     const me = this.me();
     if (me && this.selId) {
       const s = this.state.players.get(this.selId);
-      if (!s || Math.hypot(s.x - me.x, s.y - me.y) > TARGET_RANGE) this.deselect();
+      if (!s || (!this.selGrupo && Math.hypot(s.x - me.x, s.y - me.y) > TARGET_RANGE)) this.deselect(); // foco num membro do grupo vale na zona toda
     }
     if (!this.lockKey) { if (this.touchMode) this.assistTarget("attack"); return; } // sem foco: no celular já mostra o mais próximo ao alcance do ataque
     const t = this.targets().find((x) => x.key === this.lockKey);
@@ -1396,6 +1410,7 @@ class WorldScene extends Phaser.Scene {
       al.sort((a, b) => dist(a.p) - dist(b.p));
       const nx = al[(al.findIndex((x) => x.id === this.selId) + 1) % al.length];
       this.selId = nx.id;
+      this.selGrupo = false;
       this.party.selectPlayer({ name: String(nx.p.name), level: Number(nx.p.level) || 1, cls: String(nx.p.cls), inParty: !!nx.p.party });
       navigator.vibrate?.(8);
       return;
