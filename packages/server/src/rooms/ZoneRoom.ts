@@ -2110,7 +2110,7 @@ export class ZoneRoom extends Room<ZoneState> {
         let healed = 0;
         this.state.players.forEach((o, oid) => {
           if (o.dead || this.hostile(id, p, oid, o) || dist(o.x, o.y, p.x, p.y) > (def.radius ?? 0)) return;
-          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o)), undefined, true); // área: sem "from" (só a cura focada desenha o raio do curandeiro)
+          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o)), undefined, true, id); // área: sem "from" (só a cura focada desenha o raio do curandeiro); `by` diz quem curou (medidor)
           if (def.guardPct) this.grantGuard(o, def.guardPct, def.guardS ?? 0);
           if (def.cleanse) { o.stunUntil = 0; o.rootUntil = 0; } // purifica: aliado curado sai do atordoamento e das raízes
           healed++;
@@ -2166,13 +2166,13 @@ export class ZoneRoom extends Room<ZoneState> {
   }
 
   /** `habilidade`: cura de habilidade (área/focada) avisa mesmo com a vida cheia: amount 0 e `excesso` = o que curaria (o número aparece para todos) */
-  private healPlayer(id: string, p: Player, amount: number, from?: string, habilidade = false) {
+  private healPlayer(id: string, p: Player, amount: number, from?: string, habilidade = false, by?: string) {
     const before = p.hp;
     const bruto = Math.round(amount * (1 + p.gear.af.healPct / 100)); // Bênção (afixo): cura mais
     p.hp = Math.min(p.maxHp, p.hp + bruto);
     const healed = p.hp - before;
-    if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y, from });
-    else if (habilidade && bruto > 0) this.broadcast(Evt.Heal, { id, amount: 0, excesso: bruto, x: p.x, y: p.y, from });
+    if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y, from, by });
+    else if (habilidade && bruto > 0) this.broadcast(Evt.Heal, { id, amount: 0, excesso: bruto, x: p.x, y: p.y, from, by });
   }
 
   /** Atordoa o inimigo (não age até acabar; cancela o golpe que preparava). Chefes resistem: a duração cai para BOSS_CC_RESIST. */

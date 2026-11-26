@@ -41,6 +41,7 @@ import { montarEntradaPainel } from "./painel/entrada";
 import { mountVariacoes, type VariacoesUi } from "./variacoes";
 import { mountTalentos, type TalentosUi } from "./talentos";
 import { mountBuilds, type BuildsUi } from "./builds";
+import { mountMedidor, type Medidor } from "./medidor";
 import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
 import { limparTalentos, pontosLivres, podeSubirTalento, talentosDaClasse, VARIACAO_SLOTS, VARIACAO_NIVEL } from "@frixep/shared";
 import { mountTutorial, type TutorialUi } from "./tutorial";
@@ -161,6 +162,7 @@ class WorldScene extends Phaser.Scene {
   private variacoes!: VariacoesUi;
   private talentos!: TalentosUi;
   private builds!: BuildsUi;
+  private medidor?: Medidor; // medidor de dano e cura (tecla M / menu Jogo)
   private pendingNpc: NpcDef | null = null; // clicou num NPC longe: abre a conversa quando chegar perto
   private qDefs = new Map<string, QuestDef>(); // definições das missões (para o "?" dourado dos NPCs)
   private qEstados: QuestEstado[] = [];
@@ -1041,6 +1043,7 @@ class WorldScene extends Phaser.Scene {
   }
 
   private onHeal(m: HealEvent) {
+    if (m.amount > 0) this.medidor?.cura(m.by ?? m.from ?? m.id, m.amount); // quem curou: a área manda `by`; a focada manda `from`; senão a própria vítima
     const { sx, sy } = toScreen(m.x, m.y);
     if (m.from) { // cura focada: raio do curandeiro até o alvo
       const caster = this.state.players.get(m.from);
@@ -1261,6 +1264,7 @@ class WorldScene extends Phaser.Scene {
   }
 
   private onHit(m: HitEvent) {
+    if (m.by) this.medidor?.dano(m.by, m.dmg); // medidor: dano de quem bateu (monstro ou jogador)
     const mine = m.by === this.room.sessionId;
     const toMe = m.k === "p" && m.id === this.room.sessionId;
     const { sx, sy } = toScreen(m.x, m.y);
@@ -1618,7 +1622,19 @@ class WorldScene extends Phaser.Scene {
     const grava = (k: string, v: number) => { try { localStorage.setItem(chave(k), String(v)); } catch { /* sem armazenamento */ } };
     const nivel = () => Number(this.me()?.level) || 1;
     const nVariacoes = () => VARIACAO_SLOTS.filter((s) => nivel() >= VARIACAO_NIVEL[s]).length;
+    this.medidor = mountMedidor({
+      meuId: () => this.room?.sessionId ?? "",
+      grupo: () => { // só o grupo de quem mede (sozinho, só ele)
+        const eu = this.me();
+        const out: { id: string; name: string; cls: string }[] = [];
+        this.state?.players?.forEach((p: any, id: string) => {
+          if (id === this.room.sessionId || (eu?.party && p.party === eu.party)) out.push({ id, name: String(p.name ?? ""), cls: String(p.cls ?? "") });
+        });
+        return out;
+      },
+    });
     const itens: AtalhoJogo[] = [
+      { label: "Medidor", tecla: "M", icone: ICONES_JOGO.medidor, run: () => this.medidor?.toggle(), aberto: () => this.medidor?.isOpen() ?? false },
       { label: "Diário", tecla: "J", icone: ICONES_JOGO.diario, run: () => this.diario.toggle(), aberto: () => this.diario.isOpen() },
       { label: "Mochila", tecla: "I", icone: ICONES_JOGO.mochila, run: () => this.inv.toggle(), aberto: () => this.inv.isOpen() },
       {

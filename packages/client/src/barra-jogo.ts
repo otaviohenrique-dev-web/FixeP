@@ -50,7 +50,8 @@ const ICONE_VARIACAO = `<path d="M12 3l8 9-8 9-8-9z"/><path d="M4 12h16"/>`;
 const ICONE_BUILD = `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6M9 7h3"/>`;
 
 /** ícones dos atalhos de jogo, reaproveitados pelo menu */
-export const ICONES_JOGO = { diario: ICONE_DIARIO, mochila: ICONE_MOCHILA, talento: ICONE_TALENTO, variacao: ICONE_VARIACAO, build: ICONE_BUILD };
+const ICONE_MEDIDOR = `<path d="M4 20V11M10 20V5M16 20v-7M21 20H3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`; // barras de dano (medidor M)
+export const ICONES_JOGO = { diario: ICONE_DIARIO, mochila: ICONE_MOCHILA, talento: ICONE_TALENTO, variacao: ICONE_VARIACAO, build: ICONE_BUILD, medidor: ICONE_MEDIDOR };
 
 const REC_KEY = "frixep.atalhos.rec";
 let cssPronto = false;
