@@ -149,8 +149,8 @@ export const ZONES: Record<number, ZoneDef> = {
     spawn: { x: 24, y: 30 },
     // a cidade tem UM só portão (norte, na muralha) e ele leva ao mapa-mundo: cada zona nova entra na lista do mapa, sem abrir portais novos na cidade.
     // chegando de qualquer zona de combate o jogador aparece logo dentro do portão (fora do raio dele)
-    arrive: { 1: { x: 24, y: 5 }, 2: { x: 24, y: 5 }, 3: { x: 24, y: 5 }, 5: { x: 24, y: 5 } },
-    portals: [{ x: 24, y: 2, r: PORTAL_RADIUS, to: WORLD_GATE }],
+    arrive: { 1: { x: 24, y: 3 }, 2: { x: 24, y: 3 }, 3: { x: 24, y: 3 }, 5: { x: 24, y: 3 } },
+    portals: [{ x: 24, y: 0, r: PORTAL_RADIUS, to: WORLD_GATE }], // y 0 = borda andável (o mapa prende em 0): o arco pintado fica na muralha logo acima
     enemies: [],
     lootMult: 0,
     drops: { gear: 0, potion: 0, weights: {}, material: 0, materials: {} },

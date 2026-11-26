@@ -11,7 +11,7 @@ const WS = HTTP.replace(/^http/, "ws");
 const QID = "caca_aos_ossos";
 const KILLS = 3;
 const GARRICK = { x: 20.5, y: 24 };
-const GATE = { x: 24, y: 3 }; // dentro do raio do portão da cidade (24, 2)
+const GATE = { x: 24, y: 1 }; // dentro do raio do portão da cidade (24, 0)
 const PORTAL_ZONE1_TO_CITY = { x: 4, y: 28 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, ms = 4000, step = 50) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(step); } return !!fn(); };

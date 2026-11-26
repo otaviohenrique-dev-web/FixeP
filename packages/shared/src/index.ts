@@ -195,7 +195,7 @@ export interface DiedEvent { k: "e" | "p"; id: string }
 export interface ChestEvent { x: number; y: number; rarity: Rarity; boss: string }
 export interface XpEvent { amount: number; x: number; y: number }
 export interface LevelUpEvent { id: string; level: number }
-export interface HealEvent { id: string; amount: number; x: number; y: number; revive?: boolean; from?: string; excesso?: number } // excesso: cura de habilidade num alvo de vida cheia (amount 0) // from: quem curou (a cura focada desenha o raio até o alvo)
+export interface HealEvent { id: string; amount: number; x: number; y: number; revive?: boolean; from?: string; by?: string; excesso?: number } // excesso: cura de habilidade num alvo de vida cheia (amount 0) // from: quem curou (a cura focada desenha o raio até o alvo)
 export interface ProjEvent { id: string; x: number; y: number; dir: number; speed: number; range: number; look: "arrow" | "pierce" | "bolt" | "fire" | "arcane"; blast?: number }
 export interface ProjEndEvent { id: string; x: number; y: number; hit: boolean }
 export interface TrapEvent { id: string; s: "set" | "boom" | "gone"; x: number; y: number; r: number }

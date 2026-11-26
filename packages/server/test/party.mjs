@@ -228,7 +228,7 @@ async function toArena(acc) {
   city.onMessage("world_map", () => (gate = true));
   city.onMessage("travel", (m) => (arena = m));
   city.onMessage("*", () => {});
-  city.send("move_to", { x: 24, y: 2 }); // portão de Brasalume
+  city.send("move_to", { x: 24, y: 0 }); // portão de Brasalume
   await until(() => gate, 14000);
   // recém-chegado à cidade: a viagem é recusada até passar a espera (TRAVEL_COOLDOWN_S); insiste a cada segundo
   for (let i = 0; i < 14 && !arena; i++) { city.send("travel", { to: 5 }); await until(() => arena, 1000); }

@@ -110,11 +110,11 @@ console.log("\n== Travessia: aparece logo à frente do portão, sem inimigo por 
   await A.r.leave(true);
   await sleep(500);
   A = await join("zone4", tk, true); // chegada na cidade com carregamento
-  check("chega na cidade a 3 tiles do portão (perto, mas fora do gatilho)", near(A.me(), 24, 5, 0.2) && Math.hypot(A.me().x - 24, A.me().y - 2) >= 2.9, `(${A.me().x}, ${A.me().y})`);
+  check("chega na cidade a 3 tiles do portão (perto, mas fora do gatilho)", near(A.me(), 24, 3, 0.2) && Math.hypot(A.me().x - 24, A.me().y - 0) >= 2.9, `(${A.me().x}, ${A.me().y})`);
   check("e protegido pela bolha desde a chegada", A.me().shield === true);
   A.ready(); await sleep(200);
-  A.go(24, 2.6);
-  check("anda até o portão da cidade", await until(() => Math.hypot(A.me().x - 24, A.me().y - 2.6) < 0.4, 5000));
+  A.go(24, 0.6);
+  check("anda até o portão da cidade", await until(() => Math.hypot(A.me().x - 24, A.me().y - 0.6) < 0.4, 5000));
   A.r.send("travel", { to: 1 });
   await sleep(600);
   check("recém-chegado: o portão recusa viajar de novo na hora (espera)", A.ev.travel.length === 0 && A.ev.notice.some((t) => t.includes("Recém-chegado")), JSON.stringify(A.ev.notice.slice(-1)));
