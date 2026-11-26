@@ -31,10 +31,11 @@ const CSS = `
 .jg-btn:focus-visible{outline:2px solid #ffd2a3;outline-offset:2px}
 .jg-btn.on{opacity:1;color:#fff6dc;border-color:#ffd45e;box-shadow:0 0 10px rgba(255,200,90,.4)}
 .jg-btn .ut-dot{position:absolute;top:-3px;right:-3px}
-.jg-tog{pointer-events:auto;flex:none;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid rgba(201,164,92,.5);background:rgba(10,15,24,.75);cursor:pointer;color:#e2c98e;opacity:.85;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.jg-tog{position:relative;pointer-events:auto;flex:none;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid rgba(201,164,92,.5);background:rgba(10,15,24,.75);cursor:pointer;color:#e2c98e;opacity:.85;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 .jg-tog:hover,.jg-tog:focus-visible{opacity:1;color:#f0cf86}
 .jg-tog svg{width:13px;height:13px;transition:transform .2s}
 .jg-bar.rec .jg-tog svg{transform:rotate(180deg)}
+.jg-tog .ut-dot{position:absolute;top:-4px;right:-4px}
 body.mob .jg-bar{display:none}
 /* tela estreita (celular, mesmo sem toque detectado): os atalhos ficam no menu ☰ */
 @media (max-width:620px){.jg-bar{display:none}}
@@ -99,12 +100,17 @@ export function mountBarraJogo(itens: AtalhoJogo[]): { atualiza(): void } {
   tog.setAttribute("aria-controls", "jg-list");
   tog.innerHTML = svg(`<path d="M9 6l6 6-6 6"/>`);
   tog.addEventListener("pointerdown", (e) => e.stopPropagation());
+  const togDot = criarPonto(false); // recolhida: o ponto verde de qualquer atalho aparece na seta
+  togDot.hidden = true;
+  tog.append(togDot);
   const aplicar = () => {
     barra.classList.toggle("rec", recolhida);
     lista.toggleAttribute("inert", recolhida);
     tog.setAttribute("aria-expanded", String(!recolhida));
     tog.title = tog.ariaLabel = recolhida ? "Mostrar atalhos" : "Recolher atalhos";
+    atualizaPonto();
   };
+  const atualizaPonto = () => { togDot.hidden = !(recolhida && linhas.some(({ dot }) => !dot.hidden)); };
   tog.onclick = () => {
     recolhida = !recolhida;
     try { localStorage.setItem(REC_KEY, recolhida ? "1" : "0"); } catch { /* sem armazenamento */ }
@@ -122,6 +128,7 @@ export function mountBarraJogo(itens: AtalhoJogo[]): { atualiza(): void } {
       b.setAttribute("aria-pressed", String(aberto));
       dot.hidden = !(it.pendente?.() ?? false);
     }
+    atualizaPonto();
   }
   atualiza();
   window.setInterval(atualiza, 700); // acompanha o servidor (nível, pontos gastos)
