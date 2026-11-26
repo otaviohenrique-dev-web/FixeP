@@ -1,7 +1,7 @@
 // Testes unitários do baú (regras puras + banco embutido): limites de espaço, conservação de itens, moedas e persistência atômica.
 // Uso: npx tsx test/vault.unit.ts
 import { randomUUID } from "node:crypto";
-import { ITEMS, INV_SLOTS, VAULT_SLOTS, VAULT_PAGE, VAULT_PAGES, VAULT_COIN_MAX } from "@frixep/shared";
+import { ITEMS, INV_SLOTS, VAULT_SLOTS, VAULT_PAGE, VAULT_PAGES, VAULT_COIN_MAX, afixosDaSemente, gemasValidas } from "@frixep/shared";
 import { emptyInventory, addItem } from "../src/game/inventory.js";
 import { emptyVault, deposit, withdraw, moveInVault, moveCoins } from "../src/game/vault.js";
 import { openDb } from "../src/db/index.js";
@@ -65,6 +65,21 @@ console.log("\n== Moedas ==");
   check("o teto de moedas da mochila é respeitado ao retirar", !moveCoins(inv, v, "iron", 5, "out").ok && inv.iron === VAULT_COIN_MAX && v.iron === 5);
 }
 
+// PD-16: item com afixos, refino e gemas sai e volta do baú igual (antes voltava sem eles)
+const armaRara = Object.keys(ITEMS).find((k) => ITEMS[k].kind === "weapon" && ITEMS[k].rarity === "rare")!;
+const afArma = afixosDaSemente("teste-bau", ITEMS[armaRara].kind, ITEMS[armaRara].rarity);
+const gmArma = gemasValidas(["forca"], ITEMS[armaRara].kind, ITEMS[armaRara].rarity);
+const mesmosExtras = (s: { af?: string[]; rf?: number; gm?: string[] } | null | undefined) =>
+  !!s && JSON.stringify(s.af ?? []) === JSON.stringify(afArma) && s.rf === 3 && JSON.stringify(s.gm ?? []) === JSON.stringify(gmArma);
+console.log("\n== Extras do item (afixos, refino, gemas) ==");
+{
+  const inv = emptyInventory(), v = emptyVault();
+  addItem(inv, armaRara, 1, afArma, 3, gmArma);
+  check("o item de teste tem afixos e gema", afArma.length > 0 && gmArma.length > 0, `${afArma.join(",")} | ${gmArma.join(",")}`);
+  check("depositar mantém afixos, refino e gemas no baú", deposit(inv, v, 0, undefined, 7).ok && mesmosExtras(v.slots[7]), JSON.stringify(v.slots[7]));
+  check("retirar devolve o item com afixos, refino e gemas", withdraw(inv, v, 7, undefined).ok && mesmosExtras(inv.slots.find((s) => s?.id === armaRara)), JSON.stringify(inv.slots.find((s) => s?.id === armaRara)));
+}
+
 console.log("\n== Persistência (banco) ==");
 {
   const db = await openDb();
@@ -85,6 +100,13 @@ console.log("\n== Persistência (banco) ==");
   await repo.saveInventoryAndVault(id, inv, v);
   const lv2 = await repo.loadVault(id), li2 = await repo.loadInventory(id, "warrior");
   check("retirar e gravar: o item muda de lado, nunca nos dois", withdrawn.ok && lv2.slots[33] === null && li2.slots.some((s) => s?.id === gear[0]));
+  // PD-16: o baú grava e relê afixos, refino e gemas
+  const inv3 = emptyInventory();
+  addItem(inv3, armaRara, 1, afArma, 3, gmArma);
+  deposit(inv3, lv2, 0, undefined, 150);
+  await repo.saveInventoryAndVault(id, inv3, lv2);
+  const lv3 = await repo.loadVault(id);
+  check("baú gravado e relido com afixos, refino e gemas do item", mesmosExtras(lv3.slots[150]), JSON.stringify(lv3.slots[150]));
   const acct2 = await repo.upsertAccount("test", randomUUID(), "Outro");
   const c2 = await repo.createCharacter(acct2.id, "Outro" + Math.random().toString(36).slice(2, 7), "mage");
   if (!c2.ok) throw new Error("criar 2");

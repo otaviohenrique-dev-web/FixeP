@@ -1,3 +1,4 @@
+import { extrasDoBanco, extrasParaBanco, type ExtrasBanco } from "./extras.js";
 import { randomUUID } from "node:crypto";
 import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, KINDS_EQUIPAVEIS, MAX_CHARACTERS_PER_ACCOUNT, migrateItemId, afixosValidos, afixosDaSemente, refinoValido, gemasValidas, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
@@ -8,7 +9,7 @@ import type { Db, Tx } from "./index.js";
 
 /** Zona de nascimento dos personagens novos: a cidade. Só os testes (nunca em produção) podem trocar, para as suítes antigas seguirem lutando na zona 1. */
 export const startZone = () => { const z = Number(process.env.TEST_START_ZONE); return process.env.NODE_ENV !== "production" && Number.isInteger(z) && z > 0 ? z : START_ZONE; };
-export interface VaultRows { items: { slot: number; id: string; qty: number }[]; iron: number; obols: number }
+export interface VaultRows { items: ({ slot: number; id: string; qty: number } & ExtrasBanco)[]; iron: number; obols: number }
 
 export interface InvRows { items: { slot: number; id: string; qty: number; af: string | null; rf: number | null; gm: string | null; gmv: boolean }[]; eq: { slot: string; id: string; af: string | null; rf: number | null; gm: string | null; gmv: boolean }[]; iron: number; obols: number }
 
@@ -290,11 +291,13 @@ export class Repo {
 
   async loadVault(charId: string): Promise<Vault> {
     const v = emptyVault();
-    const items = await this.db.query<{ slot: number; item_id: string; qty: number }>("select slot, item_id, qty from vault_items where character_id = $1", [charId]);
+    const items = await this.db.query<{ slot: number; item_id: string; qty: number; af: string | null; rf: number | null; gm: string | null; gmv: boolean }>(
+      "select slot, item_id, qty, af, rf, gm, gmv from vault_items where character_id = $1", [charId]);
     for (const r of items.rows) {
       const def = ITEMS[r.item_id];
       if (!def || r.slot < 0 || r.slot >= VAULT_SLOTS || v.slots[r.slot]) continue; // item removido do jogo é ignorado
-      v.slots[r.slot] = { id: r.item_id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
+      // extras (afixos, refino, gemas) voltam com o item (PD-16); linha antiga sem afixos ganha afixos determinísticos
+      v.slots[r.slot] = { id: r.item_id, qty: Math.max(1, Math.min(def.stack, r.qty)), ...extrasDoBanco(r.item_id, r, `${charId}:bau:${r.slot}:${r.item_id}`) };
     }
     const w = await this.db.query<{ vault_iron: number; vault_obols: number }>("select vault_iron, vault_obols from characters where id = $1", [charId]);
     v.iron = Math.max(0, Number(w.rows[0]?.vault_iron) || 0);
@@ -303,15 +306,15 @@ export class Repo {
   }
 
   vaultRows(v: Vault): VaultRows {
-    return { items: v.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty }] : [])), iron: v.iron, obols: v.obols };
+    return { items: v.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, ...extrasParaBanco(s) }] : [])), iron: v.iron, obols: v.obols };
   }
 
   private async writeVault(q: Tx["query"], charId: string, r: VaultRows) {
     await q("delete from vault_items where character_id = $1", [charId]);
     await q("update characters set vault_iron = $2, vault_obols = $3 where id = $1", [charId, r.iron, r.obols]);
     if (r.items.length) {
-      const ph = r.items.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
-      await q(`insert into vault_items (character_id, slot, item_id, qty) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty])]);
+      const ph = r.items.map((_, i) => `($1, ${[2, 3, 4, 5, 6, 7, 8].map((k) => `$${i * 7 + k}`).join(", ")})`).join(",");
+      await q(`insert into vault_items (character_id, slot, item_id, qty, af, rf, gm, gmv) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty, x.af, x.rf, x.gm, x.gmv])]);
     }
   }
 

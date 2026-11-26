@@ -4,7 +4,7 @@ process.env.PGLITE_DIR = "memory";
 process.env.NODE_ENV = "test";
 
 import { randomUUID } from "node:crypto";
-import { MARKET_FEE_PCT, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PAGE, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MAX_COINS, listingFee, minListingPrice, ITEMS } from "@frixep/shared";
+import { MARKET_FEE_PCT, MARKET_MAX_ACTIVE, MARKET_MAX_OPEN, MARKET_PAGE, MARKET_MIN_PRICE, MARKET_MAX_PRICE, MAX_COINS, listingFee, minListingPrice, ITEMS, afixosDaSemente, gemasValidas } from "@frixep/shared";
 import { emptyInventory, addItem, type Inventory } from "../src/game/inventory.js";
 import { Market, type MarketActor } from "../src/game/market.js";
 import { openDb } from "../src/db/index.js";
@@ -245,6 +245,32 @@ console.log("\n== Limpeza ==");
   await m2.sweep();
   const n = (await db.query<{ n: string }>("select count(*)::text as n from market_listings where id = $1", [id])).rows[0].n;
   check("listagens encerradas há mais de 3 dias são apagadas", n === "0");
+}
+
+console.log("\n== Extras do item (afixos, refino, gemas) passam pelo mercado (PD-16) ==");
+{
+  const arma = Object.keys(ITEMS).find((k) => ITEMS[k].kind === "weapon" && ITEMS[k].rarity === "rare")!;
+  const af = afixosDaSemente("teste-mercado", ITEMS[arma].kind, ITEMS[arma].rarity);
+  const gm = gemasValidas(["forca"], ITEMS[arma].kind, ITEMS[arma].rarity);
+  const iguais = (s: { af?: string[]; rf?: number; gm?: string[] } | null | undefined) =>
+    !!s && JSON.stringify(s.af ?? []) === JSON.stringify(af) && s.rf === 2 && JSON.stringify(s.gm ?? []) === JSON.stringify(gm);
+  const vend = await mk(5000), comp = await mk(MAX_COINS);
+  addItem(vend.inv, arma, 1, af, 2, gm);
+  const preco = Math.max(minListingPrice(arma, 1), 1000);
+  const r1 = await market.list(vend, slotOf(vend.inv, arma), 1, preco);
+  check("anuncia a arma com afixos, refino e gema", r1.ok && af.length > 0 && gm.length > 0, JSON.stringify(r1));
+  const pag = await market.browse({ q: ITEMS[arma].name }, comp.charId);
+  const l1 = pag.items.find((l) => l.itemId === arma && l.seller === vend.name);
+  check("a listagem mostra os extras (a ficha do comprador vê afixos, refino e gema)", iguais(l1), JSON.stringify(l1));
+  const b1 = l1 ? await market.buy(comp, l1.id) : { ok: false };
+  check("quem compra recebe o item com afixos, refino e gema", b1.ok && iguais(comp.inv.slots.find((s) => s?.id === arma)), JSON.stringify(comp.inv.slots.find((s) => s?.id === arma)));
+  // cancelar devolve com os extras
+  const vend2 = await mk(5000);
+  addItem(vend2.inv, arma, 1, af, 2, gm);
+  const r2 = await market.list(vend2, slotOf(vend2.inv, arma), 1, preco);
+  const meus = await market.mine(vend2.charId);
+  const c2 = r2.ok && meus[0] ? await market.cancel(vend2, meus[0].id) : { ok: false };
+  check("cancelar devolve o item com afixos, refino e gema", c2.ok && iguais(vend2.inv.slots.find((s) => s?.id === arma)), JSON.stringify(vend2.inv.slots.find((s) => s?.id === arma)));
 }
 
 await db.close();
