@@ -7,3 +7,5 @@ alter table characters add column if not exists gm_invuln boolean not null defau
 alter table characters add column if not exists gm_vel real not null default 1;
 alter table inventory_items add column if not exists gmv boolean not null default false;
 alter table equipment add column if not exists gmv boolean not null default false;
+-- marca do PERSONAGEM: já usou dar moedas, criar item ou dar XP/nível. Permanente. Em produção isola da economia.
+alter table characters add column if not exists gm_usado boolean not null default false;

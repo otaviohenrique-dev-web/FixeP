@@ -30,6 +30,7 @@ export interface CharacterRow {
   gm_invis: boolean;
   gm_invuln: boolean;
   gm_vel: number;
+  gm_usado: boolean; // o personagem já usou moedas, item ou XP do Modo Deus (marca permanente)
 }
 
 /** Normaliza o nome para a chave de unicidade: sem acento, sem maiúsculas, espaços colapsados. */
@@ -140,7 +141,7 @@ export class Repo {
   /** personagem da conta: o pedido por id (só se for da conta) ou, sem id, o mais antigo (quem não escolhe entra no primeiro) */
   async getCharacter(accountId: string, charId?: string): Promise<CharacterRow | null> {
     const { rows } = await this.db.query<CharacterRow>(
-      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts, gm_modo, gm_invis, gm_invuln, gm_vel from characters where account_id = $1 and ($2::text is null or id::text = $2) order by created_at limit 1",
+      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts, gm_modo, gm_invis, gm_invuln, gm_vel, gm_usado from characters where account_id = $1 and ($2::text is null or id::text = $2) order by created_at limit 1",
       [accountId, charId ?? null],
     );
     return rows[0] ?? null;
@@ -149,7 +150,7 @@ export class Repo {
   /** todos os personagens da conta, do mais antigo para o mais novo (a tela de seleção) */
   async listCharacters(accountId: string): Promise<CharacterRow[]> {
     const { rows } = await this.db.query<CharacterRow>(
-      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts, gm_modo, gm_invis, gm_invuln, gm_vel from characters where account_id = $1 order by created_at",
+      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts, gm_modo, gm_invis, gm_invuln, gm_vel, gm_usado from characters where account_id = $1 order by created_at",
       [accountId],
     );
     return rows;
@@ -169,7 +170,7 @@ export class Repo {
         const id = randomUUID();
         const zone = startZone();
         await q("insert into characters (id, account_id, name, name_key, class, zone) values ($1, $2, $3, $4, $5, $6)", [id, accountId, name, nameKey(name), cls, zone]);
-        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone, auto_pot_at: 0, variacoes: "{}", talentos: "{}", talentos_resets: 0, loadouts: "{}", gm_modo: false, gm_invis: false, gm_invuln: false, gm_vel: 1 } };
+        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone, auto_pot_at: 0, variacoes: "{}", talentos: "{}", talentos_resets: 0, loadouts: "{}", gm_modo: false, gm_invis: false, gm_invuln: false, gm_vel: 1, gm_usado: false } };
       });
     } catch (e: any) {
       if (e?.code === "23505") return { ok: false, error: "name_taken" }; // violação da unicidade de name_key
@@ -184,6 +185,11 @@ export class Repo {
   /** estado do Modo Deus no personagem (só o servidor chama, depois de confirmar que a conta é admin) */
   async setGmModo(charId: string, g: { modo: boolean; invis: boolean; invuln: boolean; vel: number }): Promise<void> {
     await this.db.query("update characters set gm_modo = $2, gm_invis = $3, gm_invuln = $4, gm_vel = $5, updated_at = now() where id = $1", [charId, g.modo, g.invis, g.invuln, g.vel]);
+  }
+
+  /** marca o personagem como usuário do Modo Deus (permanente; só o servidor chama) */
+  async marcarGmUsado(charId: string): Promise<void> {
+    await this.db.query("update characters set gm_usado = true where id = $1", [charId]);
   }
 
   /** limiar da auto-poção (já validado por clampAutoPot no servidor) */

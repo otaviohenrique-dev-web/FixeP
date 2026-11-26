@@ -122,9 +122,9 @@ export function painelRouter(repo: Repo): Router {
     const id = texto(req.params.id);
     const { rows } = await repo.db.query<{
       id: string; account_id: string; name: string; class: CharClass; level: number; xp: number; zone: number; iron: number; obols: number;
-      criado_em: string; email: string | null; conta_criada: string;
+      criado_em: string; email: string | null; conta_criada: string; gm_usado: boolean;
     }>(
-      `select c.id, c.account_id, c.name, c.class, c.level, c.xp, c.zone, c.iron, c.obols,
+      `select c.id, c.account_id, c.name, c.class, c.level, c.xp, c.zone, c.iron, c.obols, c.gm_usado,
               c.created_at::text as criado_em, a.email, a.created_at::text as conta_criada
          from characters c join accounts a on a.id = c.account_id where c.id::text = $1`,
       [id],
@@ -160,6 +160,8 @@ export function painelRouter(repo: Repo): Router {
       inventario: inv.slots.flatMap((s, i) => (s ? [{ slot: i, item: nomeDoItem(s.id), qtd: s.qty }] : [])),
       equipamento,
       sancao: await estadoSancao(repo, c.account_id),
+      // Modo Deus: marca permanente de quem já usou moedas, item ou XP; em produção ela isola o personagem da economia
+      modoDeus: { usado: c.gm_usado === true, isolado: c.gm_usado === true && travasAtivas() },
       logins: logins.rows.map((l) => l.criado_em),
       historico,
     });

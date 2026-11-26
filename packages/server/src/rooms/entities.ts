@@ -41,6 +41,7 @@ export class Player extends Schema {
   @type("boolean") gmInvis = false; // Modo Deus: invisível (o cliente comum esconde; monstros e jogadores não o alcançam)
   @type("boolean") gmInvuln = false; // Modo Deus: invulnerável
   @type("number") gmVel = 1; // Modo Deus: multiplicador de velocidade (1 = normal)
+  gmUsado = false; // só no servidor: o personagem já usou moedas, item ou XP do Modo Deus (marca permanente; isola da economia em produção)
 
   // --- só no servidor (não sincronizado) ---
   charId = ""; // linha em `characters`

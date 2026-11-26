@@ -850,7 +850,7 @@ export class ZoneRoom extends Room<ZoneState> {
     let tid = "", target: Player | undefined;
     this.state.players.forEach((o, oid) => { if (o.name.toLowerCase() === want) { tid = oid; target = o; } });
     if (!target || tid === client.sessionId) return this.notify(client.sessionId, "Jogador não encontrado nesta zona.");
-    if (target.gm && travasAtivas()) return this.notify(client.sessionId, `${target.name} está em Modo Deus e não negocia.`);
+    if ((target.gm || target.gmUsado) && travasAtivas()) return this.notify(client.sessionId, `${target.name} usou o Modo Deus e não negocia.`);
     if (target.dead || target.traveling || this.tradeBusy(tid)) return this.notify(client.sessionId, `${target.name} está ocupado.`);
     if (dist(me.x, me.y, target.x, target.y) > TRADE_RANGE) return this.notify(client.sessionId, "Chegue mais perto para trocar.");
     this.tradeInvites.set(tid, { from: client.sessionId, until: this.t + TRADE_INVITE_S });
@@ -1119,6 +1119,7 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.talentos = JSON.stringify(limparTalentos(auth.character.talentos, pl.cls as CharClass, pl.level)); // os talentos também (C2.3)
     pl.talentosResets = Math.max(0, Math.floor(Number(auth.character.talentos_resets) || 0));
     pl.loadouts = JSON.stringify(limparLoadouts(auth.character.loadouts, pl.cls as CharClass)); // os 3 builds voltam com o personagem (C2.4)
+    pl.gmUsado = auth.character.gm_usado === true; // a marca do personagem volta com ele
     if (isAdmin(auth.user.id) && auth.character.gm_modo) { // Modo Deus volta com o personagem (só para conta admin)
       pl.gm = true;
       pl.gmInvis = auth.character.gm_invis === true;
@@ -1222,9 +1223,18 @@ export class ZoneRoom extends Room<ZoneState> {
   /** Modo Deus ligado (com as travas): o personagem não negocia, não usa mercado nem baú. Avisa quem tentou. */
   private gmTravado(sid: string): boolean {
     const pl = this.state.players.get(sid);
-    if (!pl?.gm || !travasAtivas()) return false;
-    this.notify(sid, "Modo Deus ligado: este personagem não negocia, não usa o mercado nem o baú.");
+    if (!(pl?.gm || pl?.gmUsado) || !travasAtivas()) return false;
+    this.notify(sid, pl.gmUsado
+      ? "Este personagem usou o Modo Deus: fica isolado da economia (mercado, negociação e baú)."
+      : "Modo Deus ligado: este personagem não negocia, não usa o mercado nem o baú.");
     return true;
+  }
+
+  /** marca permanente: o personagem usou moedas, item ou XP do Modo Deus */
+  private async marcaGmUsado(p: Player): Promise<void> {
+    if (p.gmUsado) return;
+    p.gmUsado = true;
+    await this.repo.marcarGmUsado(p.charId);
   }
 
   private achaJogador(charId: unknown): [string, Player] | null {
@@ -1283,6 +1293,7 @@ export class ZoneRoom extends Room<ZoneState> {
         if (xp !== undefined) this.addXp(sid, p, xp);
         p.dirty = true;
         this.refreshStats(p);
+        await this.marcaGmUsado(p);
         return { ok: true, resumo: `Nível ${p.level} (XP ${p.xp})`, antes, depois: { nivel: p.level, xp: p.xp }, detalhes: { nivelPedido: nivel, xpDado: xp } };
       }
 
@@ -1294,6 +1305,7 @@ export class ZoneRoom extends Room<ZoneState> {
         p.inv.slots = teste.slots;
         p.invDirty = true;
         this.sendInv(sid, p);
+        await this.marcaGmUsado(p);
         return { ok: true, resumo: `${ITEMS[v.id].name} x${v.qtd} na mochila (vinculado ao GM)`, detalhes: { item: v.id, qtd: v.qtd, refino: v.refino, afixos: v.af } };
       }
 
@@ -1306,6 +1318,7 @@ export class ZoneRoom extends Room<ZoneState> {
         p.inv[tipo] = Math.min(MAX_COINS, p.inv[tipo] + qtd);
         p.invDirty = true;
         this.sendInv(sid, p);
+        await this.marcaGmUsado(p);
         return { ok: true, resumo: `+${qtd} ${tipo === "iron" ? "Tostões" : "Óbolos"}`, antes, depois: { [tipo]: p.inv[tipo] }, detalhes: { moeda: tipo, qtd } };
       }
 
@@ -2557,10 +2570,11 @@ export class ZoneRoom extends Room<ZoneState> {
     // alvo: provocação ativa > quem já está em combate > mais próximo no raio de aggro (e dentro da coleira: quem está além dela não "puxa" o inimigo)
     let target: [string, Player] | null = null;
     const taunter = this.t < e.tauntUntil ? this.state.players.get(e.tauntId) : undefined;
-    if (taunter && !taunter.dead && !taunter.traveling && !taunter.shield) target = [e.tauntId, taunter];
+    if (taunter && !taunter.dead && !taunter.traveling && !taunter.shield && !(taunter.gm && taunter.gmInvis)) target = [e.tauntId, taunter];
     else {
       const current = e.targetId ? this.state.players.get(e.targetId) : undefined;
-      if (current && !current.dead && !current.traveling && !current.shield && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
+      // Modo Deus invisível: monstro nenhum mantém, mira ou persegue o GM (a escolha de alvo ignora ele)
+      if (current && !current.dead && !current.traveling && !current.shield && !(current.gm && current.gmInvis) && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
       else target = this.nearestPlayer(e, K.aggro, this.leashOf(K));
     }
     e.targetId = target ? target[0] : "";

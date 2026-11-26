@@ -40,6 +40,7 @@ async function jogador(prefix, zona = "zone4") {
   const name = prefix + rnd().replace(/[^a-z0-9]/g, "x");
   const cr = await fetch(`${HTTP}/api/character`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, class: "warrior" }) });
   if (!cr.ok) throw new Error(`criar personagem: ${cr.status}`);
+  const charId = (await cr.json()).character.id;
   const room = await new Client(WS).joinOrCreate(zona, { token });
   await new Promise((r) => (room.state?.players ? r() : room.onStateChange.once(r)));
   const ev = { inv: null, notices: [], done: [] };
@@ -49,7 +50,7 @@ async function jogador(prefix, zona = "zone4") {
   for (const t of ["telegraph", "hit", "swing", "died", "proj", "projend", "coins", "loot", "trap", "levelup", "heal", "pong", "market_page", "market_mine", "market_prices"]) room.onMessage(t, () => {});
   room.send("inv_sync", {});
   await sleep(300);
-  return { room, ev, name, token, sid: room.sessionId, me: () => room.state.players.get(room.sessionId) };
+  return { room, ev, name, token, charId, sid: room.sessionId, me: () => room.state.players.get(room.sessionId) };
 }
 
 // código do painel: lê a última linha do arquivo que o servidor de teste grava, esperando uma linha nova
@@ -68,8 +69,30 @@ const acao = (painel, token, corpo) => api("POST", "/modo-deus/acao", { token, p
 const contaInv = (c, id) => (c.ev.inv?.inv ?? []).filter((s) => s?.id === id).reduce((n, s) => n + s.qty, 0);
 const slotDe = (c, id, gmv) => (c.ev.inv?.inv ?? []).findIndex((s) => s?.id === id && !!s.gmv === gmv);
 
-const ADM = await jogador("Adm"); // o 1º convidado do servidor de teste é o admin
-const B = await jogador("Bea"); // jogador comum, na mesma zona
+// Fase 2 (zona com monstros): o GM invisível não é mirado nem perseguido; sem invisibilidade, o monstro mira (controle).
+async function monstros(ADM, B, painel) {
+  console.log("\n== Modo Deus invisível: monstro não mira o GM (zona 1)");
+  await until(() => B.room.state.enemies.size > 0);
+  let alvo = null;
+  B.room.state.enemies.forEach((e, id) => { if (!alvo && e.st === "idle" && id !== "boss") alvo = { id, e }; });
+  check("há um monstro parado na zona", !!alvo);
+  if (!alvo) return;
+  await acao(painel, ADM.token, { acao: "modo", ligado: true, invis: true, invuln: false, vel: 1 });
+  await acao(painel, ADM.token, { acao: "teleporte", zona: 1, x: alvo.e.x + 1, y: alvo.e.y });
+  await sleep(300);
+  // o alvo (targetId) é só do servidor: o cliente vê o estado do monstro (chase/windup/recover) e o HP do GM
+  const persegue = () => ["chase", "windup", "recover"].includes(B.room.state.enemies.get(alvo.id)?.st);
+  await sleep(3000);
+  check("com o GM invisível, o monstro não o persegue nem ataca", !persegue());
+  check("com o GM invisível, ele não leva dano perto do monstro", ADM.me().hp === ADM.me().maxHp, `hp ${ADM.me().hp}/${ADM.me().maxHp}`);
+  await acao(painel, ADM.token, { acao: "modo", invis: false });
+  check("controle: sem invisibilidade, o monstro o persegue ou o fere", await until(() => persegue() || ADM.me().hp < ADM.me().maxHp, 6000));
+}
+
+// MODO_FASE=1: zona 4 (cidade, com o leiloeiro). MODO_FASE=2: zona 1 (com monstros), para a parte dos monstros.
+const FASE2 = process.env.MODO_FASE === "2";
+const ADM = await jogador("Adm", FASE2 ? "zone" : "zone4"); // o 1º convidado do servidor de teste é o admin
+const B = await jogador("Bea", FASE2 ? "zone" : "zone4"); // jogador comum, na mesma zona
 await rm(ARQ, { force: true });
 await sleep(150);
 
@@ -87,6 +110,15 @@ check("admin sem X-Painel-Token => 401", r401.status === 401, `status ${r401.sta
 
 const painel = await tokenPainel(ADM.token);
 check("admin recebe token do painel", !!painel);
+
+if (FASE2) {
+  await monstros(ADM, B, painel);
+  ADM.room.leave();
+  B.room.leave();
+  await sleep(200);
+  console.log(fails ? `\n${fails} FALHA(S)` : "\nTODOS PASSARAM");
+  process.exit(fails ? 1 : 0);
+}
 
 console.log("\n== ligar o Modo Deus (invisível e velocidade)");
 const lig = await acao(painel, ADM.token, { acao: "modo", ligado: true, invis: true, invuln: true, vel: 2 });
@@ -119,10 +151,14 @@ check("com o modo ligado, o mercado recusa o personagem", await until(() => ADM.
 await acao(painel, ADM.token, { acao: "modo", ligado: false });
 await until(() => ADM.me().gm === false);
 ADM.room.send("market_list", { npc: "auctioneer", slot: slotG, qty: 1, price: 100 });
-const recusa = (d) => !d.ok && /Item criado pelo Modo Deus/.test(d.text);
-check("item do GM não é listado no mercado", await until(() => ADM.ev.done.some(recusa)), JSON.stringify(ADM.ev.done.at(-1)));
+// o personagem usou o Modo Deus (criou item): fica isolado da economia, mesmo com o modo desligado
+check("personagem gm não lista item no mercado", await until(() => ADM.ev.notices.some((t) => /usou o Modo Deus/.test(t))), JSON.stringify(ADM.ev.notices.at(-1)));
 check("nenhuma listagem foi criada", !ADM.ev.done.some((d) => d.ok && d.kind === "list"));
 check("o item continua na mochila (não saiu)", await until(() => contaInv(ADM, "pocao_de_vida") >= 3));
+const ficha = await api("GET", `/jogadores/${ADM.charId}`, { token: ADM.token, painel });
+check("a ficha mostra que o personagem usou o Modo Deus", ficha.body.modoDeus?.usado === true && ficha.body.modoDeus?.isolado === true, JSON.stringify(ficha.body.modoDeus));
+const fichaB = await api("GET", `/jogadores/${B.charId}`, { token: ADM.token, painel });
+check("jogador que não usou aparece como não usado", fichaB.body.modoDeus?.usado === false);
 
 console.log("\n== teleporte e puxar");
 await acao(painel, ADM.token, { acao: "modo", ligado: true, invis: false });
@@ -130,7 +166,7 @@ const tp2 = await acao(painel, ADM.token, { acao: "teleporte", zona: 4, x: 10, y
 check("teleporte com coordenada => 200", tp2.status === 200);
 check("o admin foi para (10, 10)", await until(() => Math.hypot(ADM.me().x - 10, ADM.me().y - 10) < 1));
 check("coordenada fora da zona é recusada", (await acao(painel, ADM.token, { acao: "teleporte", zona: 4, x: 9999, y: 1 })).status === 400);
-const pux = await acao(painel, ADM.token, { acao: "puxar", jogador: B.charId ?? "" });
+const pux = await acao(painel, ADM.token, { acao: "puxar", jogador: "00000000-0000-0000-0000-000000000000" });
 check("puxar sem jogador válido é recusado", pux.status === 404);
 const jog = await api("GET", "/modo-deus", { token: ADM.token, painel });
 const alvoB = (jog.body.jogadores ?? []).find((j) => j.nome === B.name);
