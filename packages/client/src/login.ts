@@ -340,6 +340,7 @@ const CSS = `
 .fx-ico{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1px solid currentColor;font-size:12px;letter-spacing:0;text-indent:0}
 .fx-msg{min-height:0;margin:0;text-align:center;font:400 13px/1.4 Georgia,serif;letter-spacing:.04em;color:#ff9d8a;text-shadow:0 1px 8px #000}
 .fx-msg:empty{display:none}
+.fx-copy{margin:0;text-align:center;font:400 11px/1.3 Georgia,serif;letter-spacing:.06em;color:rgba(188,216,245,.45);text-shadow:0 1px 6px #000}
 .fx-snd{position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#bcd8f5;
   background:rgba(8,16,28,.55);border:1px solid rgba(160,200,240,.3);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:border-color .18s,color .18s,box-shadow .18s}
 .fx-snd:hover,.fx-snd:focus-visible{color:#fff;border-color:#ff9a4d;box-shadow:0 0 16px rgba(255,120,40,.35)}
@@ -399,6 +400,7 @@ export function mountScreen(heading: string, message?: string): ScreenHandle {
         <div class="fx-head"></div>
         <p class="fx-msg" role="alert"></p>
       </section>
+      <p class="fx-copy">&copy; 2026 FrixeP. Todos os direitos reservados.</p>
     </div>
     <button class="fx-snd" type="button" aria-label="Alternar som ambiente"></button>`;
   document.body.append(root);
