@@ -1,7 +1,7 @@
 import { apiUrl } from "../auth";
 import { ABAS } from "./registro";
 import { CSS, el, botao } from "./ui";
-import type { InstanciaAba, Painel } from "./tipos";
+import type { InstanciaAba, MetodoPainel, Painel } from "./tipos";
 
 /**
  * Janela do painel (carregada sob demanda). Duas partes:
@@ -15,7 +15,7 @@ let estiloMontado = false;
 let fechar: (() => void) | null = null;
 
 /** chamada à API do painel: sempre com o token do jogo; com o token do painel, quando já confirmado */
-async function chamar<T = any>(jogoToken: string, metodo: "GET" | "POST", caminho: string, corpo?: unknown, comPainel = true): Promise<T> {
+async function chamar<T = any>(jogoToken: string, metodo: MetodoPainel, caminho: string, corpo?: unknown, comPainel = true): Promise<T> {
   const cab: Record<string, string> = { Authorization: `Bearer ${jogoToken}` };
   if (corpo !== undefined) cab["Content-Type"] = "application/json";
   if (comPainel && tokenPainel) cab["X-Painel-Token"] = tokenPainel;

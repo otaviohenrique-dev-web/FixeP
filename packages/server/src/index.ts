@@ -8,6 +8,7 @@ import { authRouter } from "./auth.js";
 import { apiRouter } from "./api.js";
 import { openDb } from "./db/index.js";
 import { Repo } from "./db/repo.js";
+import { Balanceamento } from "./balanceamento.js";
 import { origemPermitida } from "./origens.js";
 import { avisarConfiguracaoPainel } from "./painel/email.js";
 import { ZONE_IDS, zoneRoomName } from "@frixep/shared";
@@ -17,6 +18,8 @@ const permitida = (o: string | undefined) => origemPermitida(o);
 
 const db = await openDb();
 const repo = new Repo(db);
+const balance = new Balanceamento(db);
+await balance.carregar(); // ajustes salvos valem desde o primeiro jogador
 avisarConfiguracaoPainel();
 
 const app = express();
@@ -37,7 +40,7 @@ app.use(
 );
 app.use(express.json({ limit: "10kb" }));
 app.use("/auth", authRouter(repo));
-app.use("/api", apiRouter(repo));
+app.use("/api", apiRouter(repo, balance));
 
 const httpServer = http.createServer(app);
 const gameServer = new Server({
@@ -49,7 +52,7 @@ const gameServer = new Server({
       permitida(info.origin) ? cb(true) : cb(false, 403, "Origem não permitida"),
   }),
 });
-for (const id of ZONE_IDS) gameServer.define(zoneRoomName(id), ZoneRoom, { repo }); // uma sala por zona ("zone", "zone2", "zone3")
+for (const id of ZONE_IDS) gameServer.define(zoneRoomName(id), ZoneRoom, { repo, balance }); // uma sala por zona ("zone", "zone2", "zone3")
 await gameServer.listen(port);
 // Porteiro HTTP na frente de TUDO (Express e matchmaking do Colyseus): Origin de fora da lista leva 403. /health é sempre liberado.
 const ouvintes = httpServer.listeners("request").slice(0) as http.RequestListener[];

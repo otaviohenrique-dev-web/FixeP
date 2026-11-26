@@ -46,6 +46,9 @@ export const ACOES_LEGIVEIS: Record<string, string> = {
   desbanir: "Desbaniu",
   expulsar: "Expulsou da sessão",
   resolver_denuncia: "Resolveu denúncia",
+  alterar_balanceamento: "Alterou balanceamento",
+  voltar_padrao_balanceamento: "Voltou ao padrão (balanceamento)",
+  desfazer_balanceamento: "Desfez mudança de balanceamento",
 };
 
 export const CSS = `
@@ -98,6 +101,7 @@ export const CSS = `
 .pn-login p{margin:0;max-width:420px}
 .pn-hide{display:none!important}
 .pn-small{font-size:12px;color:#8fb0cf}
+.pn-sub{margin:0 0 10px;padding:10px;border-radius:6px;background:rgba(10,20,34,.55);border:1px solid rgba(160,200,240,.14)}
 body.mob .pn-back{padding:0}
 body.mob .pn-win{width:100%;height:100%;max-height:none;border-radius:0;border:0}
 body.mob .pn-body{padding:12px}

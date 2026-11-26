@@ -47,6 +47,8 @@ function exigirTokenPainel(req: Request, res: Response, next: NextFunction) {
 }
 
 const CONTA_ADMIN = [exigirSessao, exigirAdmin];
+/** proteção completa de qualquer rota de admin do painel (sessão + conta admin + token do painel). Outras abas (ex.: balanceamento) usam esta lista. */
+export const PROTEGER_PAINEL = [exigirSessao, exigirAdmin, exigirTokenPainel] as const;
 const texto = (x: unknown) => (typeof x === "string" ? x : "");
 
 export function painelRouter(repo: Repo): Router {

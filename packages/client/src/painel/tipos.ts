@@ -5,7 +5,7 @@
  * 3) crie o arquivo de rotas no servidor e monte-o em packages/server/src/painel/rotas.ts.
  */
 
-export type MetodoPainel = "GET" | "POST";
+export type MetodoPainel = "GET" | "POST" | "PUT";
 
 /** o que a janela entrega a cada aba */
 export interface Painel {
