@@ -80,6 +80,10 @@ config_suite() {
     test/talentos.mjs)
       echo "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100|"
       echo "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1|TALENTO_MODO=zona" ;;
+    # Balanceamento ao vivo: fase 1 (permissão, limites, efeito na hora, desfazer) e fase 2 (reinício, mesmo banco em arquivo).
+    test/balanceamento.mjs)
+      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=2 PGLITE_DIR=$BAL_DB|BALANCE_FASE=1"
+      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=2 PGLITE_DIR=$BAL_DB|BALANCE_FASE=2" ;;
     # Loadouts (C2.4): fase 1 (nível 10) e fase 2 (nível 6) no MESMO banco em arquivo; zona recusa (ver run_loadouts).
     test/loadouts.mjs)
       echo "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100 PGLITE_DIR=$LOADOUT_DB|LOADOUT_FASE=1 LOADOUT_TOKEN_FILE=$LOADOUT_TOKEN"
@@ -89,6 +93,7 @@ config_suite() {
   esac
 }
 LOADOUT_DB="../../.data/loadouts-test-pglite"; LOADOUT_TOKEN="../../.data/loadouts-test-token.txt"
+BAL_DB="../../.data/balanceamento-test-pglite"
 
 # Listas geradas por glob (ordem alfabética estável, LC_ALL=C).
 export LC_ALL=C
@@ -193,9 +198,11 @@ if [ ${#SUITES[@]} -gt 0 ]; then
   echo "== Suítes com servidor de teste (${#SUITES[@]} arquivos, um servidor novo por caso)"
   for file in "${SUITES[@]}"; do
     [ "$file" = test/loadouts.mjs ] && { rm -rf "$LOADOUT_DB" "$LOADOUT_TOKEN"; mkdir -p ../../.data; }
+    [ "$file" = test/balanceamento.mjs ] && { rm -rf "$BAL_DB"; mkdir -p ../../.data; }
     # fd 3: o node da suíte não pode consumir a lista de casos pela entrada padrão
     while IFS='|' read -r -u 3 srv suite; do run_case "$srv" "$file" "$suite"; done 3< <(config_suite "$file")
     [ "$file" = test/loadouts.mjs ] && rm -rf "$LOADOUT_DB" "$LOADOUT_TOKEN"
+    [ "$file" = test/balanceamento.mjs ] && rm -rf "$BAL_DB"
   done
 fi
 

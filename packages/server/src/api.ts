@@ -3,6 +3,8 @@ import { PLAYABLE_CLASSES, START_ZONE, MAX_CHARACTERS_PER_ACCOUNT, type CharClas
 import { verifySession, type AuthUser } from "./auth.js";
 import { registrarEvento } from "./telemetria.js";
 import { Repo, validateName } from "./db/repo.js";
+import { isAdmin } from "./moderacao.js";
+import type { Balanceamento } from "./balanceamento.js";
 
 declare module "express-serve-static-core" {
   interface Request { user?: AuthUser }
@@ -37,11 +39,68 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+/**
+ * PONTO DE TROCA DA AUTENTICAÇÃO DO PAINEL ADMIN. Hoje as rotas /api/admin/* usam requireAuth + isAdmin (moderacao.ts).
+ * Quando a F1 do painel (acesso com 2FA) entrar na main, troque a lista ADMIN_ROTAS abaixo pelo middleware de sessão dela
+ * (ex.: [limit(...), exigirSessaoPainel]); nenhuma rota de balanceamento precisa mudar.
+ */
+function exigirAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!isAdmin(req.user?.id)) return res.status(403).json({ error: "Reservado a administradores." });
+  next();
+}
+const ADMIN_ROTAS = [requireAuth, exigirAdmin] as const;
+
 const shape = (c: { id: string; name: string; class: string; level: number; xp: number; zone?: number }) =>
   ({ id: c.id, name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? START_ZONE });
 
-export function apiRouter(repo: Repo): Router {
+export function apiRouter(repo: Repo, balance: Balanceamento): Router {
   const r = Router();
+
+  // ---- balanceamento ao vivo (admin). Erros de valor/motivo voltam 400; a lista de erros vem do próprio módulo.
+  const motivoDe = (b: any) => (typeof b?.motivo === "string" ? b.motivo : "");
+  const responderResultado = (res: Response, out: { ok: boolean; erro?: string; status?: number }) => {
+    if (out.ok) return res.json({ ok: true });
+    res.status(out.status ?? 400).json({ error: out.erro });
+  };
+  r.get("/admin/balanceamento", limit(120, 60_000), ...ADMIN_ROTAS, (_req, res) => {
+    res.json({ ajustes: balance.listar() });
+  });
+  r.put("/admin/balanceamento/:chave", limit(60, 60_000), ...ADMIN_ROTAS, async (req, res) => {
+    try {
+      if (typeof req.body?.valor !== "number") return res.status(400).json({ error: "Informe o valor (número inteiro)." });
+      responderResultado(res, await balance.definir(req.params.chave, req.body.valor, motivoDe(req.body), req.user!.id));
+    } catch (e) {
+      console.error("[api] balanceamento:", (e as Error).message);
+      res.status(500).json({ error: "Erro interno." });
+    }
+  });
+  r.post("/admin/balanceamento/:chave/padrao", limit(60, 60_000), ...ADMIN_ROTAS, async (req, res) => {
+    try {
+      responderResultado(res, await balance.padrao(req.params.chave, motivoDe(req.body), req.user!.id));
+    } catch (e) {
+      console.error("[api] balanceamento/padrao:", (e as Error).message);
+      res.status(500).json({ error: "Erro interno." });
+    }
+  });
+  r.get("/admin/balanceamento/historico", limit(120, 60_000), ...ADMIN_ROTAS, async (req, res) => {
+    try {
+      const chave = typeof req.query.chave === "string" ? req.query.chave : undefined;
+      res.json({ historico: await balance.historico(chave) });
+    } catch (e) {
+      console.error("[api] balanceamento/historico:", (e as Error).message);
+      res.status(500).json({ error: "Erro interno." });
+    }
+  });
+  r.post("/admin/balanceamento/desfazer/:id", limit(60, 60_000), ...ADMIN_ROTAS, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "Histórico inválido." });
+      responderResultado(res, await balance.desfazer(id, req.user!.id));
+    } catch (e) {
+      console.error("[api] balanceamento/desfazer:", (e as Error).message);
+      res.status(500).json({ error: "Erro interno." });
+    }
+  });
 
   r.get("/me", limit(60, 60_000), requireAuth, async (req, res) => {
     try {

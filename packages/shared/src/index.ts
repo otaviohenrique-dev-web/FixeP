@@ -128,6 +128,7 @@ export const Evt = {
   Quests: "quest_estado", // QuestEvent: estado completo das quests do personagem (ao entrar e a cada mudança)
   QuestDefs: "quest_defs", // QuestDefsEvent: definições das quests (nome, texto, objetivos, recompensa); vai ao pedir quest_sync
   DicasVistas: "dicas_vistas", // DicasVistasEvent: ids de dicas já vistas pelo personagem (ao entrar e a cada dicas_sync)
+  Balance: "balance", // BalanceEvent: valores efetivos do balanceamento ao vivo (ao entrar e a cada mudança do admin)
 } as const;
 
 // ------------------------------------------------------------ troca entre jogadores
@@ -391,7 +392,7 @@ const dodge = (dash: number, cd: number): ActionSpec => ({ kind: "dodge", name: 
 interface ClassSpec extends Omit<ClassDef, "actions" | "skill1Alt"> { actions: Record<ActionId, ActionSpec>; skill1Alt?: ActionSpec }
 
 /** Dados de todas as classes, em forma de efeitos. CLASS_DEFS é derivado daqui por resolveAction (sem modificadores). */
-const CLASS_SPECS: Record<CharClass, ClassSpec> = {
+export const CLASS_SPECS: Record<CharClass, ClassSpec> = {
   warrior: {
     id: "warrior", name: "Guerreiro", role: "Tanque", maxHp: 120, color: 0xff8a3d,
     resource: { name: "Fúria", icon: "flame", color: 0xe0742a, max: 100, regen: 5, perLevel: 3 },
@@ -622,3 +623,4 @@ export * from "./desmontar";
 export * from "./engaste";
 export * from "./refino_stats";
 export * from "./simulacao";
+export * from "./ajustes";

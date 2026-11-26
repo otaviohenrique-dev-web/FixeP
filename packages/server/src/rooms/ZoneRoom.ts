@@ -37,6 +37,8 @@ import { parties, type Result } from "../game/party.js";
 import { carregarQuests, questsDoServidor, aceitar, progredirAbate, progredirFala, progredirChegada, progredirUso, atualizarColetas, aplicarRecompensa, xpAposGanho, estadoParaCliente, type QuestMap, type QuestRt } from "../game/quests.js";
 import type { QuestEvent, QuestDefsEvent, QuestDef, AcaoUsar, DicasVistasEvent } from "@frixep/shared";
 import { dicaValida, dicasValidas } from "@frixep/shared";
+import { valoresEfetivos, type BalanceEvent } from "@frixep/shared";
+import type { Balanceamento } from "../balanceamento.js";
 import type { ActiveBuff, BuffsEvent } from "@frixep/shared";
 
 /** Quests carregadas dos JSON em packages/server/data/quests. Se algum estiver errado, o servidor nem sobe (mensagem diz o arquivo). */
@@ -85,12 +87,16 @@ export class ZoneRoom extends Room<ZoneState> {
   private userIds = new Map<string, string>(); // sessionId -> accountId
   private t = 0; // relógio da simulação (s)
   private repo!: Repo;
+  private balance!: Balanceamento;
+  private soltarBalance?: () => void;
   private market!: Market;
   private saver?: ReturnType<typeof setInterval>;
   private zone!: ZoneDef;
 
-  onCreate(options: { repo: Repo }) {
+  onCreate(options: { repo: Repo; balance: Balanceamento }) {
     this.repo = options.repo;
+    this.balance = options.balance;
+    this.soltarBalance = this.balance.ouvir((mudou) => this.aplicarBalanceamento(mudou)); // ajuste do admin: vale já, nesta sala também
     liveRooms.add(this);
     const ttl = Number(process.env.MARKET_TTL_S); // só para testes (fora de produção): listagens que vencem em segundos
     this.market = new Market(options.repo.db, options.repo, Date.now, process.env.NODE_ENV !== "production" && ttl > 0 ? ttl * 1000 : undefined);
@@ -1039,6 +1045,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   onJoin(client: Client, options: { load?: boolean } | undefined, auth: JoinAuth) {
     this.userIds.set(client.sessionId, auth.user.id);
+    client.send(Evt.Balance, { valores: valoresEfetivos() } satisfies BalanceEvent); // valores efetivos do balanceamento (dicas e fichas mostram os números certos)
     active.set(auth.user.id, { room: this, sid: client.sessionId });
     const pl = new Player();
     const from = arrivals.get(auth.character.id); // chegou por um portal: nasce junto do portal de volta
@@ -1132,8 +1139,34 @@ export class ZoneRoom extends Room<ZoneState> {
     }
   }
 
+  /** ajuste de balanceamento ao vivo: avisa os clientes e ajusta o que já está em jogo (vida dos inimigos e dos jogadores vivos) */
+  private aplicarBalanceamento(mudou: string[]) {
+    if (mudou.length === 0) return;
+    this.broadcast(Evt.Balance, { valores: valoresEfetivos() } satisfies BalanceEvent);
+    // inimigos vivos: a vida nova vale também para eles, mantendo a fração que ainda têm (o dano já usa o valor novo a cada golpe)
+    this.state.enemies.forEach((e) => {
+      if (!mudou.includes(`inimigo.${e.kind}.hp`)) return;
+      const novo = enemyHp(e.level, e.kind);
+      if (novo === e.maxHp) return;
+      const frac = e.maxHp > 0 ? e.hp / e.maxHp : 1;
+      e.maxHp = novo;
+      if (e.st !== "dead") e.hp = Math.max(1, Math.round(novo * frac));
+    });
+    // jogadores vivos: a vida máxima da classe muda; quem está vivo mantém a fração de vida que tinha
+    if (mudou.some((k) => k.startsWith("classe."))) {
+      this.state.players.forEach((p) => {
+        const novo = maxHpFor(this.classOf(p).id, p.level, p.gear.hp);
+        if (novo === p.maxHp) return;
+        const frac = p.maxHp > 0 ? p.hp / p.maxHp : 1;
+        p.maxHp = novo;
+        if (!p.dead) p.hp = Math.max(1, Math.min(novo, Math.round(novo * frac)));
+      });
+    }
+  }
+
   async onDispose() {
     liveRooms.delete(this);
+    this.soltarBalance?.();
     clearInterval(this.saver);
     await this.saveAll();
   }
