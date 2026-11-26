@@ -60,6 +60,8 @@ config_suite() {
     test/buffs.mjs) echo "LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1|" ;;
     # Moderação (C0.6): a primeira conta criada vira admin (só não-produção).
     test/moderacao.mjs) echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1|" ;;
+    # Painel de administração (F1): o código de 2FA vai para um arquivo que o teste lê (só fora de produção).
+    test/painel_admin.mjs) echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1 PAINEL_CODIGO_ARQUIVO=$PAINEL_ARQ|PAINEL_CODIGO_FILE=$PAINEL_ARQ" ;;
     # Quests (C1.1) e quest de abate REAL (PD-07).
     test/quests.mjs) echo "QUEST_TEST=1 QUEST_FIXTURE=1 API_RATE_MULT=100|" ;;
     test/quests_combate.mjs) echo "QUEST_TEST=1 QUEST_FIXTURE=1 LOOT_TEST=1 API_RATE_MULT=100|" ;;
@@ -82,8 +84,8 @@ config_suite() {
       echo "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1|TALENTO_MODO=zona" ;;
     # Balanceamento ao vivo: fase 1 (permissão, limites, efeito na hora, desfazer) e fase 2 (reinício, mesmo banco em arquivo).
     test/balanceamento.mjs)
-      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=2 PGLITE_DIR=$BAL_DB|BALANCE_FASE=1"
-      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=2 PGLITE_DIR=$BAL_DB|BALANCE_FASE=2" ;;
+      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=2 PGLITE_DIR=$BAL_DB PAINEL_CODIGO_ARQUIVO=$BAL_PAINEL|BALANCE_FASE=1 PAINEL_CODIGO_FILE=$BAL_PAINEL"
+      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=2 PGLITE_DIR=$BAL_DB PAINEL_CODIGO_ARQUIVO=$BAL_PAINEL|BALANCE_FASE=2 PAINEL_CODIGO_FILE=$BAL_PAINEL" ;;
     # Loadouts (C2.4): fase 1 (nível 10) e fase 2 (nível 6) no MESMO banco em arquivo; zona recusa (ver run_loadouts).
     test/loadouts.mjs)
       echo "VARIACAO_TEST_LEVEL=10 ECON_TEST=1 API_RATE_MULT=100 PGLITE_DIR=$LOADOUT_DB|LOADOUT_FASE=1 LOADOUT_TOKEN_FILE=$LOADOUT_TOKEN"
@@ -94,6 +96,8 @@ config_suite() {
 }
 LOADOUT_DB="../../.data/loadouts-test-pglite"; LOADOUT_TOKEN="../../.data/loadouts-test-token.txt"
 BAL_DB="../../.data/balanceamento-test-pglite"
+BAL_PAINEL="../../.data/balanceamento-test-codigo.txt"
+PAINEL_ARQ="../../.data/painel-test-codigo.txt"
 
 # Listas geradas por glob (ordem alfabética estável, LC_ALL=C).
 export LC_ALL=C
@@ -198,11 +202,11 @@ if [ ${#SUITES[@]} -gt 0 ]; then
   echo "== Suítes com servidor de teste (${#SUITES[@]} arquivos, um servidor novo por caso)"
   for file in "${SUITES[@]}"; do
     [ "$file" = test/loadouts.mjs ] && { rm -rf "$LOADOUT_DB" "$LOADOUT_TOKEN"; mkdir -p ../../.data; }
-    [ "$file" = test/balanceamento.mjs ] && { rm -rf "$BAL_DB"; mkdir -p ../../.data; }
+    [ "$file" = test/balanceamento.mjs ] && { rm -rf "$BAL_DB" "$BAL_PAINEL"; mkdir -p ../../.data; }
     # fd 3: o node da suíte não pode consumir a lista de casos pela entrada padrão
     while IFS='|' read -r -u 3 srv suite; do run_case "$srv" "$file" "$suite"; done 3< <(config_suite "$file")
     [ "$file" = test/loadouts.mjs ] && rm -rf "$LOADOUT_DB" "$LOADOUT_TOKEN"
-    [ "$file" = test/balanceamento.mjs ] && rm -rf "$BAL_DB"
+    [ "$file" = test/balanceamento.mjs ] && rm -rf "$BAL_DB" "$BAL_PAINEL"
   done
 fi
 

@@ -4,6 +4,7 @@
  */
 import { aplicarAjustes, mapaAjustes, valoresEfetivos, validarAjuste, valorEfetivo, valorPadrao } from "@frixep/shared";
 import { MOTIVO_MAX } from "./moderacao.js";
+import { registrarAuditoria } from "./painel/auditoria.js";
 import type { Db } from "./db/index.js";
 
 export interface HistoricoItem { id: number; chave: string; antes: number; depois: number; motivo: string; conta: string; criadoEm: string }
@@ -42,7 +43,7 @@ export class Balanceamento {
       const m = (motivo ?? "").trim();
       if (!m) return { ok: false, erro: "Escreva o motivo da mudança.", status: 400 } as const;
       if (m.length > MOTIVO_MAX) return { ok: false, erro: `O motivo passa de ${MOTIVO_MAX} caracteres.`, status: 400 } as const;
-      return this.gravar(chave, valor, m, conta);
+      return this.gravar(chave, valor, m, conta, "alterar_balanceamento");
     });
   }
 
@@ -54,7 +55,7 @@ export class Balanceamento {
       const m = (motivo ?? "").trim();
       if (!m) return { ok: false, erro: "Escreva o motivo da mudança.", status: 400 } as const;
       if (m.length > MOTIVO_MAX) return { ok: false, erro: `O motivo passa de ${MOTIVO_MAX} caracteres.`, status: 400 } as const;
-      return this.gravar(chave, p, m, conta);
+      return this.gravar(chave, p, m, conta, "voltar_padrao_balanceamento");
     });
   }
 
@@ -67,7 +68,7 @@ export class Balanceamento {
       if (valorEfetivo(h.chave) !== Number(h.depois)) {
         return { ok: false, erro: "Esse valor mudou depois desta alteração: desfaça as mais recentes primeiro.", status: 409 } as const;
       }
-      return this.gravar(h.chave, Number(h.antes), `Desfeito (alteração #${id})`, conta);
+      return this.gravar(h.chave, Number(h.antes), `Desfeito (alteração #${id})`, conta, "desfazer_balanceamento");
     });
   }
 
@@ -86,7 +87,7 @@ export class Balanceamento {
   }
 
   /** grava no banco (ajuste + histórico, numa transação), depois aplica na memória e avisa as salas */
-  private async gravar(chave: string, valor: number, motivo: string, conta: string): Promise<Resultado> {
+  private async gravar(chave: string, valor: number, motivo: string, conta: string, acao: string): Promise<Resultado> {
     const antes = valorEfetivo(chave)!;
     if (antes === valor) return { ok: false, erro: "O valor já é esse.", status: 400 };
     const padrao = valorPadrao(chave)!;
@@ -102,6 +103,8 @@ export class Balanceamento {
         );
       await t.query("insert into balance_historico (chave, antes, depois, motivo, conta) values ($1, $2, $3, $4, $5)", [chave, antes, valor, motivo, conta]);
     });
+    // auditoria do painel (quem, quando, o que mudou e o motivo); o histórico próprio continua em balance_historico
+    await registrarAuditoria(this.db, { adminContaId: conta, acao, alvoNome: chave, antes, depois: valor, detalhes: { motivo } });
     this.ajustes = proximo;
     const mudou = aplicarAjustes(this.ajustes);
     for (const fn of this.ouvintes) {

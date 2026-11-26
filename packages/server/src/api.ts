@@ -1,10 +1,11 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { PLAYABLE_CLASSES, START_ZONE, MAX_CHARACTERS_PER_ACCOUNT, type CharClass } from "@frixep/shared";
-import { verifySession, type AuthUser } from "./auth.js";
+import { exigirSessao, type AuthUser } from "./auth.js";
 import { registrarEvento } from "./telemetria.js";
 import { Repo, validateName } from "./db/repo.js";
-import { isAdmin } from "./moderacao.js";
+import { PROTEGER_PAINEL } from "./painel/rotas.js";
 import type { Balanceamento } from "./balanceamento.js";
+import { painelRouter } from "./painel/rotas.js";
 
 declare module "express-serve-static-core" {
   interface Request { user?: AuthUser }
@@ -29,29 +30,13 @@ setInterval(() => {
   for (const [k, h] of hits) if (now > h.reset) hits.delete(k);
 }, 60_000).unref();
 
-async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const h = req.headers.authorization ?? "";
-  try {
-    req.user = await verifySession(h.startsWith("Bearer ") ? h.slice(7) : undefined);
-    next();
-  } catch {
-    res.status(401).json({ error: "Não autorizado." });
-  }
-}
-
-/**
- * PONTO DE TROCA DA AUTENTICAÇÃO DO PAINEL ADMIN. Hoje as rotas /api/admin/* usam requireAuth + isAdmin (moderacao.ts).
- * Quando a F1 do painel (acesso com 2FA) entrar na main, troque a lista ADMIN_ROTAS abaixo pelo middleware de sessão dela
- * (ex.: [limit(...), exigirSessaoPainel]); nenhuma rota de balanceamento precisa mudar.
- */
-function exigirAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!isAdmin(req.user?.id)) return res.status(403).json({ error: "Reservado a administradores." });
-  next();
-}
-const ADMIN_ROTAS = [requireAuth, exigirAdmin] as const;
+const requireAuth = exigirSessao;
 
 const shape = (c: { id: string; name: string; class: string; level: number; xp: number; zone?: number }) =>
   ({ id: c.id, name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? START_ZONE });
+
+/** rotas de balanceamento: mesma proteção do painel da F1 (sessão, conta admin e token do painel) */
+const ADMIN_ROTAS = PROTEGER_PAINEL;
 
 export function apiRouter(repo: Repo, balance: Balanceamento): Router {
   const r = Router();
@@ -102,6 +87,7 @@ export function apiRouter(repo: Repo, balance: Balanceamento): Router {
     }
   });
 
+
   r.get("/me", limit(60, 60_000), requireAuth, async (req, res) => {
     try {
       // token de uma conta que não existe (ex.: emitido antes da F2): sessão inválida => volta ao login
@@ -132,6 +118,9 @@ export function apiRouter(repo: Repo, balance: Balanceamento): Router {
       res.status(500).json({ error: "Erro interno." });
     }
   });
+
+  // painel de administração: /api/admin/* (cada rota exige conta admin; o resto exige também o código de 2FA)
+  r.use("/admin", painelRouter(repo));
 
   return r;
 }

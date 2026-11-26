@@ -1,6 +1,6 @@
 // Teste de ponta a ponta do balanceamento ao vivo: chaves, permissão, limites, efeito imediato, desfazer e persistência.
 // Fase "1" (servidor novo, a 1ª conta criada vira admin pelo seam de teste):
-//   - não-admin recebe 403 em todas as rotas /api/admin/balanceamento;
+//   - não-admin recebe 403 em todas as rotas /balanceamento;
 //   - o admin lê o mapa, muda a vida do lobo (vale na hora, inclusive para o lobo vivo na zona 2),
 //     recusa valor fora do limite, desfaz a mudança (volta o valor anterior) e salva de novo para a próxima fase.
 // Fase "2" (MESMO banco em arquivo, servidor reiniciado): o ajuste salvo continua valendo; voltar ao padrão funciona.
@@ -8,6 +8,12 @@
 //   BALANCE_FASE=1 node test/balanceamento.mjs
 //   BALANCE_FASE=2 node test/balanceamento.mjs
 import { Client } from "colyseus.js";
+import { readFile } from "node:fs/promises";
+
+// código de 2FA do painel: o servidor de teste grava o último código neste arquivo (PAINEL_CODIGO_ARQUIVO)
+const ARQ_CODIGO = process.env.PAINEL_CODIGO_FILE;
+if (!ARQ_CODIGO) throw new Error("defina PAINEL_CODIGO_FILE (o mesmo arquivo que o servidor de teste grava)");
+let PAINEL = null; // token do painel (X-Painel-Token), definido depois do código de 2FA
 
 const HTTP = process.env.SERVER ?? "http://localhost:2999";
 const WS = HTTP.replace(/^http/, "ws");
@@ -33,13 +39,29 @@ async function conta(prefixo) {
   return token;
 }
 const api = (token, metodo, caminho, corpo) =>
-  fetch(`${HTTP}${caminho}`, {
+  fetch(`${HTTP}/api/admin${caminho}`, {
     method: metodo,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(PAINEL ? { "X-Painel-Token": PAINEL } : {}) },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
   });
+// fluxo do painel (como em painel_admin.mjs): pede o código, confirma e guarda o token do painel
+async function linhasCodigo() {
+  return (await readFile(ARQ_CODIGO, "utf8").catch(() => "")).split(String.fromCharCode(10)).filter(Boolean);
+}
+async function entrarPainel(token) {
+  const antes = (await linhasCodigo()).length;
+  const pedido = await fetch(`${HTTP}/api/admin/codigo`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  if (!pedido.ok) throw new Error(`pedir código do painel: ${pedido.status}`);
+  for (let i = 0; i < 60 && (await linhasCodigo()).length <= antes; i++) await new Promise((r) => setTimeout(r, 50));
+  const codigo = (await linhasCodigo()).at(-1);
+  const r = await fetch(`${HTTP}/api/admin/sessao`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ codigo }) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(`confirmar código do painel: ${r.status} ${JSON.stringify(j)}`);
+  return j.token;
+}
+
 const listar = async (token) => {
-  const r = await api(token, "GET", "/api/admin/balanceamento");
+  const r = await api(token, "GET", "/balanceamento");
   const j = await r.json();
   if (!j.ajustes) throw new Error(`listar o balanceamento: status ${r.status} ${JSON.stringify(j)}`);
   return j.ajustes;
@@ -63,13 +85,16 @@ async function lobosDaZona(token) {
 if (FASE === "1") {
   const ADM = await conta("Adm");
   const N = await conta("Nao");
+  const semPainel = await fetch(`${HTTP}/api/admin/balanceamento`, { headers: { Authorization: `Bearer ${ADM}` } });
+  check("admin sem token do painel => 401", semPainel.status === 401, `status ${semPainel.status}`);
+  PAINEL = await entrarPainel(ADM);
 
   console.log("\n== não-admin recebe 403 ==");
-  const r1 = await api(N, "GET", "/api/admin/balanceamento");
+  const r1 = await api(N, "GET", "/balanceamento");
   check("não-admin lê o mapa: 403", r1.status === 403, `status ${r1.status}`);
-  const r2 = await api(N, "PUT", "/api/admin/balanceamento/inimigo.wolf.hp", { valor: 90, motivo: "tentativa" });
+  const r2 = await api(N, "PUT", "/balanceamento/inimigo.wolf.hp", { valor: 90, motivo: "tentativa" });
   check("não-admin não altera: 403", r2.status === 403, `status ${r2.status}`);
-  const r3 = await api(N, "GET", "/api/admin/balanceamento/historico");
+  const r3 = await api(N, "GET", "/balanceamento/historico");
   check("não-admin não vê o histórico: 403", r3.status === 403, `status ${r3.status}`);
 
   console.log("\n== mapa gerado das definições ==");
@@ -85,7 +110,7 @@ if (FASE === "1") {
   check("lobo vivo com a vida padrão (178 no nível 10)", vidaAntes === VIDA_PADRAO, `maxHp ${vidaAntes}`);
 
   console.log("\n== admin muda a vida do lobo: vale na hora ==");
-  const mudou = await api(ADM, "PUT", "/api/admin/balanceamento/inimigo.wolf.hp", { valor: 90, motivo: "lobo apanhando demais" });
+  const mudou = await api(ADM, "PUT", "/balanceamento/inimigo.wolf.hp", { valor: 90, motivo: "lobo apanhando demais" });
   check("alteração aceita (200)", mudou.status === 200, `status ${mudou.status}`);
   const novaVida = VIDA_NOVA;
   check("lobo vivo recebe a vida nova (333)", await until(() => lobos()[0]?.maxHp === novaVida), `maxHp ${lobos()[0]?.maxHp}`);
@@ -94,41 +119,46 @@ if (FASE === "1") {
   check("o painel mostra o valor atual e que foi alterado", depois.atual === 90 && depois.alterado === true, JSON.stringify(depois));
 
   console.log("\n== limites de segurança ==");
-  const acima = await api(ADM, "PUT", "/api/admin/balanceamento/inimigo.wolf.hp", { valor: 999999, motivo: "teste" });
+  const acima = await api(ADM, "PUT", "/balanceamento/inimigo.wolf.hp", { valor: 999999, motivo: "teste" });
   check("valor acima do máximo é recusado (400)", acima.status === 400, `status ${acima.status}`);
-  const abaixo = await api(ADM, "PUT", "/api/admin/balanceamento/inimigo.wolf.hp", { valor: 1, motivo: "teste" });
+  const abaixo = await api(ADM, "PUT", "/balanceamento/inimigo.wolf.hp", { valor: 1, motivo: "teste" });
   check("valor abaixo do mínimo é recusado (400)", abaixo.status === 400, `status ${abaixo.status}`);
-  const semMotivo = await api(ADM, "PUT", "/api/admin/balanceamento/inimigo.wolf.hp", { valor: 80, motivo: "  " });
+  const semMotivo = await api(ADM, "PUT", "/balanceamento/inimigo.wolf.hp", { valor: 80, motivo: "  " });
   check("sem motivo é recusado (400)", semMotivo.status === 400, `status ${semMotivo.status}`);
   check("valor recusado não muda o lobo", lobos()[0]?.maxHp === novaVida);
 
   console.log("\n== desfazer volta o valor anterior ==");
-  const hist = await (await api(ADM, "GET", "/api/admin/balanceamento/historico?chave=inimigo.wolf.hp")).json();
+  const hist = await (await api(ADM, "GET", "/balanceamento/historico?chave=inimigo.wolf.hp")).json();
   const ultima = hist.historico[0];
   check("histórico guarda antes, depois, motivo e conta", ultima && ultima.antes === 48 && ultima.depois === 90 && ultima.motivo === "lobo apanhando demais" && !!ultima.conta && !!ultima.criadoEm, JSON.stringify(ultima));
-  const desf = await api(ADM, "POST", `/api/admin/balanceamento/desfazer/${ultima.id}`, {});
+  const desf = await api(ADM, "POST", `/balanceamento/desfazer/${ultima.id}`, {});
   check("desfazer aceito (200)", desf.status === 200, `status ${desf.status}`);
   check("lobo volta à vida anterior (178)", await until(() => lobos()[0]?.maxHp === VIDA_PADRAO), `maxHp ${lobos()[0]?.maxHp}`);
   check("o painel volta ao padrão (48, não alterado)", await until(async () => { const a = ajuste(await listar(ADM), "inimigo.wolf.hp"); return a.atual === 48 && a.alterado === false; }));
 
   console.log("\n== salvo de novo para a fase 2 (reinício) ==");
-  const de = await api(ADM, "PUT", "/api/admin/balanceamento/inimigo.wolf.hp", { valor: 90, motivo: "para a fase 2" });
+  const de = await api(ADM, "PUT", "/balanceamento/inimigo.wolf.hp", { valor: 90, motivo: "para a fase 2" });
   check("alteração salva para o reinício (200)", de.status === 200);
+  const aud = await (await api(ADM, "GET", "/auditoria?limite=100")).json();
+  const linhas = (aud.itens ?? []).filter((l) => l.acao === "alterar_balanceamento" && l.alvo_nome === "inimigo.wolf.hp");
+  check("a auditoria do painel registra as alterações (com motivo)", linhas.length >= 1 && linhas.some((l) => l.detalhes?.motivo === "lobo apanhando demais"), `linhas ${linhas.length}`);
+  check("a auditoria registra o desfazer", (aud.itens ?? []).some((l) => l.acao === "desfazer_balanceamento"));
   lobosRoom.leave(true);
   await sleep(200);
 } else if (FASE === "2") {
   const ADM = await conta("Adm2");
+  PAINEL = await entrarPainel(ADM);
   console.log("\n== depois do reinício ==");
   const lista = await listar(ADM);
   const lobo = ajuste(lista, "inimigo.wolf.hp");
   check("o ajuste salvo continua valendo (90)", lobo?.atual === 90 && lobo?.alterado === true, JSON.stringify(lobo));
   const { room, lobos } = await lobosDaZona(ADM);
   check("lobo nasce/está com a vida salva (333 no nível 10)", await until(() => lobos()[0]?.maxHp === VIDA_NOVA), `maxHp ${lobos()[0]?.maxHp}`);
-  const hist = await (await api(ADM, "GET", "/api/admin/balanceamento/historico?chave=inimigo.wolf.hp")).json();
+  const hist = await (await api(ADM, "GET", "/balanceamento/historico?chave=inimigo.wolf.hp")).json();
   check("o histórico também sobrevive ao reinício", hist.historico.length >= 3, `entradas ${hist.historico.length}`);
 
   console.log("\n== voltar ao padrão ==");
-  const pad = await api(ADM, "POST", "/api/admin/balanceamento/inimigo.wolf.hp/padrao", { motivo: "fim do teste" });
+  const pad = await api(ADM, "POST", "/balanceamento/inimigo.wolf.hp/padrao", { motivo: "fim do teste" });
   check("voltar ao padrão aceito (200)", pad.status === 200, `status ${pad.status}`);
   check("lobo volta à vida padrão (178)", await until(() => lobos()[0]?.maxHp === VIDA_PADRAO), `maxHp ${lobos()[0]?.maxHp}`);
   const final = ajuste(await listar(ADM), "inimigo.wolf.hp");

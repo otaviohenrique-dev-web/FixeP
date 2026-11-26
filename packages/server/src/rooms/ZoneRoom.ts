@@ -21,6 +21,35 @@ import { verifySession, type AuthUser } from "../auth.js";
 const liveRooms = new Set<ZoneRoom>();
 /** Jogadores online em todas as zonas (o cliente mostra no painel de FPS/ping). */
 export const onlineCount = () => { let n = 0; for (const r of liveRooms) n += r.state.players.size; return n; };
+
+/** jogadores online agora, por zona (painel de administração: visão geral) */
+export function jogadoresPorZona(): { zona: number; nome: string; jogadores: number }[] {
+  const porZona = new Map<number, { zona: number; nome: string; jogadores: number }>();
+  for (const r of liveRooms) {
+    const z = r.infoZona();
+    const acc = porZona.get(z.zona) ?? { ...z, jogadores: 0 };
+    acc.jogadores += z.jogadores;
+    porZona.set(z.zona, acc);
+  }
+  return [...porZona.values()].sort((a, b) => a.zona - b.zona);
+}
+
+/** a conta está online agora (em alguma zona)? */
+export const contaOnline = (contaId: string): boolean => active.has(contaId);
+
+/** derruba a sessão da conta, se estiver online. Código de saída: 4003 banido, 4005 expulso pelo painel. */
+export function derrubarConta(contaId: string, codigo: number): boolean {
+  const s = active.get(contaId);
+  if (!s) return false;
+  s.room.clients.getById(s.sid)?.leave(codigo);
+  return true;
+}
+
+/** aviso para a conta, se ela estiver online em alguma zona (usado pelo painel) */
+export function avisarContaOnline(contaId: string, text: string): void {
+  const s = active.get(contaId);
+  if (s) s.room.notificarSessao(s.sid, text);
+}
 import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
 import { registrarEvento } from "../telemetria.js";
@@ -1162,6 +1191,16 @@ export class ZoneRoom extends Room<ZoneState> {
         if (!p.dead) p.hp = Math.max(1, Math.min(novo, Math.round(novo * frac)));
       });
     }
+  }
+
+  /** zona desta sala e quantos jogadores estão nela (painel de administração) */
+  infoZona(): { zona: number; nome: string; jogadores: number } {
+    return { zona: this.zone.id, nome: this.zone.name, jogadores: this.state.players.size };
+  }
+
+  /** aviso discreto para uma sessão desta sala (usado pelo painel, fora da sala) */
+  notificarSessao(sid: string, text: string) {
+    this.notify(sid, text);
   }
 
   async onDispose() {
