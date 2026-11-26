@@ -117,12 +117,13 @@ async function renascer() {
 
 // Mata UM inimigo do tipo: prefere um inimigo sozinho, vai até ele e ataca até cair (combate real, sem atalho).
 async function matarUm(kind) {
+  // conta QUALQUER inimigo vivo perto (bandos misturam lobos e esqueletos): quem está no meio de um bando puxa todos
   const escolher = () => {
     const me = P.me(); let best = null, bd = Infinity;
-    const vivos = [];
-    P.r.state.enemies.forEach((e, k) => { if (e.kind === kind && e.st !== "dead" && e.hp > 0) vivos.push({ k, e }); });
+    const vivos = [], todos = [];
+    P.r.state.enemies.forEach((e, k) => { if (e.st !== "dead" && e.hp > 0) { todos.push({ k, e }); if (e.kind === kind) vivos.push({ k, e }); } });
     for (const { k, e } of vivos) {
-      const vizinhos = vivos.filter((o) => o.k !== k && Math.hypot(o.e.x - e.x, o.e.y - e.y) < 10).length;
+      const vizinhos = todos.filter((o) => o.k !== k && Math.hypot(o.e.x - e.x, o.e.y - e.y) < 9).length;
       const d = Math.hypot(e.x - me.x, e.y - me.y) + vizinhos * 100;
       if (d < bd) { bd = d; best = k; }
     }

@@ -3,7 +3,7 @@ import {
   EQUIP_SLOT_NAME, CLASS_DEFS, itemValue, listingFee, suggestedPrice,
   type InventorySnapshot, type ItemDef, type NpcDef, type MarketPage, type MarketMineEvent, type MarketDoneEvent, type MarketFilter, type MarketPricesEvent, type MyListing, type MarketCurrency, type CharClass, type ItemKind, type Rarity,
 } from "@frixep/shared";
-import { bindItemTip } from "./itemtip";
+import { bindItemTip, openItemTip, COARSE } from "./itemtip";
 
 /**
  * Janela do leiloeiro (mercado dos jogadores), em DOM. O servidor decide tudo (taxa, custódia, limites, quem comprou primeiro):
@@ -57,8 +57,7 @@ const CSS = `
 .mk-form .sum b{color:#ffd08a}
 .mk-chip{display:inline-block;padding:2px 7px;border-radius:9px;font:700 10px/1.3 "Cinzel",Georgia,serif;letter-spacing:.06em}
 .mk-chip.act{background:rgba(125,214,138,.15);color:#9fe0a8}.mk-chip.sold{background:rgba(255,200,90,.15);color:#ffd08a}.mk-chip.exp{background:rgba(255,110,90,.15);color:#ffb3a6}
-.mk-hint{margin:0;padding:0 14px 8px;font:400 12px/1.45 Georgia,serif;color:#9fc0e0}
-@media (max-width:620px){.mk-row{grid-template-columns:40px 1fr}.mk-act{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center}.mk-ic{width:40px;height:40px}}
+.mk-hint{margin:0;padding:0 14px 8px;font:400 12px/1.45 Georgia,serif;color:#9fc0e0}@media (max-width:620px){.mk-row{grid-template-columns:40px 1fr}.mk-act{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center}.mk-ic{width:40px;height:40px}}
 .mk-prices{flex:1 1 100%;min-width:0;display:flex;flex-direction:column;gap:5px;padding:6px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2)}
 .mk-ph{font:700 12px/1.35 "Cinzel",Georgia,serif;color:#ffd08a}
 .mk-pl{display:flex;flex-direction:column;gap:3px;max-height:150px;overflow:auto}
@@ -309,7 +308,17 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
       b.type = "button";
       b.onclick = () => { listSlot = listSlot === i ? -1 : i; render(); };
       act.append(b);
-      row.append(iconBox(st.id, st.qty), info, act);
+      // ficha completa (afixos, refino, gemas): passar o mouse, clicar, ou segurar o dedo no celular
+      const ic = iconBox(st.id, st.qty);
+      const tipData = () => ({ def: d, af: st.af, rf: st.rf, gm: st.gm, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null });
+      bindItemTip(ic, tipData);
+      bindItemTip(info, tipData);
+      // clique com o mouse abre a ficha; no toque o segurar já faz isso (o toque curto não deve abrir)
+      if (!COARSE) {
+        ic.addEventListener("click", () => openItemTip(ic, tipData()));
+        info.addEventListener("click", () => openItemTip(info, tipData()));
+      }
+      row.append(ic, info, act);
       if (listSlot === i) row.append(listForm(i, st.id, st.qty));
       list.append(row);
     });
