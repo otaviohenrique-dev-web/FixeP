@@ -110,7 +110,19 @@ export function mountBuffs(host: HTMLElement): BuffStrip {
     wrap.append(svg, glyph, count, secs, tip);
     // tooltip: passar o mouse, ou segurar o dedo (toque longo)
     let timer = 0;
-    const open = () => wrap.classList.add("open");
+    // a janela fica centralizada no ícone, mas nunca sai da tela (antes, o ícone da esquerda cortava o texto)
+    const place = () => {
+      const r = wrap.getBoundingClientRect();
+      const vw = document.documentElement.clientWidth;
+      const w = Math.min(210, vw - 16);
+      tip.style.position = "fixed";
+      tip.style.width = `${w}px`;
+      tip.style.minWidth = "0";
+      tip.style.right = "auto";
+      tip.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - w / 2, vw - w - 8))}px`;
+      tip.style.top = `${r.bottom + 8}px`;
+    };
+    const open = () => { place(); wrap.classList.add("open"); };
     const close = () => { clearTimeout(timer); wrap.classList.remove("open"); };
     wrap.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") open(); });
     wrap.addEventListener("pointerleave", close);
