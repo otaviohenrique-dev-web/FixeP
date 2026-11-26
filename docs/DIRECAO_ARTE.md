@@ -45,6 +45,8 @@ Fundo fixo `#12121a` (sem cenário, sem sombra no fundo). A cor de cada raridade
 
 ## 3. Raridades (8)
 
+**Ordem oficial, do menos raro ao mais raro:** Lixo → Normal (Comum) → Incomum → Raro → Épico → Lendário → Mítico → Ancestral. Essa ordem vale para geração de arte, lista de tarefas e exibição.
+
 As cores e os sufixos já estão no código (`packages/shared/src/items.ts`). **Decisão: manter as cores do código.** O PDF só difere em hex pequenos (Lixo, Lendário, Ancestral); não vale trocar o código por isso.
 
 | # | Raridade | Nome no código | Sufixo | Moldura (hex) | Acabamento |
@@ -177,3 +179,30 @@ Estas decisões ficam para depois, sem bloquear a fila acima:
 - **Decoração de cenário** (árvores, pedras, ruínas): não definida no código.
 - **Cosméticos:** `assets/cosmetics/` está vazia e não há código para eles.
 - **Moedas:** arte pronta, uso no código ainda não existe.
+
+## 10. Geração com Gemini (consistência)
+
+Vale para os ícones de item (seção 4.1). Objetivo: as 8 raridades parecerem da mesma mão.
+
+**Passo 1: âncoras de estilo.** Antes de qualquer item, gerar uma âncora por raridade com o mesmo bloco de estilo e o mesmo objeto (Espada de Uma Mão). Aprovar as 8 juntas. Essas 8 viram referência para todo o resto.
+
+**Passo 2: prompt fixo.** Montar sempre na mesma ordem:
+
+```
+[BLOCO DE ESTILO] Item: [DESCRIÇÃO EM INGLÊS DA FAMÍLIA]. Rarity: [NOME DA ORDEM]. Finish: [ACABAMENTO]. Border color: [HEX].
+```
+
+- **Bloco de estilo:** copiar do PDF (`ARTE_PENDENTE.pdf`, seção "Bloco de estilo"), sem alterar uma palavra.
+- **Descrição da família:** copiar da tabela do PDF (inglês).
+- **Acabamento e hex:** da tabela da seção 3 deste doc (não do PDF, quando diferirem).
+
+**Passo 3: regras de consistência.**
+- Usar sempre a mesma âncora de referência (imagem anexada) junto do prompt, quando a ferramenta permitir.
+- Mesmo tamanho, enquadramento e espessura de moldura em todas as raridades; só a cor e o acabamento mudam.
+- Mesmo objeto base em uma família, do Lixo ao Ancestral: só a ornamentação cresce.
+- Rejeitar qualquer imagem com fundo que não seja `#12121a`, texto, moldura fora da cor ou brilho vazando para fora.
+- Conferir em 48 x 48 px antes de aceitar.
+
+**Passo 4: nomes e pastas.** Salvar como `item_<família>_<raridade>.png` em `assets/items/` (raridade em inglês: `junk`, `common`, `uncommon`, `rare`, `epic`, `legendary`, `mythic`, `ancestral`). Gerar a versão mestre em 512 px e reduzir para 48 px no jogo. Registrar a ferramenta em `assets/CREDITS.md`.
+
+**Passo 5: ordem de geração.** Espada de Uma Mão nas 8 raridades (piloto), na ordem Lixo → Ancestral. Só depois a próxima família.
