@@ -44,6 +44,7 @@ import { mountBuilds, type BuildsUi } from "./builds";
 import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
 import { limparTalentos, pontosLivres, podeSubirTalento, talentosDaClasse, VARIACAO_SLOTS, VARIACAO_NIVEL } from "@frixep/shared";
 import { mountTutorial, type TutorialUi } from "./tutorial";
+import { mountRastreador, type RastreadorUi } from "./rastreador";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
 import type { DicasVistasEvent, ActiveBuff } from "@frixep/shared";
 import { mountVault, type VaultUi } from "./vault";
@@ -143,7 +144,8 @@ class WorldScene extends Phaser.Scene {
   private projs = new Map<string, { x: number; y: number; dx: number; dy: number; speed: number; left: number; blast?: number; obj: Phaser.GameObjects.Shape }>();
   private traps = new Map<string, Phaser.GameObjects.Shape[]>();
   private zoneId = 1;
-  private tutorial!: TutorialUi; // faixa e bandeira do tutorial (C1.4)
+  private tutorial!: TutorialUi; // bandeira do tutorial (C1.4)
+  private rastreador!: RastreadorUi; // missões à esquerda: passo do tutorial e missões aceitas
   private dicas!: Dicas; // balão de dicas contextuais, uma vez por personagem (C1.6)
   private gates: GateLayer | null = null; // portões da zona (estruturas de pedra no lugar dos antigos anéis)
   private lowHp!: LowHp; // moldura vermelha de vida baixa
@@ -280,7 +282,8 @@ class WorldScene extends Phaser.Scene {
     this.makeEffects();
     this.ground = new GroundLayer(this, toScreen);
     this.npcs = new NpcLayer(this, toScreen, zoneNpcs(this.zoneId), this.atlases);
-    this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId }); // faixa do tutorial e bandeira (C1.4)
+    this.tutorial = mountTutorial({ scene: this, toScreen, getZone: () => this.zoneId }); // bandeira do tutorial (C1.4)
+    this.rastreador = mountRastreador({ onAbrirDiario: () => this.diario.open() }); // rastreador de missões à esquerda (abre o diário ao clicar)
     this.dicas = mountDicas({ enviar: (id) => this.room?.send(Msg.DicaVista, { id }), tutorialAberto: tutorialFaixaAberta }); // dicas contextuais (C1.6)
     this.selG = this.add.graphics().setDepth(0.35);
     this.aimG = this.add.graphics().setDepth(0.36);
@@ -584,8 +587,8 @@ class WorldScene extends Phaser.Scene {
       else this.inv.toast(t[0], t[1]);
     });
     room.onMessage(Evt.Notice, (m: NoticeEvent) => { this.inv.toast(String(m.text), m.ok ? "#9fe0a8" : "#ffb3a6"); this.econ.questNotice(String(m.text), !!m.ok); if (!m.ok) this.dicaDoAviso(String(m.text)); });
-    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); });
-    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); });
+    room.onMessage(Evt.Quests, (m: QuestEvent) => { this.econ.setQuests(m); this.diario.setQuests(m); this.tutorial.setQuests(m); this.rastreador.setQuests(m); });
+    room.onMessage(Evt.QuestDefs, (m: QuestDefsEvent) => { this.econ.setQuestDefs(m); this.diario.setDefs(m); this.tutorial.setDefs(m); this.rastreador.setDefs(m); });
     room.onMessage(Evt.DicasVistas, (m: DicasVistasEvent) => this.dicas.carregar(m)); // dicas já vistas por este personagem (C1.6)
     this.room.send(Msg.InvSync, {});
     this.room.send(Msg.QuestSync, {}); // pede o estado e as definições das quests (depois de registrar os receptores)
