@@ -56,14 +56,21 @@ export function validateName(raw: unknown): { ok: true; name: string } | { ok: f
 export class Repo {
   constructor(readonly db: Db) {}
 
-  async upsertAccount(provider: string, providerId: string, name: string): Promise<{ id: string; name: string }> {
+  /** cria ou atualiza a conta no login. O e-mail (quando o provedor o informa) só é trocado se vier um novo. */
+  async upsertAccount(provider: string, providerId: string, name: string, email?: string | null): Promise<{ id: string; name: string }> {
     const { rows } = await this.db.query<{ id: string; name: string }>(
-      `insert into accounts (id, provider, provider_id, name) values ($1, $2, $3, $4)
-       on conflict (provider, provider_id) do update set name = excluded.name
+      `insert into accounts (id, provider, provider_id, name, email) values ($1, $2, $3, $4, $5)
+       on conflict (provider, provider_id) do update set name = excluded.name, email = coalesce(excluded.email, accounts.email)
        returning id, name`,
-      [randomUUID(), provider, providerId, name],
+      [randomUUID(), provider, providerId, name, email ?? null],
     );
     return rows[0];
+  }
+
+  /** e-mail da conta (só para o painel: código de acesso e revelação registrada). null = sem e-mail (convidado ou provedor sem e-mail). */
+  async emailDaConta(contaId: string): Promise<string | null> {
+    const { rows } = await this.db.query<{ email: string | null }>("select email from accounts where id = $1", [contaId]);
+    return rows[0]?.email ?? null;
   }
 
   async accountExists(id: string): Promise<boolean> {
@@ -72,27 +79,38 @@ export class Repo {
   }
 
   // ---- moderação (C0.6)
-  async getSancao(contaId: string): Promise<{ silenciadoAte: number | null; banido: boolean }> {
-    const { rows } = await this.db.query<{ silenciado_ate: Date | null; banido: boolean }>(
-      "select silenciado_ate, banido from sancoes where conta_id = $1", [contaId]);
+  async getSancao(contaId: string): Promise<{ silenciadoAte: number | null; banido: boolean; banidoAte: number | null }> {
+    const { rows } = await this.db.query<{ silenciado_ate: Date | null; banido: boolean; banido_ate: Date | null }>(
+      "select silenciado_ate, banido, banido_ate from sancoes where conta_id = $1", [contaId]);
     const r = rows[0];
-    return { silenciadoAte: r?.silenciado_ate ? new Date(r.silenciado_ate).getTime() : null, banido: !!r?.banido };
+    const banidoAte = r?.banido_ate ? new Date(r.banido_ate).getTime() : null;
+    // banimento com prazo que já venceu não vale mais (o registro fica, só deixa de bloquear)
+    const banido = !!r?.banido && (banidoAte === null || banidoAte > Date.now());
+    return { silenciadoAte: r?.silenciado_ate ? new Date(r.silenciado_ate).getTime() : null, banido, banidoAte };
   }
 
-  /** grava o silêncio até `ateMs` (não mexe no banimento) */
-  async setSilencio(contaId: string, ateMs: number, motivo: string): Promise<void> {
+  /** grava o silêncio até `ateMs` (não mexe no banimento); null retira o silêncio */
+  async setSilencio(contaId: string, ateMs: number | null, motivo: string): Promise<void> {
     await this.db.query(
       `insert into sancoes (conta_id, silenciado_ate, motivo) values ($1, to_timestamp($2::float8 / 1000), $3)
        on conflict (conta_id) do update set silenciado_ate = excluded.silenciado_ate, motivo = excluded.motivo, atualizado_em = now()`,
       [contaId, ateMs, motivo]);
   }
 
-  /** grava o banimento ou o retira (não mexe no silêncio) */
-  async setBanido(contaId: string, banido: boolean, motivo: string): Promise<void> {
+  /** grava o banimento ou o retira (não mexe no silêncio). `ateMs` = fim do banimento; null = permanente. */
+  async setBanido(contaId: string, banido: boolean, motivo: string, ateMs: number | null = null): Promise<void> {
     await this.db.query(
-      `insert into sancoes (conta_id, banido, motivo) values ($1, $2, $3)
-       on conflict (conta_id) do update set banido = excluded.banido, motivo = excluded.motivo, atualizado_em = now()`,
-      [contaId, banido, motivo]);
+      `insert into sancoes (conta_id, banido, banido_ate, motivo) values ($1, $2, to_timestamp($3::float8 / 1000), $4)
+       on conflict (conta_id) do update set banido = excluded.banido, banido_ate = excluded.banido_ate, motivo = excluded.motivo, atualizado_em = now()`,
+      [contaId, banido, ateMs, motivo]);
+  }
+
+  /** sanções atuais da conta, cruas (para a auditoria: antes e depois) */
+  async sancaoCrua(contaId: string): Promise<{ silenciado_ate: string | null; banido: boolean; banido_ate: string | null; motivo: string | null }> {
+    const { rows } = await this.db.query<{ silenciado_ate: string | null; banido: boolean; banido_ate: string | null; motivo: string | null }>(
+      "select silenciado_ate::text as silenciado_ate, banido, banido_ate::text as banido_ate, motivo from sancoes where conta_id = $1",
+      [contaId]);
+    return rows[0] ?? { silenciado_ate: null, banido: false, banido_ate: null, motivo: null };
   }
 
   /** personagem pelo nome (sem diferenciar maiúsculas/acentos, como na criação) */

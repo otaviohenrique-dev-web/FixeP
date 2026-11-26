@@ -60,6 +60,8 @@ config_suite() {
     test/buffs.mjs) echo "LOOT_TEST=1 API_RATE_MULT=100 TEST_START_ZONE=1|" ;;
     # Moderação (C0.6): a primeira conta criada vira admin (só não-produção).
     test/moderacao.mjs) echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1|" ;;
+    # Painel de administração (F1): o código de 2FA vai para um arquivo que o teste lê (só fora de produção).
+    test/painel_admin.mjs) echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1 PAINEL_CODIGO_ARQUIVO=$PAINEL_ARQ|PAINEL_CODIGO_FILE=$PAINEL_ARQ" ;;
     # Quests (C1.1) e quest de abate REAL (PD-07).
     test/quests.mjs) echo "QUEST_TEST=1 QUEST_FIXTURE=1 API_RATE_MULT=100|" ;;
     test/quests_combate.mjs) echo "QUEST_TEST=1 QUEST_FIXTURE=1 LOOT_TEST=1 API_RATE_MULT=100|" ;;
@@ -89,6 +91,7 @@ config_suite() {
   esac
 }
 LOADOUT_DB="../../.data/loadouts-test-pglite"; LOADOUT_TOKEN="../../.data/loadouts-test-token.txt"
+PAINEL_ARQ="../../.data/painel-test-codigo.txt"
 
 # Listas geradas por glob (ordem alfabética estável, LC_ALL=C).
 export LC_ALL=C
