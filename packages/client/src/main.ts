@@ -15,7 +15,10 @@ import { ensureLogin, logout, wsUrl } from "./auth";
 import { ensureCharacter } from "./character";
 import { mountGameMenu } from "./menu";
 import { mountHudCamadas } from "./hudcamadas";
-import { attachPerf, startPerf, timed, count } from "./perf-probe";
+import { attachPerf, timed, count } from "./perf-probe";
+import { mountBarraJogo, ICONES_JOGO, type AtalhoJogo } from "./barra-jogo";
+import { mountConfiguracoes } from "./configuracoes";
+import { aoMudarConfig, config, fatorEfeitos, iniciarConfig } from "./config";
 import { modoQualidade } from "./quality";
 import { mountHud, type Hud } from "./hud";
 import { mountInventory, type InventoryUi } from "./inventory";
@@ -39,7 +42,6 @@ import { mountTalentos, type TalentosUi } from "./talentos";
 import { mountBuilds, type BuildsUi } from "./builds";
 import { modificadoresDaEscolha, limparEscolhas, type ActionModifier } from "@frixep/shared";
 import { limparTalentos, pontosLivres, podeSubirTalento, talentosDaClasse, VARIACAO_SLOTS, VARIACAO_NIVEL } from "@frixep/shared";
-import { mountUtilidades } from "./utilidades";
 import { mountTutorial, type TutorialUi } from "./tutorial";
 import { mountDicas, tutorialFaixaAberta, type Dicas } from "./dicas";
 import type { DicasVistasEvent, ActiveBuff } from "@frixep/shared";
@@ -93,6 +95,7 @@ const SEM_SPRITES = MODO === "sem-sprites"; // Teste B
 // alvo de desenho que aceita qualquer chamada e não faz nada (usado no Teste A)
 const NO_DRAW: unknown = new Proxy({}, { get: () => () => NO_DRAW });
 const DPR = Math.max(1, Math.min(COARSE ? 2 : 3, window.devicePixelRatio || 1)); // celular: no máximo 2x (menos pixels = mais FPS)
+const rdpr = () => DPR * config().escalaRender; // resolução do canvas: DPR da tela × escala de renderização (Configurações > Gráficos)
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
@@ -128,7 +131,7 @@ class WorldScene extends Phaser.Scene {
   private bubbles = new Map<string, { t: Phaser.GameObjects.Text; until: number }>();
   private bars!: Phaser.GameObjects.Graphics;
   private weaponAuras?: WeaponAuras;
-  private emitters!: { orange: Phaser.GameObjects.Particles.ParticleEmitter; red: Phaser.GameObjects.Particles.ParticleEmitter; gold: Phaser.GameObjects.Particles.ParticleEmitter; green: Phaser.GameObjects.Particles.ParticleEmitter };
+  private emitters!: Record<"orange" | "red" | "gold" | "green", { explode(n: number, x: number, y: number): void }>;
   private hitstopUntil = 0;
   private touchMode = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
   private joy!: ReturnType<typeof mountJoystick>;
@@ -218,7 +221,7 @@ class WorldScene extends Phaser.Scene {
   async create() {
     // textos do Phaser são rasterizados na densidade da tela (senão ficam borrados em retina)
     this.sys.events.on("addedtoscene", (o: Phaser.GameObjects.GameObject) => {
-      if (o instanceof Phaser.GameObjects.Text && DPR > 1) o.setResolution(DPR);
+      if (o instanceof Phaser.GameObjects.Text && DPR > 1) o.setResolution(rdpr());
     });
     this.loader = (this.sys.settings.data as { loader: LoadingScreen }).loader;
     attachPerf(this.game, () => ({ zone: ZONES[this.zoneId]?.name ?? "?", ents: this.sprites.size }));
@@ -336,21 +339,6 @@ class WorldScene extends Phaser.Scene {
     this.joy = mountJoystick();
     this.applyTouch();
     this.paintPortrait();
-    const menuJogo = mountGameMenu({
-      playerName: this.me()?.name ?? "Portador",
-      onLogout: async () => {
-        this.leaving = true;
-        try { await this.room.leave(true); } catch { /* já desconectado */ }
-        logout();
-      },
-      onPerf: () => startPerf(),
-      // painéis que saíram da tela principal: abrem pelo menu (as teclas J e V continuam valendo)
-      acoes: [
-        { label: "Diário", run: () => this.diario.toggle() },
-      ], // Talentos, Variações e Builds ficam no botão "Habilidades" (ao lado do menu), com o ponto verde de pendência
-    });
-    mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
-    void montarEntradaPainel((this.sys.settings.data as { token: string }).token, menuJogo.addAcao); // botão "Painel": só aparece para admin (o módulo do painel carrega sob demanda)
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
     this.diario = mountDiario(); // rastreador e diário de quests (C1.3); depois do econ, que injeta o CSS de quests
@@ -377,7 +365,7 @@ class WorldScene extends Phaser.Scene {
       aplicarEquip: (slot) => this.room?.send(Msg.LoadoutEquipAplicar, { slot }),
       renomear: (slot, nome) => this.room?.send(Msg.LoadoutNome, { slot, nome }),
     });
-    this.montarUtilidades();
+    this.montarJogo();
     this.worldMap = mountWorldMap((to) => { this.room.send(Msg.Travel, { to }); }); // o load só aparece quando o servidor aprova (Evt.Travel)
     this.vault = mountVault({ send: (t, p) => this.room?.send(t, p) });
     const chat = mountChat({
@@ -704,7 +692,7 @@ class WorldScene extends Phaser.Scene {
     // celular: câmera mais afastada para enxergar mais ao redor (os textos ganham contra-escala para continuarem legíveis)
     const zoom = this.touchMode ? TOUCH_ZOOM : 1;
     // zoom em múltiplos de 0,5 pixel de tela por pixel de arte (em DPR 3 o celular cai em 2,0 exato): sem escala fracionária que borre
-    this.cameras.main.setZoom(Math.max(0.5, Math.round(zoom * DPR * 2) / 2));
+    this.cameras.main.setZoom(Math.max(0.5, Math.round(zoom * rdpr() * 2) / 2));
     this.cameras.main.roundPixels = true;
     this.uiScale = Math.min(1.25, 1 / zoom);
     setMobileUi(this.touchMode);
@@ -827,13 +815,21 @@ class WorldScene extends Phaser.Scene {
       tex.generateTexture("spark", 6, 6);
       tex.destroy();
     }
-    const mk = (tint: number) =>
-      this.add
+    // explode() respeita "Partículas e efeitos" (Configurações > Gráficos): nenhum = não emite; reduzido = metade das partículas
+    const mk = (tint: number) => {
+      const em = this.add
         .particles(0, 0, "spark", {
           lifespan: { min: 220, max: 480 }, speed: { min: 60, max: 210 }, scale: { start: 1.2, end: 0 },
           alpha: { start: 1, end: 0 }, tint, blendMode: "ADD", emitting: false,
         })
         .setDepth(1e6);
+      return {
+        explode: (n: number, x: number, y: number) => {
+          const k = fatorEfeitos();
+          if (k > 0) em.explode(Math.max(1, Math.round(n * k)), x, y);
+        },
+      };
+    };
     this.emitters = { orange: mk(0xffa040), red: mk(0xff3b2b), gold: mk(0xffe27a), green: mk(0x7dff9a) };
   }
 
@@ -1014,7 +1010,7 @@ class WorldScene extends Phaser.Scene {
       this.floatText(m.x, m.y - 0.6, "RENASCEU", "#fff2a8", 20, true);
       if (m.id === this.room.sessionId) { this.cameras.main.flash(250, 255, 240, 160); sfx.heal(); }
     } else {
-      this.floatText(m.x, m.y - 1.1, `+${m.amount}`, "#7dff9a", 20, true); // acima da cabeça (e do nome)
+      if (config().numCura) this.floatText(m.x, m.y - 1.1, `+${m.amount}`, "#7dff9a", 20, true); // acima da cabeça (e do nome)
       if (m.id === this.room.sessionId) { sfx.heal(); this.hud.showHeal(m.amount); }
     }
   }
@@ -1036,7 +1032,7 @@ class WorldScene extends Phaser.Scene {
   private skyFx(fx: SkillFx, gx: number, gy: number, r: number, ms: number) {
     const { sx, sy } = toScreen(gx, gy);
     const ground = (col: number, k: number) => this.ring(gx, gy, r * k, col, 420, 0.25);
-    const fall = (x0: number, y0: number, x1: number, y1: number, delay: number, dur: number, make: () => Phaser.GameObjects.Shape, land: () => void, trail?: Phaser.GameObjects.Particles.ParticleEmitter) => {
+    const fall = (x0: number, y0: number, x1: number, y1: number, delay: number, dur: number, make: () => Phaser.GameObjects.Shape, land: () => void, trail?: { explode(n: number, x: number, y: number): void }) => {
       const o = make().setPosition(x0, y0).setDepth(1e6);
       this.tweens.add({
         targets: o, x: x1, y: y1, delay, duration: dur, ease: "Quad.easeIn",
@@ -1212,12 +1208,12 @@ class WorldScene extends Phaser.Scene {
       const w = this.state.players.get(String(m.by));
       if (w) { this.beam(w.x, w.y, m.x, m.y, 0x8fd0ff, 200); this.ring(w.x, w.y, 1.2, 0x8fd0ff, 260, 0.5); }
       this.emitters.gold.explode(8, sx, sy - 10);
-      this.floatText(m.x, m.y, String(m.dmg), "#8fd0ff", 18, true);
+      if (config().numDano) this.floatText(m.x, m.y, String(m.dmg), "#8fd0ff", 18, true);
       return;
     }
     if (m.k === "e") {
       (m.crit ? this.emitters.gold : this.emitters.orange).explode(m.crit ? 16 : 9, sx, sy - 10);
-      this.floatText(m.x, m.y, String(m.dmg) + (m.crit ? "!" : ""), m.crit ? "#ffd45e" : "#ffffff", m.crit ? 24 : 17, m.crit);
+      if (config().numDano) this.floatText(m.x, m.y, String(m.dmg) + (m.crit ? "!" : ""), m.crit ? "#ffd45e" : "#ffffff", m.crit ? 24 : 17, m.crit);
       if (mine || m.crit) sfx.hit(m.crit);
       if (mine) {
         this.cameras.main.shake(m.crit ? 130 : 80, m.crit ? 0.006 : 0.003);
@@ -1225,7 +1221,7 @@ class WorldScene extends Phaser.Scene {
       }
     } else {
       this.emitters.red.explode(12, sx, sy - 10);
-      this.floatText(m.x, m.y, String(m.dmg), "#ff6a5a", 20, true);
+      if (config().numDano) this.floatText(m.x, m.y, String(m.dmg), "#ff6a5a", 20, true);
       if (toMe) {
         this.cameras.main.shake(170, 0.008);
         this.cameras.main.flash(130, 255, 50, 40);
@@ -1549,16 +1545,22 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** botão "Habilidades" (Talentos, Variações, Builds) com o ponto verde pulsante de pendências; "visto" fica salvo neste navegador por personagem */
-  private montarUtilidades() {
+  /**
+   * Menu ☰ e atalhos de jogo: Diário (J), Mochila (I), Talentos (T), Variações (V) e Builds (B).
+   * No computador vão numa barra no topo (com ícone, tecla e ponto verde de pendência); no celular ficam na seção "Jogo" do menu.
+   * "visto" fica salvo neste navegador por personagem.
+   */
+  private montarJogo() {
     const chave = (k: string) => `frixep.ut.${k}.${this.me()?.name ?? ""}`;
     const lido = (k: string): number => { try { return Number(localStorage.getItem(chave(k)) || 0); } catch { return 0; } };
     const grava = (k: string, v: number) => { try { localStorage.setItem(chave(k), String(v)); } catch { /* sem armazenamento */ } };
     const nivel = () => Number(this.me()?.level) || 1;
     const nVariacoes = () => VARIACAO_SLOTS.filter((s) => nivel() >= VARIACAO_NIVEL[s]).length;
-    mountUtilidades([
+    const itens: AtalhoJogo[] = [
+      { label: "Diário", tecla: "J", icone: ICONES_JOGO.diario, run: () => this.diario.toggle(), aberto: () => this.diario.isOpen() },
+      { label: "Mochila", tecla: "I", icone: ICONES_JOGO.mochila, run: () => this.inv.toggle(), aberto: () => this.inv.isOpen() },
       {
-        label: "Talentos", tecla: "T", run: () => this.talentos.toggle(), aberto: () => this.talentos.isOpen(),
+        label: "Talentos", tecla: "T", icone: ICONES_JOGO.talento, run: () => this.talentos.toggle(), aberto: () => this.talentos.isOpen(),
         pendente: () => { // ponto livre E algum talento que dá para subir agora
           const me = this.me();
           if (!me) return false;
@@ -1567,16 +1569,30 @@ class WorldScene extends Phaser.Scene {
         },
       },
       {
-        label: "Variações", tecla: "V", run: () => this.variacoes.toggle(), aberto: () => this.variacoes.isOpen(),
+        label: "Variações", tecla: "V", icone: ICONES_JOGO.variacao, run: () => this.variacoes.toggle(), aberto: () => this.variacoes.isOpen(),
         pendente: () => nVariacoes() > lido("va"), // variação nova liberada que o jogador ainda não viu
         visto: () => grava("va", nVariacoes()),
       },
       {
-        label: "Builds", tecla: "B", run: () => this.builds.toggle(), aberto: () => this.builds.isOpen(),
+        label: "Builds", tecla: "B", icone: ICONES_JOGO.build, run: () => this.builds.toggle(), aberto: () => this.builds.isOpen(),
         pendente: () => nivel() >= 6 && lido("bd") === 0, // builds guardam variações e talentos: aparece junto com os talentos, até abrir uma vez
         visto: () => grava("bd", 1),
       },
-    ]);
+    ];
+    mountBarraJogo(itens); // computador: barra no topo
+    const configUi = mountConfiguracoes(); // janela ⚙ Configurações (abas Gráficos, Interface, Som, Controles)
+    const menuJogo = mountGameMenu({
+      playerName: this.me()?.name ?? "Portador",
+      onLogout: async () => {
+        this.leaving = true;
+        try { await this.room.leave(true); } catch { /* já desconectado */ }
+        logout();
+      },
+      jogo: itens, // celular: seção "Jogo" do menu ☰
+      onConfig: () => configUi.abrir(),
+    });
+    mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
+    void montarEntradaPainel((this.sys.settings.data as { token: string }).token, menuJogo.addAcao); // botão "Painel": só aparece para admin (o módulo do painel carrega sob demanda)
   }
 
   private savedQMode(): 0 | 1 { try { return localStorage.getItem("frixep.qmode") === "1" ? 1 : 0; } catch { return 0; } }
@@ -1661,7 +1677,7 @@ class WorldScene extends Phaser.Scene {
       timed("sprites", () => v.update(time, { dead: o.dead, windup: o.windup }));
       const hidden = !!o.hideWhenDead && o.dead && v.deathDone; // com sprite, a morte toca antes de sumir
       s.setVisible(!hidden && !SEM_SPRITES); // Teste B: some com os sprites (nomes e placas continuam)
-      this.labels.get(key)?.setVisible(!hidden);
+      this.labels.get(key)?.setVisible(!hidden && config().nomes); // Configurações > Interface: nomes sobre personagens
       this.levelTags.get(key)?.setVisible(!hidden);
       if (hidden) return;
       const { sx, sy } = toScreen(x, y);
@@ -1790,6 +1806,7 @@ class WorldScene extends Phaser.Scene {
 }
 
 // Primeiro o login; o Phaser só inicia depois que há um token válido.
+iniciarConfig(); // escala da HUD (Configurações) antes de montar qualquer janela
 checkGpu(); // avisa se o navegador está desenhando por software (sem a placa de vídeo)
 const token = await ensureLogin();
 const character = await ensureCharacter(token); // sem personagem, mostra a criação antes de entrar no jogo
@@ -1800,12 +1817,21 @@ new Phaser.Game({
   parent: "game",
   backgroundColor: "#0b0b10",
   // canvas em resolução nativa: tamanho em pixels de dispositivo, exibido em CSS por 1/DPR (sem borrão); sprites sem suavização e posições arredondadas
-  scale: { mode: Phaser.Scale.NONE, width: Math.round(viewSize().w * DPR), height: Math.round(viewSize().h * DPR), zoom: 1 / DPR },
+  scale: { mode: Phaser.Scale.NONE, width: Math.round(viewSize().w * rdpr()), height: Math.round(viewSize().h * rdpr()), zoom: 1 / rdpr() },
   render: { roundPixels: true, powerPreference: "high-performance", antialias: !COARSE },
   scene: [],
   callbacks: {
     postBoot: (game) => {
-      const fit = () => { const v = viewSize(); game.scale.resize(Math.round(v.w * DPR), Math.round(v.h * DPR)); };
+      const fit = () => {
+        const v = viewSize();
+        game.scale.setZoom(1 / rdpr()); // a escala de renderização muda o tamanho do canvas, mas não o da tela
+        game.scale.resize(Math.round(v.w * rdpr()), Math.round(v.h * rdpr()));
+      };
+      // limite de FPS (Configurações > Gráficos): o loop do Phaser só desenha quando passou o intervalo
+      const loop = game.loop as unknown as { targetFps: number; _target: number };
+      const limitarFps = () => { const t = config().fpsMax || 240; loop.targetFps = t; loop._target = 1000 / t; };
+      limitarFps();
+      aoMudarConfig(() => { limitarFps(); fit(); }); // aplicar nas Configurações vale na hora
       window.addEventListener("resize", fit);
       window.addEventListener("orientationchange", () => setTimeout(fit, 200));
       window.visualViewport?.addEventListener("resize", fit);

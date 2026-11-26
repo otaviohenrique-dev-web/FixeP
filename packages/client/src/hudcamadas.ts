@@ -5,8 +5,8 @@
  * Navegadores sem `:has` (antigos) mantêm o HUD visível, como antes.
  */
 const CSS = `
-body:has(.gm-back.open,.iv-back.open,.qst-back.open,.ec-back.open,.vt-back.open)
-  :is(.hd,.gm-btn,.iv-btn,.ut-btn,.ut-pop,.ec-wallet,.st,.qd-dock,.pt,.ch,.js-zone,.js-base,.js-rest,.dica){visibility:hidden!important;pointer-events:none!important}
+body:has(.gm-back.open,.iv-back.open,.qst-back.open,.ec-back.open,.vt-back.open,.cf-back.open)
+  :is(.hd,.gm-btn,.iv-btn,.ut-btn,.ut-pop,.ec-wallet,.st,.qd-dock,.pt,.ch,.js-zone,.js-base,.js-rest,.dica,.jg-bar){visibility:hidden!important;pointer-events:none!important}
 `;
 
 export function mountHudCamadas() {
