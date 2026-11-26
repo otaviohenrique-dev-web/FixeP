@@ -64,6 +64,8 @@ const nomeNpc = (id: string) => nomeNpcPorId(id, NPCS_TODOS);
 /** recolhido: a escolha guardada vale; sem escolha, recolhe só em tela baixa (paisagem) */
 let recolhido = (() => { try { const v = localStorage.getItem(REC_KEY); return v === null ? BAIXA : v === "1"; } catch { return BAIXA; } })();
 
+let limparAnterior: (() => void) | null = null;
+
 const el = (tag: string, cls = "", text = ""): HTMLElement => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -84,6 +86,19 @@ export function mountRastreador(opts: RastreadorOpts): RastreadorUi {
   painel.setAttribute("aria-label", "Missões");
   painel.hidden = true;
   document.body.append(painel);
+
+  // fica logo abaixo do botão do grupo (+), que já fica abaixo do PvP; acompanha o grupo quando ele abre ou cresce
+  let ptVisto: Element | null = null;
+  const obs = typeof ResizeObserver === "function" ? new ResizeObserver(() => posicionar()) : null;
+  function posicionar() {
+    const pt = document.querySelector<HTMLElement>(".pt");
+    if (pt && pt !== ptVisto) { if (ptVisto) obs?.unobserve(ptVisto); obs?.observe(pt); ptVisto = pt; }
+    const r = pt?.getBoundingClientRect();
+    painel.style.top = r && r.height > 0 ? `${Math.round(r.bottom + 10)}px` : "";
+  }
+  limparAnterior?.(); // a montagem anterior (zona passada) deixa de observar
+  addEventListener("resize", posicionar);
+  limparAnterior = () => { removeEventListener("resize", posicionar); obs?.disconnect(); };
 
   let defs = new Map<string, QuestDef>();
   let estados = new Map<string, QuestEstado>();
@@ -119,6 +134,7 @@ export function mountRastreador(opts: RastreadorOpts): RastreadorUi {
       return;
     }
     painel.hidden = false;
+    posicionar();
 
     const hd = el("div", "rq-hd");
     const tog = el("button", "rq-tog", recolhido ? "+" : "–") as HTMLButtonElement;
