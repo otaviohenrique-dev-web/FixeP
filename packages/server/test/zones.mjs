@@ -59,7 +59,7 @@ await sleep(300);
 
 console.log("\n== Zona 1 (Cinzas) ==");
 let A = await join("zone");
-check("chega às Cinzas junto do portal da cidade (fora do raio dele)", A.r.state.zoneId === 1 && near(A.me(), 9.5, 28, 0.5), `zona ${A.r.state.zoneId} em (${A.me().x}, ${A.me().y})`);
+check("chega às Cinzas junto do portal da cidade (fora do raio dele)", A.r.state.zoneId === 1 && near(A.me(), 7, 28, 0.5), `zona ${A.r.state.zoneId} em (${A.me().x}, ${A.me().y})`);
 check("cada zona tem o seu chefe (Rei Ossudo, Lobo Alfa, Soberano das Catacumbas)", bossOf(A.r) === "bone_king", bossOf(A.r));
 check("inimigos da zona 1 (os 5 originais e1..e5): esqueletos, níveis 1,1,1,2,3", levels(A.r, 5) === "1,1,1,2,3" && kinds(A.r, 5) === '{"skeleton":5}', `${levels(A.r, 5)} ${kinds(A.r, 5)}`);
 check("API informa a zona do personagem (1)", (await zoneApi()) === 1);
@@ -77,7 +77,7 @@ console.log("\n== Pontos de caça (grupos de inimigos) ==");
   const xs = new Set(grp.map((e) => `${e.x.toFixed(1)},${e.y.toFixed(1)}`));
   check("ninguém nasce em cima de ninguém (posições todas diferentes)", xs.size === 5);
   check("o nível sobe ao longo do grupo (2 a 3)", Math.min(...grp.map((e) => e.level)) === 2 && Math.max(...grp.map((e) => e.level)) === 3, grp.map((e) => e.level).join(","));
-  const far = []; A.r.state.enemies.forEach((e, id) => { if (Math.hypot(e.x - 9.5, e.y - 28) < 14 || Math.hypot(e.x - 9.5, e.y - 35) < 14 || Math.hypot(e.x - 12, e.y - 31) < 14) far.push(id); }); // pontos de chegada das Cinzas e o spawn
+  const far = []; A.r.state.enemies.forEach((e, id) => { if (Math.hypot(e.x - 7, e.y - 28) < 14 || Math.hypot(e.x - 7, e.y - 35) < 14 || Math.hypot(e.x - 12, e.y - 31) < 14) far.push(id); }); // pontos de chegada das Cinzas e o spawn
   check("nenhum inimigo (comum nem chefe) a menos de 14 tiles dos pontos de chegada nem do spawn", far.length === 0, far.join(","));
 }
 
@@ -110,7 +110,7 @@ check("nem pula direto para a sala da zona 3", rejected);
 
 console.log("\n== Zona 2 (Floresta Gélida) ==");
 let B = await join("zone2");
-check("entra na zona 2 junto do portal de volta", B.r.state.zoneId === 2 && near(B.me(), 8.5, 8.5, 0.5), `(${B.me().x}, ${B.me().y})`);
+check("entra na zona 2 junto do portal de volta", B.r.state.zoneId === 2 && near(B.me(), 6.2, 6.2, 0.5), `(${B.me().x}, ${B.me().y})`);
 check("inimigos da zona 2: lobos e esqueletos, níveis 6,6,6,7,8,8,9,10", levels(B.r, 8) === "6,6,6,7,8,8,9,10" && kinds(B.r, 8) === '{"wolf":5,"skeleton":3}', `${levels(B.r, 8)} ${kinds(B.r, 8)}`);
 const e0 = enemies(B.r, 8).find((e) => e.kind === "wolf" && e.level === 6);
 check("a vida do inimigo segue o nível e o tipo (lobo nível 6 = 120: 60 x 0,8 x 2,5; 0,30 por nível)", e0 && e0.maxHp === 120 && e0.hp === 120, JSON.stringify(e0));
@@ -134,19 +134,21 @@ check("andar até o portal do fundo leva à zona 3", crossed3 && B.ev.travel[0].
 await B.r.leave(true);
 await sleep(300);
 const C = await join("zone3");
-check("entra na zona 3", C.r.state.zoneId === 3 && near(C.me(), 8.5, 8.5, 0.5), `(${C.me().x}, ${C.me().y})`);
+check("entra na zona 3", C.r.state.zoneId === 3 && near(C.me(), 6.2, 6.2, 0.5), `(${C.me().x}, ${C.me().y})`);
 check("inimigos da zona 3: espectros e esqueletos, níveis 12 a 20", levels(C.r, 8) === "12,13,13,15,15,16,18,20" && kinds(C.r, 8) === '{"skeleton":3,"wraith":5}', `${levels(C.r, 8)} ${kinds(C.r, 8)}`);
 const w = enemies(C.r, 8).find((e) => e.kind === "wraith" && e.level === 13);
 check("espectro nível 13: vida 359 (60 x 1,3 x 4,6; 0,30 por nível)", w && w.maxHp === Math.round(60 * 1.3 * (1 + 0.30 * 12)), JSON.stringify(w));
 
 console.log("\n== Volta pelo portal ==");
 C.r.send("move_to", { x: 4, y: 4 });
-const back = await waitFor(() => C.ev.travel.length > 0, 5000);
+await sleep(1500);
+check("recém-chegado não atravessa de novo na hora (espera para viajar)", C.ev.travel.length === 0 && C.ev.notice.some((t) => t.includes("Recém-chegado")), JSON.stringify(C.ev.notice.slice(-2)));
+const back = await waitFor(() => C.ev.travel.length > 0, 14000); // passada a espera, encostado no portal, atravessa
 check("o portal da zona 3 leva de volta à zona 2", back && C.ev.travel[0].zone === 2);
 await C.r.leave(true);
 await sleep(300);
 let D = await join("zone2");
-check("chega perto do portal da zona 3 (não em cima dele)", D.r.state.zoneId === 2 && near(D.me(), 36, 36, 0.5), `(${D.me().x}, ${D.me().y})`);
+check("chega perto do portal da zona 3 (não em cima dele)", D.r.state.zoneId === 2 && near(D.me(), 37.9, 37.9, 0.5), `(${D.me().x}, ${D.me().y})`);
 await sleep(1500);
 check("e não atravessa de novo sozinho", D.ev.travel.length === 0 && D.ev.left === null);
 // no caminho um lobo pode atacar: a trava de combate (8 s) recusa a travessia, então insiste até o combate acabar (CI é mais lento que o PC)
@@ -156,13 +158,14 @@ check("o portal da zona 2 para a cidade leva à zona 4", cruzou && D.ev.travel[0
 await D.r.leave(true);
 await sleep(300);
 D = await join("zone4");
-check("volta à cidade já dentro do portão (24; 7,5), de qualquer zona", D.r.state.zoneId === 4 && near(D.me(), 24, 7.5, 0.5), `(${D.me().x}, ${D.me().y})`);
+check("volta à cidade já dentro do portão (24; 5), de qualquer zona", D.r.state.zoneId === 4 && near(D.me(), 24, 5, 0.5), `(${D.me().x}, ${D.me().y})`);
 await sleep(800);
 check("e não reabre o mapa-mundo sozinho (fora do raio)", D.ev.gate === 0);
 D.r.send("move_to", { x: 24, y: 2 });
 check("andar até o portão abre o mapa-mundo de novo", await waitFor(() => D.ev.gate > 0, 6000));
-D.r.send("travel", { to: 3 });
-check("qualquer zona de combate serve de destino (Catacumbas)", (await waitFor(() => D.ev.travel.length > 0, 5000)) && D.ev.travel[0].zone === 3);
+let viajou = false; // recém-chegado: o pedido é recusado até passar a espera; insiste a cada segundo
+for (let i = 0; i < 14 && !viajou; i++) { D.r.send("travel", { to: 3 }); viajou = await waitFor(() => D.ev.travel.length > 0, 1000); }
+check("qualquer zona de combate serve de destino (Catacumbas)", viajou && D.ev.travel[0].zone === 3);
 await D.r.leave(true);
 
 console.log("\n== Em combate não se atravessa ==");
@@ -177,7 +180,7 @@ console.log("\n== Em combate não se atravessa ==");
   await waitFor(() => h.ev.travel.length > 0, 5000);
   await h.r.leave(true);
   await sleep(300);
-  const P = await join("zone", g.token); // chega às Cinzas em (9,5; 28); o primeiro ponto de caça está em (5, 4)
+  const P = await join("zone", g.token); // chega às Cinzas em (7; 28); o primeiro ponto de caça está em (5, 4)
   P.r.send("move_to", { x: 6, y: 10 }); // dentro do aggro dos esqueletos do ponto de caça
   const hit = await waitFor(() => P.me().hp < P.me().maxHp, 20000);
   check("os esqueletos do ponto de caça atacam quem chega perto", hit, `hp ${P.me().hp}/${P.me().maxHp}`);

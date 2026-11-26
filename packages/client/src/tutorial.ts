@@ -1,5 +1,5 @@
 import type Phaser from "phaser";
-import { ZONES, ZONE_NPCS, WORLD_GATE, HUB_ZONE, objetivoAtual, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent } from "@frixep/shared";
+import { ZONES, ZONE_NPCS, WORLD_GATE, HUB_ZONE, PORTAL_TRIGGER_RADIUS, objetivoAtual, type QuestDef, type QuestEstado, type QuestEvent, type QuestDefsEvent } from "@frixep/shared";
 
 /**
  * Tutorial de 5 quests (C1.4): a bandeira no chão apontando o ponto da quest "chegar". O texto do passo atual
@@ -45,7 +45,7 @@ type Ponto = { x: number; y: number; raio: number };
 function portalPara(zona: number, alvo: number): Ponto | null {
   const ps = ZONES[zona]?.portals ?? [];
   const p = ps.find((q) => q.to === alvo) ?? (alvo !== TOWN ? ps.find((q) => q.to === WORLD_GATE) : undefined) ?? ps.find((q) => q.to === TOWN);
-  return p ? { x: p.x, y: p.y, raio: Math.max(0.6, p.r - 0.4) } : null;
+  return p ? { x: p.x, y: p.y, raio: PORTAL_TRIGGER_RADIUS } : null;
 }
 
 /** Destinos da trilha (o mais perto do jogador é usado): ponto do "chegar", NPC, pontos de caça do "abater";

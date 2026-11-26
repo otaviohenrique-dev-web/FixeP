@@ -95,6 +95,7 @@ export class Player extends Schema {
   pullX = 0; // ponto para onde é puxado
   pullY = 0;
   travelNoteAt = -1e9; // último aviso "em combate" ao tentar atravessar (para não repetir a cada tick)
+  travelOkAt = 0; // chegou por um portal: só atravessa de novo a partir deste instante (TRAVEL_COOLDOWN_S)
   combatAt = -1e9; // último instante em que causou ou recebeu dano (a regeneração de vida espera PLAYER_REGEN_DELAY_S)
   regenAcc = 0; // fração de vida regenerada ainda não aplicada (hp é inteiro)
   quests: QuestMap = new Map(); // quests do personagem (C1.1): carregadas do banco ao entrar

@@ -502,8 +502,12 @@ export const ARRIVAL_SHIELD_S = 9;
 export const ARRIVAL_SHIELD_WAIT_S = 25;
 /** Raio (tiles) em volta de todo ponto de chegada/nascimento sem nenhum inimigo (o aggro é de 7 a 11; sobra margem). */
 export const ARRIVAL_SAFE_RADIUS = 14;
-/** Distância (tiles) entre o centro do portão e o ponto em que se chega: fora do alcance de pisar nele. */
-export const ARRIVAL_GATE_DIST = 5.5;
+/** Distância (tiles) entre o centro do portão e o ponto em que se chega: logo à frente da passagem, mas fora do gatilho dela. */
+export const ARRIVAL_GATE_DIST = 3;
+/** Depois de chegar por um portal, espera (s) até poder atravessar de novo: evita ir e voltar sem parar. */
+export const TRAVEL_COOLDOWN_S = 8;
+/** A bolha de chegada por portal só vem de novo depois deste tempo (s): atravessar várias vezes não renova a proteção. */
+export const ARRIVAL_SHIELD_CD_S = 60;
 
 export const SKELETON = {
   name: "Esqueleto",
