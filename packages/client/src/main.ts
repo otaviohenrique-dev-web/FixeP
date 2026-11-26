@@ -33,6 +33,7 @@ import { GroundLayer } from "./ground";
 import { NpcLayer } from "./npcs";
 import { mountEconomy, type EconomyUi } from "./economy";
 import { mountDiario, type DiarioUi } from "./diario";
+import { montarEntradaPainel } from "./painel/entrada";
 import { mountVariacoes, type VariacoesUi } from "./variacoes";
 import { mountTalentos, type TalentosUi } from "./talentos";
 import { mountBuilds, type BuildsUi } from "./builds";
@@ -349,6 +350,7 @@ class WorldScene extends Phaser.Scene {
       ], // Talentos, Variações e Builds ficam no botão "Habilidades" (ao lado do menu), com o ponto verde de pendência
     });
     mountHudCamadas(); // HUD flutuante some enquanto um painel grande está aberto
+    void montarEntradaPainel((this.sys.settings.data as { token: string }).token); // botão "Painel": só aparece para admin (o módulo do painel carrega sob demanda)
     this.inv = mountInventory({ send: (t, p) => this.room?.send(t, p), getLevel: () => this.me()?.level ?? 1, getClass: () => this.cls, onBreak: (slot) => this.econ.confirmBreak(slot) });
     this.econ = mountEconomy({ send: (t, p) => this.room?.send(t, p), getClass: () => this.cls, getZone: () => this.zoneId, getLevel: () => this.me()?.level ?? 1, toast: (t, c) => this.inv.toast(t, c), onNpc: (n) => this.npcs.talk(n.id) });
     this.diario = mountDiario(); // rastreador e diário de quests (C1.3); depois do econ, que injeta o CSS de quests
@@ -523,7 +525,7 @@ class WorldScene extends Phaser.Scene {
     room.onMessage(Evt.Shield, (m: { ms: number }) => { this.shieldEnd = performance.now() + (Number(m?.ms) || 0); }); // a bolha começou a contar (a tela de load já acabou)
     room.onLeave((code) => {
       if (this.leaving || room !== this.room) return;
-      if (code === 4001) logout(); // outra aba assumiu a conta: vai ao login sem disputar a sessão
+      if (code === 4001 || code === 4005) logout(); // 4001: outra aba assumiu a conta; 4005: expulso pelo painel. Vai ao login sem disputar a sessão
       else if (!this.entering) { this.beginTravel(this.zoneId, "Reconectando em"); void this.enterZone(this.zoneId, "reconnect"); } // queda de rede ou servidor: reentra mantendo o token
     });
     room.onMessage(Evt.Swing, (m: SwingEvent) => {

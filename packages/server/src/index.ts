@@ -9,6 +9,7 @@ import { apiRouter } from "./api.js";
 import { openDb } from "./db/index.js";
 import { Repo } from "./db/repo.js";
 import { origemPermitida } from "./origens.js";
+import { avisarConfiguracaoPainel } from "./painel/email.js";
 import { ZONE_IDS, zoneRoomName } from "@frixep/shared";
 
 const port = Number(process.env.PORT ?? 2567);
@@ -16,6 +17,7 @@ const permitida = (o: string | undefined) => origemPermitida(o);
 
 const db = await openDb();
 const repo = new Repo(db);
+avisarConfiguracaoPainel();
 
 const app = express();
 app.set("trust proxy", 1); // atrás do proxy (Render): IP real nos limites de taxa

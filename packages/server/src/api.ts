@@ -1,8 +1,9 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { PLAYABLE_CLASSES, START_ZONE, MAX_CHARACTERS_PER_ACCOUNT, type CharClass } from "@frixep/shared";
-import { verifySession, type AuthUser } from "./auth.js";
+import { exigirSessao, type AuthUser } from "./auth.js";
 import { registrarEvento } from "./telemetria.js";
 import { Repo, validateName } from "./db/repo.js";
+import { painelRouter } from "./painel/rotas.js";
 
 declare module "express-serve-static-core" {
   interface Request { user?: AuthUser }
@@ -27,15 +28,7 @@ setInterval(() => {
   for (const [k, h] of hits) if (now > h.reset) hits.delete(k);
 }, 60_000).unref();
 
-async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const h = req.headers.authorization ?? "";
-  try {
-    req.user = await verifySession(h.startsWith("Bearer ") ? h.slice(7) : undefined);
-    next();
-  } catch {
-    res.status(401).json({ error: "Não autorizado." });
-  }
-}
+const requireAuth = exigirSessao;
 
 const shape = (c: { id: string; name: string; class: string; level: number; xp: number; zone?: number }) =>
   ({ id: c.id, name: c.name, class: c.class, level: c.level, xp: c.xp, zone: c.zone ?? START_ZONE });
@@ -73,6 +66,9 @@ export function apiRouter(repo: Repo): Router {
       res.status(500).json({ error: "Erro interno." });
     }
   });
+
+  // painel de administração: /api/admin/* (cada rota exige conta admin; o resto exige também o código de 2FA)
+  r.use("/admin", painelRouter(repo));
 
   return r;
 }
