@@ -5,13 +5,7 @@
  * Tudo vale só com `body.mob`; no computador nada muda.
  */
 
-const KEY = "frixep_hud_scale";
-export const HUD_SCALES = [
-  { id: "s", label: "Pequena", v: 0.85 },
-  { id: "m", label: "Média", v: 1 },
-  { id: "l", label: "Grande", v: 1.2 },
-] as const;
-type ScaleId = (typeof HUD_SCALES)[number]["id"];
+import { aoMudarConfig, fatorEscalaUi } from "./config";
 
 const SAFE_T = "max(8px,env(safe-area-inset-top))";
 const SAFE_L = "max(8px,env(safe-area-inset-left))";
@@ -83,9 +77,6 @@ body.mob .ec-near{left:${SAFE_L};transform:none;bottom:calc(${SAFE_B} + 196px);m
   body.mob .ec-near{bottom:calc(${SAFE_B} + 112px);left:calc(max(8px,env(safe-area-inset-left)) + 44px*var(--hs));max-width:34vw}
   body.mob .hd.touch .hd-chan{bottom:calc(${SAFE_B} + 20px);left:50%}
 }
-/* escolha da escala no menu (só no celular) */
-.gm-hs{display:none}
-body.mob .gm-hs{display:block}
 `;
 
 /**
@@ -95,29 +86,10 @@ body.mob .gm-hs{display:block}
 const ORIENT_K = { portrait: 0.9, landscape: 0.8 };
 const LANDSCAPE = "(orientation:landscape)";
 
-let scaleId: ScaleId = "m";
-try {
-  const s = localStorage.getItem(KEY);
-  if (s === "s" || s === "m" || s === "l") scaleId = s;
-} catch { /* sem armazenamento: usa a média */ }
-
 function apply() {
-  const v = HUD_SCALES.find((s) => s.id === scaleId)!.v;
+  const v = fatorEscalaUi();
   const land = typeof matchMedia === "function" && matchMedia(LANDSCAPE).matches;
   document.body.style.setProperty("--hs", String(v * (land ? ORIENT_K.landscape : ORIENT_K.portrait)));
-}
-
-export function hudScaleLabel(): string {
-  return HUD_SCALES.find((s) => s.id === scaleId)!.label;
-}
-
-/** passa para o próximo tamanho (pequena → média → grande) e guarda a escolha */
-export function cycleHudScale(): string {
-  const i = HUD_SCALES.findIndex((s) => s.id === scaleId);
-  scaleId = HUD_SCALES[(i + 1) % HUD_SCALES.length].id;
-  try { localStorage.setItem(KEY, scaleId); } catch { /* ignora */ }
-  apply();
-  return hudScaleLabel();
 }
 
 let styled = false;
@@ -137,3 +109,5 @@ export function setMobileUi(on: boolean) {
   document.body.classList.toggle("mob", on);
   apply();
 }
+
+aoMudarConfig(() => apply()); // escala escolhida em Configurações > Interface vale na hora

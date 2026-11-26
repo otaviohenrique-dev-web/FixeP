@@ -1,8 +1,15 @@
+import { config } from "./config";
 /** Efeitos sonoros sintetizados (WebAudio): nenhum arquivo de áudio necessário. */
 let ctx: AudioContext | null = null;
 
 const enabled = () => {
   try { return localStorage.getItem("frixep_sound") !== "off"; } catch { return true; }
+};
+
+/** 0 a 1: volume geral × volume de efeitos das Configurações */
+const volume = () => {
+  const c = config();
+  return (c.somGeral / 100) * (c.somEfeitos / 100);
 };
 
 function ac(): AudioContext | null {
@@ -25,7 +32,8 @@ function noise(c: AudioContext, dur: number): AudioBufferSourceNode {
   return s;
 }
 
-function env(c: AudioContext, g: GainNode, peak: number, attack: number, decay: number) {
+function env(c: AudioContext, g: GainNode, peak0: number, attack: number, decay: number) {
+  const peak = Math.max(0.0001, peak0 * volume()); // Configurações > Som: volume geral × efeitos (rampa exponencial não aceita 0)
   const t = c.currentTime;
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + attack);
