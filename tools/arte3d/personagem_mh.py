@@ -98,10 +98,14 @@ X, Y, Z = (1, 0, 0), (0, 1, 0), (0, 0, 1)
 def base_parada():
     """braços para baixo (o modelo vem em pose A) e mãos relaxadas"""
     zerar()
-    girar("upperarm_l", Y, 40); girar("upperarm_r", Y, -33)   # 40° (antes 48°): o braço passa por fora da couraça, que é ~3 cm maior que o corpo
+    girar("upperarm_l", Y, 40); girar("upperarm_r", Y, -40 if SEM_ARMA else -33)   # 40° (antes 48°): o braço passa por fora da couraça, que é ~3 cm maior que o corpo
     girar("lowerarm_l", X, -3); girar("lowerarm_r", X, -3)
-    mirar_pulso("r", DIR_LAMINA)
+    if SEM_ARMA:   # sem arma: as duas mãos relaxadas, iguais (corpo simétrico)
+        mao_empunhadura("r", 0.45, polegar=False); mao_empunhadura("l", 0.45, polegar=False); return
+    endireitar_antebraco("r", 12)   # o antebraço pende quase reto (no repouso do modelo ele aponta ~50° para a frente)
+    ajustar_pegada("r")   # pulso reto: só gira o antebraço no próprio eixo e deixa a mão cair de leve para o lado do mindinho
     mao_empunhadura("r", 1.0); mao_empunhadura("l", 0.45, polegar=False)
+SEM_ARMA = "--sem-arma" in argv
 
 def cabeca_mundo(n): return rig.matrix_world @ P[n].head
 def cauda_mundo(n): return rig.matrix_world @ P[n].tail
@@ -115,7 +119,47 @@ def eixos_mao(lado):
     pol = cabeca_mundo(f"thumb_02_{lado}") - cabeca_mundo(f"hand_{lado}")
     if pol.dot(n) < 0: n = -n
     return a, f, n
-DIR_LAMINA = Vector((-0.08, -0.62, -0.78)).normalized()   # espada da mão direita: para a frente e para baixo
+# ---- EMPUNHADURA: o cabo fica na DIAGONAL da palma (do indicador para a base do mindinho, como numa espada de verdade),
+# então a lâmina sai do punho já inclinada para baixo; quem aponta a espada é o giro do antebraço (pronação), não o pulso.
+ANG_DIAGONAL = 24          # graus entre o eixo do punho e o cabo (cabo deitado na palma)
+DESVIO_MAX = 14            # desvio do pulso para o lado do mindinho, natural de quem relaxa a mão (pulso nunca dobra)
+DIR_ALVO = Vector((-0.30, -0.70, -0.65)).normalized()   # mão direita: para a frente, para baixo e um pouco para fora (longe das pernas)
+def dir_espada(lado):
+    """sentido da lâmina saindo da mão: eixo do punho (a) inclinado pela diagonal da palma para o lado dos dedos/pulso"""
+    a = (cabeca_mundo(f"index_01_{lado}") - cabeca_mundo(f"pinky_01_{lado}")).normalized()
+    h = (cauda_mundo(f"hand_{lado}") - cabeca_mundo(f"hand_{lado}")).normalized()   # pulso -> dedos
+    h = (h - a * h.dot(a)).normalized()
+    return (a * math.cos(math.radians(ANG_DIAGONAL)) + h * math.sin(math.radians(ANG_DIAGONAL))).normalized()
+def endireitar_antebraco(lado, dobra):
+    """deixa o antebraço na linha do braço, com o cotovelo dobrado só 'dobra' graus para a frente (braço relaxado)"""
+    u = (cauda_mundo(f"upperarm_{lado}") - cabeca_mundo(f"upperarm_{lado}")).normalized()
+    fa = (cauda_mundo(f"lowerarm_{lado}") - cabeca_mundo(f"lowerarm_{lado}")).normalized()
+    eixo = u.cross(Vector((0, -1, 0)))
+    if eixo.length < 1e-4: return
+    alvo = (Matrix.Rotation(math.radians(dobra), 3, eixo.normalized()) @ u).normalized()   # u inclinado para a frente
+    q = fa.rotation_difference(alvo)
+    if math.degrees(q.angle) > 0.5: girar(f"lowerarm_{lado}", tuple(q.axis), math.degrees(q.angle))
+PEGADA = {}
+def _girar_pegada(lado, tw, dv):
+    eixo_ab = (cauda_mundo(f"lowerarm_{lado}") - cabeca_mundo(f"lowerarm_{lado}")).normalized()
+    girar(f"lowerarm_{lado}", tuple(eixo_ab), tw)                  # pronação/supinação: o antebraço gira no próprio eixo
+    a = (cabeca_mundo(f"index_01_{lado}") - cabeca_mundo(f"pinky_01_{lado}")).normalized()
+    h = (cauda_mundo(f"hand_{lado}") - cabeca_mundo(f"hand_{lado}")).normalized()
+    n = a.cross(h).normalized()                                     # normal da palma: eixo do desvio lateral do pulso
+    girar(f"hand_{lado}", tuple(n), dv)
+def ajustar_pegada(lado):
+    if lado in PEGADA: _girar_pegada(lado, *PEGADA[lado]); return
+    base = {b: P[b].matrix.copy() for b in (f"lowerarm_{lado}", f"hand_{lado}")}
+    def repor():
+        for b in (f"lowerarm_{lado}", f"hand_{lado}"): P[b].matrix = base[b]; bpy.context.view_layer.update()
+    melhor = (9e9, 0, 0)
+    for tw in range(-180, 180, 6):
+        for dv in range(-DESVIO_MAX, DESVIO_MAX + 1, 2):
+            repor(); _girar_pegada(lado, tw, dv)
+            erro = math.degrees(dir_espada(lado).angle(DIR_ALVO)) + 0.15 * abs(dv) + 0.02 * abs(tw)   # prefere pulso neutro
+            if erro < melhor[0]: melhor = (erro, tw, dv)
+    repor(); PEGADA[lado] = melhor[1:]; _girar_pegada(lado, *PEGADA[lado])
+    print("pegada: erro", round(melhor[0], 1), "giro do antebraço", melhor[1], "desvio do pulso", melhor[2])
 def mirar_pulso(lado, alvo, limite=65):
     """gira o pulso para o eixo do punho (a) apontar para 'alvo' (até 'limite' graus): a arma aponta sem sair da mão"""
     a, f, n = eixos_mao(lado)
@@ -174,39 +218,50 @@ def encaixe_mao(lado):
 def pose(fase=None, respira=0.0, sobe=0.0, peso=0.0):
     """fase (0..1) = ciclo da caminhada (0 = contato do pé direito à frente); sem fase = parado (respiração e peso)"""
     base_parada()
-    if fase is None:   # PARADO: respira, transfere o peso de leve de um pé para o outro, braços soltos
-        mover_pelvis(0, peso * 0.012, sobe)
-        girar("pelvis", Y, peso * 1.5); girar("spine_02", Y, -peso * 1.8)
-        girar("spine_02", X, -2 - respira * 80); girar("head", X, respira * 30)
-        girar("upperarm_l", X, respira * 120); girar("upperarm_r", X, -respira * 60)
+    if fase is None:   # PARADO: respiração. Quadril, pernas e pés NÃO se mexem (nada desliza); só o peito abre e os ombros sobem
+        girar("spine_02", X, -2)                                  # postura
+        girar("spine_03", X, -2.5 * respira)                      # peito sobe/abre ao inspirar
+        girar("clavicle_l", Y, -5 * respira); girar("clavicle_r", Y, 5 * respira)   # ombros sobem (~1 px no sprite)
+        girar("head", X, 2.5 * respira)                           # a cabeça continua nivelada
         return
+    # CAMINHADA simétrica (referência: trote do Albion): os dois lados fazem exatamente o mesmo, meio ciclo defasados
     c, s2 = math.cos(2 * math.pi * fase), math.sin(2 * math.pi * fase)
     cD, cE = c, -c                                     # perna direita à frente em fase 0, esquerda em 0,5
     def joelho(f):   # flexão: um pouco no apoio (amortece) e bastante quando a perna passa à frente
         a = math.sin(2 * math.pi * f)
-        return 5 + 12 * max(0.0, a) + 46 * max(0.0, -a) ** 1.3
+        return 6 + 12 * max(0.0, a) + 50 * max(0.0, -a) ** 1.3
     jD, jE = joelho(fase), joelho(fase + 0.5)
-    mover_pelvis(0, 0, 0.012 * (1 - math.cos(4 * math.pi * fase)))      # sobe no meio do apoio, desce no contato
-    girar("pelvis", Z, 6 * c)                           # quadril gira: o lado da perna da frente avança
-    girar("pelvis", Y, 3 * s2)                          # e inclina de leve para o lado do apoio
-    girar("spine_02", Z, -5 * c); girar("spine_03", Z, -4 * c)   # ombros giram contra o quadril
-    girar("spine_02", X, -4)                            # leve inclinação à frente
-    girar("head", Z, -3 * c)                            # a cabeça compensa e continua olhando à frente
-    girar("thigh_r", X, -24 * cD); girar("thigh_l", X, -24 * cE)
+    mover_pelvis(0, 0, 0.014 * (1 - math.cos(4 * math.pi * fase)))   # sobe no meio do apoio, desce no contato
+    girar("pelvis", Z, 5 * c)                           # quadril gira: o lado da perna da frente avança
+    girar("spine_02", Z, -4 * c); girar("spine_03", Z, -4 * c)   # ombros giram contra o quadril
+    girar("spine_02", X, 4)                             # tronco levemente à frente (positivo = à frente)
+    girar("head", Z, 3 * c); girar("head", X, -3)       # a cabeça compensa e continua olhando à frente
+    girar("thigh_r", X, -26 * cD); girar("thigh_l", X, -26 * cE)
     girar("calf_r", X, jD); girar("calf_l", X, jE)
     # pé: calcanhar no contato, ponta no impulso (rola do calcanhar para a ponta)
-    girar("foot_r", X, 24 * cD * 0.5 - jD * 0.35 + 10 * max(0.0, math.sin(2 * math.pi * (fase - 0.35))) ** 2)
-    girar("foot_l", X, 24 * cE * 0.5 - jE * 0.35 + 10 * max(0.0, math.sin(2 * math.pi * (fase + 0.15))) ** 2)
-    # braços: oposição às pernas; cotovelo dobra mais quando o braço vai à frente
-    girar("upperarm_l", X, -18 * cD); girar("lowerarm_l", X, -(4 + 10 * max(0.0, cD)))
-    girar("upperarm_r", X, -(9 * cE)); girar("lowerarm_r", X, -(5 + 6 * max(0.0, cE)))
+    girar("foot_r", X, 26 * cD * 0.5 - jD * 0.35 + 10 * max(0.0, math.sin(2 * math.pi * (fase - 0.35))) ** 2)
+    girar("foot_l", X, 26 * cE * 0.5 - jE * 0.35 + 10 * max(0.0, math.sin(2 * math.pi * (fase + 0.15))) ** 2)
+    # braços soltos, em oposição às pernas, IGUAIS dos dois lados: o ombro leva o braço e o antebraço vem atrasado
+    # (cotovelo dobra mais quando o braço vai à frente e abre quando vai para trás, como um pêndulo)
+    for lado, cb, fb in (("l", cD, fase), ("r", cE, fase + 0.5)):
+        atraso = math.cos(2 * math.pi * (fb - 0.08))    # o antebraço segue o braço com um pequeno atraso
+        sx = 1 if lado == "l" else -1
+        armado = lado == "r" and not SEM_ARMA            # o braço da espada (peso na mão) balança menos e o pulso fica firme
+        k = 0.45 if armado else 1.0
+        girar(f"clavicle_{lado}", Z, -4 * cb * sx * k)  # o ombro acompanha: vai à frente e volta para trás com o braço
+        girar(f"upperarm_{lado}", X, -k * (18 * cb if cb > 0 else 34 * cb))   # para trás vai MAIS longe que para a frente
+        if armado:
+            girar(f"lowerarm_{lado}", X, -(8 + 4 * (0.5 + 0.5 * atraso)))   # cotovelo quase parado: a lâmina mantém o ângulo
+        else:
+            girar(f"lowerarm_{lado}", X, -(6 + 34 * (0.5 + 0.5 * atraso) ** 1.6))   # atrás: braço quase reto; à frente: dobra
+            girar(f"hand_{lado}", X, 6 * atraso)        # o pulso acompanha, solto
 
 def mover_pelvis(dx, dy, dz):
     pm = P["pelvis"].matrix.copy(); pm.translation += Vector((dx, dy, dz)); P["pelvis"].matrix = pm; bpy.context.view_layer.update()
 
 N_WALK, N_IDLE = 8, 6
 WALK = [dict(fase=i / N_WALK) for i in range(N_WALK)]
-IDLE = [dict(respira=0.008 * (1 - math.cos(2 * math.pi * i / N_IDLE)), sobe=-0.003 * (1 - math.cos(2 * math.pi * i / N_IDLE)), peso=math.sin(2 * math.pi * i / N_IDLE)) for i in range(N_IDLE)]
+IDLE = [dict(respira=0.5 * (1 - math.cos(2 * math.pi * i / N_IDLE))) for i in range(N_IDLE)]   # 0 (expira) .. 1 (inspira) .. 0
 POSES = {"walk": WALK, "idle": IDLE}
 
 # ------------------------------------------------------------------ equipamento criado na pose parada e preso aos ossos
@@ -226,7 +281,7 @@ def peca(nome, prim, loc, esc, material, osso, rot=(0, 0, 0), bevel=0.01, coleca
 # Cada peça numa coleção (= camada). O laranja das referências é o ACENTO (a parte que recebe a cor da raridade).
 GRUPOS = {g.index: g.name for g in corpo.vertex_groups}
 OSSOS_VALIDOS = {b.name for b in rig.data.bones}
-def casca(nome, ossos, z_min, z_max, infla, material, espessura=0.012, facetado=0.0, colecao_nome="couraca"):
+def casca(nome, ossos, z_min, z_max, infla, material, espessura=0.012, facetado=0.0, colecao_nome="couraca", juntar=False):
     """copia do próprio corpo as faces movidas por 'ossos' entre z_min e z_max (fração da altura), infla e dá espessura"""
     o = corpo.copy(); o.data = corpo.data.copy(); o.name = nome; cena.collection.objects.link(o)
     bm = bmesh.new(); bm.from_mesh(o.data)
@@ -241,7 +296,10 @@ def casca(nome, ossos, z_min, z_max, infla, material, espessura=0.012, facetado=
             n = GRUPOS.get(gi, "")
             if n in OSSOS_VALIDOS and w > peso: melhor, peso = n, w
         return melhor in ossos
-    fora = [f for f in bm.faces if not all(ok_v(v) for v in f.verts)]
+    # juntar: a face entra se QUALQUER vértice for da peça (as peças vizinhas se sobrepõem em vez de deixar
+    # um buraco nas faces da divisa, como atrás dos ombros entre o peitoral e os braços)
+    teste = any if juntar else all
+    fora = [f for f in bm.faces if not teste(ok_v(v) for v in f.verts)]
     bmesh.ops.delete(bm, geom=fora, context="FACES")
     for v in bm.verts: v.co += v.normal * infla
     bm.to_mesh(o.data); bm.free()
@@ -283,10 +341,10 @@ def peca_em(nome, prim, local, esc, material, ref, osso, colecao_nome, bevel=0.0
 # ---- ARMADURA (slot do peito): cobre o corpo todo, menos a cabeça (elmo) e os pés (botas), como no Albion
 TRONCO = {"spine_01", "spine_02", "spine_03", "pelvis", "clavicle_l", "clavicle_r"}
 MAOS = {f"{d}_{k}_{l}" for d in ("index", "middle", "ring", "pinky", "thumb") for k in ("01", "02", "03") for l in ("l", "r")} | {"hand_l", "hand_r"}
-casca("peitoral", TRONCO | {"neck_01"}, 0.50, 0.855, 0.028, ACO, facetado=0.7)
+casca("peitoral", TRONCO | {"neck_01"}, 0.50, 0.885, 0.028, ACO, facetado=0.7, juntar=True)   # sobe pelo pescoço até por baixo do elmo (sem buraco na nuca)
 for lado, s_ in (("D", "r"), ("E", "l")):
-    casca(f"ombreira_{lado}", {f"upperarm_{s_}", f"clavicle_{s_}"}, 0.74, 0.86, 0.045, ACO_CLARO, facetado=0.7)
-    casca(f"braco_{lado}", {f"upperarm_{s_}", f"lowerarm_{s_}"}, 0.0, 0.80, 0.016, ACO, facetado=0.8)
+    casca(f"ombreira_{lado}", {f"upperarm_{s_}", f"clavicle_{s_}"}, 0.74, 0.86, 0.045, ACO_CLARO, facetado=0.7, juntar=True)
+    casca(f"braco_{lado}", {f"upperarm_{s_}", f"lowerarm_{s_}"}, 0.0, 0.80, 0.016, ACO, facetado=0.8, juntar=True)
 casca("manoplas", MAOS, 0.0, 1.0, 0.005, ACO_ESCURO, espessura=0.006)
 casca("faldas", {"pelvis", "thigh_l", "thigh_r", "spine_01"}, 0.42, 0.56, 0.03, ACO, facetado=0.7)
 casca("pernas", {"thigh_l", "thigh_r", "calf_l", "calf_r"}, 0.065, 0.53, 0.014, ACO, facetado=0.8)
@@ -294,54 +352,164 @@ casca("cinto", TRONCO, 0.548, 0.588, 0.042, ACENTO, espessura=0.012)
 
 # ---- BOTAS (slot dos pés): calçado de placa até o tornozelo, faixa laranja no cano
 PES = {"foot_l", "foot_r", "ball_l", "ball_r", "calf_l", "calf_r"}
-casca("sapatos", PES, 0.0, 0.10, 0.016, ACO_CLARO, facetado=0.85, espessura=0.01, colecao_nome="botas")
-casca("botas_aro", {"calf_l", "calf_r", "foot_l", "foot_r"}, 0.082, 0.105, 0.024, ACENTO, espessura=0.008, colecao_nome="botas")
+# o cano sobe até a canela (logo abaixo do joelho) e fica POR CIMA da armadura das pernas (infla maior que o 0.014 dela)
+casca("sapatos", PES, 0.0, 0.235, 0.028, ACO_CLARO, facetado=0.85, espessura=0.01, colecao_nome="botas")
+casca("botas_aro", {"calf_l", "calf_r"}, 0.215, 0.245, 0.036, ACENTO, espessura=0.008, colecao_nome="botas")
 
-# ---- ELMO: elmo fechado com fenda do visor, nervura central e crista (acento) de frente para trás
-cab_pts = pontos({"head"}, 0.885, 1.0) + [cab.matrix_world @ v.co for v in cab.data.vertices]
+# ---- ELMO: esfera moldada à cabeça (envoltória lisa da pele: sem nariz/orelhas), justa, desce até o pescoço e cobre a
+# nuca; fenda do visor na altura dos olhos, aro na borda e crista (acento) de frente para trás. Pesos copiados da pele
+# (cabeça/pescoço): deforma junto. Medidas no corpo em repouso já com as formas do MakeHuman (as da malha base não servem).
+from mathutils.kdtree import KDTree
+def pele_repouso():
+    """posições da pele (grupo body) no repouso com as formas aplicadas, e os pesos head/neck_01 de cada vértice"""
+    masks = [m for m in corpo.modifiers if m.type == "MASK"]
+    for m in masks: m.show_viewport = False
+    rig.data.pose_position = "REST"; bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get(); ev = corpo.evaluated_get(dg); me = ev.to_mesh()
+    gi_b = corpo.vertex_groups["body"].index
+    gh, gn = corpo.vertex_groups["head"].index, corpo.vertex_groups["neck_01"].index
+    out = []
+    for v, v0 in zip(me.vertices, corpo.data.vertices):
+        g = {x.group: x.weight for x in v0.groups}
+        if g.get(gi_b, 0.0) <= 0.0: continue
+        wh, wn = g.get(gh, 0.0), g.get(gn, 0.0)
+        if wh + wn < 0.5: continue
+        out.append((corpo.matrix_world @ v.co, wh, wn))
+    ev.to_mesh_clear()
+    rig.data.pose_position = "POSE"
+    for m in masks: m.show_viewport = True
+    bpy.context.view_layer.update(); return out
+PELE_CAB = pele_repouso()
+cab_pts = [p for p, wh, wn in PELE_CAB if wh >= wn]; pesc_pts = [p for p, wh, wn in PELE_CAB if wn > wh]
+Z_QUEIXO = min(p.z for p in cab_pts); Z_PESC = min(p.z for p in pesc_pts)
+z_topo = max(p.z for p in cab_pts)
+z_corte = Z_PESC + 0.45 * (Z_QUEIXO - Z_PESC)          # o elmo termina no pescoço (acima da gola da couraça)
 cx = sum(p.x for p in cab_pts) / len(cab_pts); cy = sum(p.y for p in cab_pts) / len(cab_pts)
-zmin = 0.878 * ALTURA; zmax = max(p.z for p in cab_pts)
-rx = max(abs(p.x - cx) for p in cab_pts); ry = max(abs(p.y - cy) for p in cab_pts)
-R = max(rx, ry) * 1.05; H = (zmax - zmin) * 0.76   # rente à cabeça (antes 1.16: cabeção)
-REF_CAB = Matrix.Translation(Vector((cx, cy, zmin)))
-peca_em("elmo", "primitive_cylinder_add", (0, 0, H / 2), (1, 1.05, 1), ACO, REF_CAB, "head", "elmo", vertices=16, radius=R, depth=H)
-peca_em("elmo_topo", "primitive_uv_sphere_add", (0, 0, H * 0.98), (1, 1.05, 0.80), ACO, REF_CAB, "head", "elmo", bevel=0, liso=True, segments=16, ring_count=8, radius=R)
-z_olho = (0.935 * ALTURA) - zmin
-peca_em("visor_fenda", "primitive_cube_add", (0, -R * 1.02, z_olho), (R * 1.15, 0.03, 0.022), FENDA, REF_CAB, "head", "elmo", bevel=0, size=1)
-peca_em("visor_nervura", "primitive_cube_add", (0, -R * 1.04, H * 0.45), (0.018, 0.02, H * 0.95), ACO_CLARO, REF_CAB, "head", "elmo", size=1)
-peca_em("elmo_aro", "primitive_cylinder_add", (0, 0, 0.012), (1, 1.05, 1), ACO_CLARO, REF_CAB, "head", "elmo", vertices=16, radius=R * 1.02, depth=0.024)
-for k, (yy, zz, alto) in enumerate(((-0.7, 1.16, 0.045), (-0.35, 1.26, 0.065), (0.0, 1.29, 0.075), (0.35, 1.26, 0.07), (0.7, 1.14, 0.06))):
-    peca_em(f"crista_{k}", "primitive_cube_add", (0, yy * R, H * zz - 0.012), (0.028, R * 0.42, alto), ACENTO, REF_CAB, "head", "elmo", size=1)
+z_olho = z_topo - 0.47 * (z_topo - Z_QUEIXO)
+CENTRO_CAB = Vector((cx, cy, Z_QUEIXO + 0.45 * (z_topo - Z_QUEIXO)))
+_pele = [p - CENTRO_CAB for p, wh, wn in PELE_CAB if p.z >= z_corte - 0.01]
+PELE_DIR = [d.normalized() for d in _pele]; PELE_R = [d.length for d in _pele]
+KD_CAB = KDTree(len(PELE_DIR))
+for i, d in enumerate(PELE_DIR): KD_CAB.insert(d, i)
+KD_CAB.balance()
+KD_PESO = KDTree(len(PELE_CAB))
+for i, (p, wh, wn) in enumerate(PELE_CAB): KD_PESO.insert(p, i)
+KD_PESO.balance()
+print("elmo: queixo", round(Z_QUEIXO, 3), "pescoço", round(Z_PESC, 3), "topo", round(z_topo, 3), "olho", round(z_olho, 3))
+
+def casca_cabeca(nome, infla, material, faixa=None, suaviza=6, espessura=0.008, mat_fenda=None, janela=0.40):
+    """esfera em volta da cabeça levada até a envoltória da pele + 'infla'; corta no pescoço; 'faixa(c)' filtra faces"""
+    bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=32, radius=0.1)
+    for v in bm.verts:
+        u = v.co.normalized(); alc = 0.0
+        for _, k, _d in KD_CAB.find_range(u, janela):
+            alc = max(alc, PELE_R[k] * u.dot(PELE_DIR[k]))
+        v.co = CENTRO_CAB + u * (alc + infla)
+    for _ in range(suaviza):
+        bmesh.ops.smooth_vert(bm, verts=list(bm.verts), factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+    fora = [f for f in bm.faces if f.calc_center_median().z < z_corte or (faixa and not faixa(f.calc_center_median()))]
+    bmesh.ops.delete(bm, geom=fora, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    me = bpy.data.meshes.new(nome); bm.to_mesh(me); bm.free()
+    o = bpy.data.objects.new(nome, me); cena.collection.objects.link(o)
+    vh, vn = o.vertex_groups.new(name="head"), o.vertex_groups.new(name="neck_01")
+    for v in me.vertices:   # peso da pele mais próxima: a borda do pescoço acompanha o pescoço, o resto a cabeça
+        _, k, _d = KD_PESO.find(v.co); _, wh, wn = PELE_CAB[k]; t = wh + wn
+        vh.add([v.index], wh / t, "REPLACE"); vn.add([v.index], wn / t, "REPLACE")
+    am = o.modifiers.new("esqueleto", "ARMATURE"); am.object = rig
+    me.materials.append(material)
+    if mat_fenda:
+        me.materials.append(mat_fenda)
+        for p in me.polygons:
+            c = p.center
+            if c.y < cy - 0.045 and abs(c.z - z_olho) < 0.014: p.material_index = 1
+    for p in me.polygons: p.use_smooth = True
+    sl = o.modifiers.new("espessura", "SOLIDIFY"); sl.thickness = espessura; sl.offset = 1
+    mover_para(o, "elmo"); return o
+casca_cabeca("elmo", 0.020, ACO, mat_fenda=FENDA)
+casca_cabeca("elmo_aro", 0.026, ACO_CLARO, faixa=lambda c: c.z < z_corte + 0.022, suaviza=4)          # aro na borda do pescoço
+casca_cabeca("elmo_crista", 0.032, ACENTO, faixa=lambda c: abs(abs(math.degrees(math.atan2(c.y - cy, c.x - cx))) - 90) < 7.6 and c.z > z_olho + 0.02 - 0.5 * max(0.0, c.y - cy), suaviza=4, espessura=0.01)
 
 # ---- CAPA: tecido cinza-amarronzado atrás, forro escuro, faixas laranja nos ombros, fecho de metal
-costas = pontos({"spine_02", "spine_03"}, 0.70, 0.80)          # só o tronco (sem braços)
-y_costas = max(p.y for p in costas); larg = max(abs(p.x) for p in costas) * 0.95
-z_ombro = 0.815 * ALTURA; z_barra = 0.30 * ALTURA
-bpy.ops.mesh.primitive_grid_add(x_subdivisions=8, y_subdivisions=14, size=1)
-capa = bpy.context.object; capa.name = "capa_m"
-for v in capa.data.vertices:
-    u, t = v.co.x + 0.5, v.co.y + 0.5                        # u: de um lado ao outro; t: 0 = barra, 1 = ombro
-    largura = larg * (1 + (1 - t) * 0.45)                     # abre um pouco para baixo
-    z = z_barra + t * (z_ombro - z_barra)
-    th = (u - 0.5) * math.pi * 0.75                           # curva em volta das costas (as bordas vêm para a frente)
-    x = math.sin(th) * largura
-    y = y_costas + 0.035 - (1 - math.cos(th)) * largura * 0.55 + (1 - t) ** 1.4 * 0.17   # cai atrás, afastada das pernas
-    dobra = 0.014 * math.sin(u * math.pi * 7) * (1 - t)       # dobras na barra
-    v.co = Vector((x, y + dobra, z))
-for p in capa.data.polygons: p.use_smooth = True
-capa.data.materials.append(TECIDO); capa.data.materials.append(TECIDO_ESC)
-sl = capa.modifiers.new("espessura", "SOLIDIFY"); sl.thickness = 0.014; sl.material_offset = 1
-mw = capa.matrix_world.copy(); capa.parent = rig; capa.parent_type = "BONE"; capa.parent_bone = "spine_03"
-bpy.context.view_layer.update(); capa.matrix_world = mw; mover_para(capa, "capa")
-for lado, sx in (("D", -1), ("E", 1)):
-    REF_OMBRO = Matrix.Translation(Vector((sx * larg * 0.62, y_costas - 0.02, z_ombro + 0.005)))
-    peca_em(f"capa_faixa_{lado}", "primitive_cube_add", (0, 0, 0), (larg * 0.62, 0.16, 0.03), ACENTO, REF_OMBRO, "spine_03", "capa", size=1)
-pescoco = pontos({"neck_01"}, 0.80, 0.86)
-y_frente = min(p.y for p in pescoco) - 0.02
-peca_em("capa_fecho", "primitive_cube_add", (0, 0, 0), (0.07, 0.025, 0.045), ACO_CLARO, Matrix.Translation(Vector((0, y_frente, 0.83 * ALTURA))), "spine_03", "capa", size=1)
+# Medidas no corpo em REPOUSO com as formas do MakeHuman (a malha base é mais baixa: a capa ficava no meio das costas).
+# Nasce em cima dos ombros (por cima das ombreiras), rente à nuca, e desce até o meio das coxas.
+def pts_repouso(ossos):
+    masks = [m for m in corpo.modifiers if m.type == "MASK"]
+    for m in masks: m.show_viewport = False
+    rig.data.pose_position = "REST"; bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get(); ev = corpo.evaluated_get(dg); me = ev.to_mesh()
+    gi_b = corpo.vertex_groups["body"].index; out = []
+    for v, v0 in zip(me.vertices, corpo.data.vertices):
+        melhor, peso, corpo_ok = None, 0.0, False
+        for g in v0.groups:
+            if g.group == gi_b and g.weight > 0: corpo_ok = True
+            n = GRUPOS.get(g.group, "")
+            if n in OSSOS_VALIDOS and g.weight > peso: melhor, peso = n, g.weight
+        if corpo_ok and melhor in ossos: out.append(corpo.matrix_world @ v.co)
+    ev.to_mesh_clear(); rig.data.pose_position = "POSE"
+    for m in masks: m.show_viewport = True
+    bpy.context.view_layer.update(); return out
+H_REAL = max(p.z for p in pts_repouso({"head"}))
+clav = pts_repouso({"clavicle_l", "clavicle_r", "spine_03"})
+z_ombro = max(p.z for p in clav) + 0.03                       # topo dos ombros + couraça
+costas = [p for p in pts_repouso({"spine_02", "spine_03"}) if p.z > 0.62 * H_REAL]
+y_costas = max(p.y for p in costas) + 0.04                     # atrás das costas + couraça
+larg = max(abs(p.x) for p in pts_repouso({"clavicle_l", "clavicle_r"})) * 1.30   # cobre as ombreiras
+pesc = pts_repouso({"neck_01"}); y_nuca = max(p.y for p in pesc) + 0.02; y_frente = min(p.y for p in pesc) - 0.03
+coxa = pts_repouso({"thigh_l", "thigh_r"}); z_barra = min(p.z for p in coxa) + 0.55 * (max(p.z for p in coxa) - min(p.z for p in coxa))
+print("capa: ombro", round(z_ombro, 3), "barra", round(z_barra, 3), "costas y", round(y_costas, 3), "larg", round(larg, 3))
+T_DOBRA = 0.90                                                  # acima disto a capa vira por cima do ombro até a nuca
+def ponto_capa(u, t, sobra=0.0):
+    """u: de um lado ao outro (0..1); t: 0 = barra, 1 = gola na nuca; 'sobra' afasta para fora (faixa por cima)"""
+    th = (u - 0.5) * math.pi * 0.70                            # curva em volta das costas (as bordas vêm para a frente)
+    if t <= T_DOBRA:
+        k = t / T_DOBRA
+        largura = larg * (1 + (1 - k) * 0.30)                  # abre um pouco para baixo
+        z = z_barra + k * (z_ombro - 0.045 - z_barra)
+        y = y_costas - (1 - math.cos(th)) * largura * 0.5 + (1 - k) ** 1.5 * 0.14   # cai atrás, afastada das pernas
+        y += 0.014 * math.sin(u * math.pi * 7) * (1 - k) + sobra
+    else:                                                       # gola: sobe e vai para a frente até a nuca, por cima do ombro
+        k = (t - T_DOBRA) / (1 - T_DOBRA)
+        largura = larg * (1 - 0.25 * k)
+        z = z_ombro - 0.045 + 0.045 * math.sin(k * math.pi / 2) + sobra
+        y = y_costas + (y_nuca - y_costas) * k - (1 - math.cos(th)) * largura * 0.5 * (1 - k) + sobra * (1 - k)
+    return Vector((math.sin(th) * largura, y, z))
+def kd_armadura(nomes):
+    """vértices (na pose atual, já deformados) das peças da couraça que a capa não pode atravessar"""
+    dg = bpy.context.evaluated_depsgraph_get(); pts = []
+    for n in nomes:
+        ev = bpy.data.objects[n].evaluated_get(dg); me = ev.to_mesh()
+        pts += [ev.matrix_world @ v.co for v in me.vertices]; ev.to_mesh_clear()
+    kd = KDTree(len(pts))
+    for i, q in enumerate(pts): kd.insert(q, i)
+    kd.balance(); return kd
+KD_ARMADURA = kd_armadura(("peitoral", "ombreira_D", "ombreira_E", corpo.name))
+def malha_capa(nome, t0, t1, materiais, sobra=0.0, espessura=0.014):
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=12, y_subdivisions=max(3, round(20 * (t1 - t0))), size=1)
+    o = bpy.context.object; o.name = nome
+    for v in o.data.vertices:
+        t = t0 + (v.co.y + 0.5) * (t1 - t0); q = ponto_capa(v.co.x + 0.5, t, sobra)
+        # folga da armadura: afasta para trás (e para cima, na gola) até ficar a >= 2,5 cm da couraça/ombreiras
+        sai = Vector((0, 1, 1.2 if t > T_DOBRA - 0.05 else 0.15)).normalized()
+        for _ in range(40):
+            _, _, dist = KD_ARMADURA.find(q)
+            if dist >= 0.025 + sobra: break
+            q += sai * 0.003
+        v.co = q
+    for p in o.data.polygons: p.use_smooth = True
+    for m in materiais: o.data.materials.append(m)
+    sl = o.modifiers.new("espessura", "SOLIDIFY"); sl.thickness = espessura; sl.material_offset = 1
+    mw = o.matrix_world.copy(); o.parent = rig; o.parent_type = "BONE"; o.parent_bone = "spine_03"
+    bpy.context.view_layer.update(); o.matrix_world = mw; mover_para(o, "capa"); return o
+capa = malha_capa("capa_m", 0.0, 1.0, (TECIDO, TECIDO_ESC))
+malha_capa("capa_gola", 0.955, 1.0, (ACENTO,), sobra=0.004, espessura=0.006)   # faixa laranja na gola, por cima dos ombros
+peca_em("capa_fecho", "primitive_cube_add", (0, 0, 0), (0.07, 0.025, 0.045), ACO_CLARO, Matrix.Translation(Vector((0, y_frente, z_ombro - 0.03))), "spine_03", "capa", size=1)
 
 # ---- ESPADA DE UMA MÃO: lâmina clara, guarda com acabamento laranja (acento), cabo de couro, pomo escuro
-REF = encaixe_mao("r") @ Matrix.Rotation(math.pi, 4, "X")   # local -Z (ponta) = lado do polegar
+# referencial da espada: local -Z = sentido da lâmina (diagonal da palma); local X = largura da lâmina no plano vertical
+# que contém a lâmina (faces chatas para os lados, fios para a frente/trás: nada de fio virado para cima)
+_D = dir_espada("r"); _W = (Vector((0, 0, 1)) - _D * _D.z).normalized()
+REF = Matrix((_W, (-_D).cross(_W), -_D)).transposed().to_4x4(); REF.translation = encaixe_mao("r").translation
 COMP = 0.70
 peca_em("cabo", "primitive_cylinder_add", (0, 0, 0.0), (1, 1, 1), COURO, REF, "hand_r", "espada", vertices=10, radius=0.022, depth=0.17)
 peca_em("pomo", "primitive_uv_sphere_add", (0, 0, 0.10), (1, 1, 1), ACO_ESCURO, REF, "hand_r", "espada", bevel=0, segments=12, ring_count=8, radius=0.034)
@@ -415,6 +583,34 @@ def preparar(camada):
 
 PECAS = ["botas", "couraca", "capa", "elmo", "espada", "escudo"]
 CAMADAS = ["corpo", "cabelo"] + [c for p_ in PECAS for c in (p_, p_ + "_acento")]
+if "--exemplo" in argv:   # exemplo isolado para aprovação: volta de 360° na cabeça + corpo inteiro SE/NE (cor de acento laranja)
+    restaurar()
+    ACENTO.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (1.0, 0.33, 0.07, 1)
+    mostrar = arg("--mostrar", "corpo,couraca,botas,escudo,elmo").split(",")
+    for nome in COLECOES:
+        if nome != "cena": lc = bpy.context.view_layer.layer_collection.children[nome]; lc.exclude = nome not in mostrar; lc.holdout = False
+    os.makedirs(SAIDA, exist_ok=True)
+    if arg("--anim"):   # quadros de uma animação, cor cheia, nas direções pedidas
+        for d in DIRS:
+            camera(d)
+            for i, pp in enumerate(POSES[arg("--anim")]):
+                pose(**pp); r.filepath = os.path.join(SAIDA, f"{arg('--anim')}_{d}_{i:02d}.png"); bpy.ops.render.render(write_still=True)
+        print("ok exemplo"); sys.exit(0)
+    pose(**IDLE[0])
+    alvo_cab = (cabeca_mundo("head") + cauda_mundo("head")) / 2 + Vector((0, 0, -0.06))
+    zoom_volta = 0.75
+    if arg("--volta", "cabeca") == "corpo": alvo_cab = ALVO + Vector((0, 0, 0.10)); zoom_volta = 2.4
+    if arg("--volta", "cabeca") == "mao": alvo_cab = cabeca_mundo("hand_r") + Vector((0, -0.12, -0.12)); zoom_volta = 1.0
+    for k, az in enumerate(range(0, 360, 30)):
+        a_ = math.radians(-45 - az); cam.data.ortho_scale = zoom_volta
+        cam.location = alvo_cab + Vector((math.sin(a_) * math.cos(ELEV) * 6, -math.cos(a_) * math.cos(ELEV) * 6, math.sin(ELEV) * 6))
+        cam.rotation_euler = (alvo_cab - cam.location).to_track_quat("-Z", "Y").to_euler()
+        sol.rotation_euler = Euler((math.radians(48), 0, a_ - math.radians(35)), "XYZ")
+        r.filepath = os.path.join(SAIDA, f"volta_{k:02d}.png"); bpy.ops.render.render(write_still=True)
+    cam.data.ortho_scale = 2.4
+    for d in ("se", "ne"):
+        camera(d); r.filepath = os.path.join(SAIDA, f"corpo_{d}.png"); bpy.ops.render.render(write_still=True)
+    print("ok exemplo"); sys.exit(0)
 if "--close" in argv:
     restaurar()
     for nome in COLECOES:
