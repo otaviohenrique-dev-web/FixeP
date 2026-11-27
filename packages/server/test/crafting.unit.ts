@@ -2,7 +2,7 @@
 // escalonamento monotônico por raridade, Óbolos só do épico para cima, set = 4 peças, e craftItem (tudo ou nada,
 // com rng injetado). Uso: npx tsx test/crafting.unit.ts  (a partir de packages/server)
 import {
-  ITEMS, WEAPON_TYPES, RARITIES, GEAR_CLASSES, COIN_IRON, COIN_OBOL, MAT_FERRO, MAT_COURO, MAT_ESSENCIA, CRAFT_MULT, ARMA_BASE, ARMA_OBOLOS, PECA_BASE, PECA_OBOLOS,
+  ITEMS, WEAPON_TYPES, RARITIES, RARIDADES_CRAFT, rarityIndex, GEAR_CLASSES, COIN_IRON, COIN_OBOL, MAT_FERRO, MAT_COURO, MAT_ESSENCIA, CRAFT_MULT, ARMA_BASE, ARMA_OBOLOS, PECA_BASE, PECA_OBOLOS,
   receitaArma, receitaPeca, receitaSet, familiasArma, familiasSecundaria, faltasReceita, progressoSet, nomeFamilia, type CharClass, type Rarity, type PecaCraft,
 } from "@frixep/shared";
 import { emptyInventory, addItem } from "../src/game/inventory.js";
@@ -21,12 +21,13 @@ const forma = (r: { mats: Record<string, number>; tostoes: number; obolos: numbe
 
 console.log("== Ingredientes e tabelas");
 check("os 3 ingredientes existem no catálogo, como material", [MAT_FERRO, MAT_COURO, MAT_ESSENCIA].every((id) => ITEMS[id]?.kind === "material"));
-check("multiplicador por raridade é crescente (6 níveis de equipamento)", CRAFT_MULT.length === RARITIES.length && CRAFT_MULT.every((m, i) => i === 0 || m > CRAFT_MULT[i - 1]));
+check("multiplicador por raridade é crescente (Lixo = Comum; dali em diante sobe)", CRAFT_MULT.length === RARITIES.length && CRAFT_MULT.every((m, i) => i === 0 || m > CRAFT_MULT[i - 1] || (i === 1 && m === CRAFT_MULT[0])));
+check("a forja cria de Comum a Mítico (Lixo e Ancestral não têm receita)", RARIDADES_CRAFT.join() === "common,uncommon,rare,epic,legendary,mythic");
 
 console.log("\n== Armas: uma receita padrão para todas");
 let armasOk = 0, armasTotal = 0, formulaUnica = true, ratioUnico = true;
 for (const cls of CLASSES) for (const fam of familiasArma(cls)) {
-  RARITIES.forEach((r, i) => {
+  RARIDADES_CRAFT.map((r) => [r, rarityIndex(r)] as const).forEach(([r, i]) => {
     armasTotal++;
     const x = receitaArma(fam, r);
     if (x) armasOk++;
@@ -45,7 +46,7 @@ check("arma com família ou raridade inválida não tem receita", receitaArma("n
 
 console.log("\n== Peças de set e secundárias: outra fórmula padrão, igual para todas");
 let pecaUnica = true, pecaTotal = 0, pecaOk = 0;
-for (const cls of CLASSES) RARITIES.forEach((r, i) => {
+for (const cls of CLASSES) RARIDADES_CRAFT.map((r) => [r, rarityIndex(r)] as const).forEach(([r, i]) => {
   const ref = receitaPeca("armor", r, cls)!;
   for (const p of PECAS) {
     if (p === "secundaria") continue;
@@ -66,10 +67,10 @@ check(`toda peça de set e secundária tem receita (${pecaOk}/${pecaTotal})`, pe
 check("peças usam a mesma fórmula (mesma quantidade de ingredientes, Tostões e Óbolos na raridade)", pecaUnica);
 check("peça de set não aceita família de arma nem classe errada na secundária", receitaPeca("armor", "common", "warrior") !== null && receitaPeca("secundaria", "common", "warrior", "besta") === null && receitaPeca("secundaria", "common", "archer", "escudo_guerra") === null);
 check("raridade inválida não tem receita de peça", receitaPeca("helmet", "junk", "mage") === null);
-check("cada peça custa menos Tostões que a arma da mesma raridade", RARITIES.every((r) => receitaPeca("armor", r, "cleric")!.tostoes < receitaArma("espada_1m", r)!.tostoes));
+check("cada peça custa menos Tostões que a arma da mesma raridade", RARIDADES_CRAFT.every((r) => receitaPeca("armor", r, "cleric")!.tostoes < receitaArma("espada_1m", r)!.tostoes));
 
 console.log("\n== Escalonamento monotônico (por raridade, comum -> mítico)");
-const monotono = (get: (r: Rarity) => number) => RARITIES.every((r, i) => i === 0 || get(r) >= get(RARITIES[i - 1]));
+const monotono = (get: (r: Rarity) => number) => RARIDADES_CRAFT.every((r, i) => i === 0 || get(r) >= get(RARIDADES_CRAFT[i - 1]));
 const armaRef = "montante", peça = (r: Rarity) => receitaPeca("cape", r, "mage")!;
 check("arma: ferro, couro, essência e Tostões sobem a cada raridade", ["mat_ferro_bruto", "mat_couro_curtido", "mat_essencia_arcana"].every((m) => monotono((r) => receitaArma(armaRef, r)!.mats[m])) && monotono((r) => receitaArma(armaRef, r)!.tostoes));
 check("arma: Óbolos nunca diminuem e o mítico pede mais que o épico", monotono((r) => receitaArma(armaRef, r)!.obolos) && receitaArma(armaRef, "mythic")!.obolos > receitaArma(armaRef, "epic")!.obolos);

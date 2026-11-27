@@ -100,7 +100,7 @@ export function abrirPainel(jogoToken: string, abaInicial?: string): void {
       return;
     }
     // Esc fecha primeiro a camada de cima (gaveta, diálogo ou busca); a janela só fecha quando não há nenhuma
-    if (e.key === "Escape" && !document.querySelector(".pn-gaveta-back, .pn-modal-back")) sair();
+    if (e.key === "Escape" && !document.querySelector(".pn-gaveta-back, .pn-modal-back")) { e.preventDefault(); sair(); }
   };
   document.addEventListener("keydown", aoTecla, true);
   xis.onclick = sair;

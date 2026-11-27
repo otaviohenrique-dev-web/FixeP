@@ -297,8 +297,8 @@ function showGain(poderUp: number, rows: { label: string; pre: string; un: strin
 }
 
 /** 0 = sem brilho; épico pulsa leve, lendário médio, mítico forte */
-const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
-const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarity); return r >= 3 ? [`p${r - 2}`] : []; };
+const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic", "ancestral"];
+const pulse = (d: ItemDef): string[] => { const r = RARITY_ORDER.indexOf(d.rarity); return r >= 3 ? [`p${Math.min(3, r - 2)}`] : []; };
 
 /** posições (em % do boneco) de cada espaço */
 const EQ_POS: Record<EquipSlot | "potion", [number, number]> = {

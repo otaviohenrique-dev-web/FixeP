@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { NPC_REACH, type NpcDef } from "@frixep/shared";
 import { gridAngleToDir, pickDirection, type Dir } from "./sprites-core";
 import type { ActorAtlas } from "./sprites";
+import { chaoH } from "./iso";
 
 /**
  * NPCs da zona (comerciante e ferreira), desenhados por código até a arte chegar: figura simples + placa com nome e ofício.
@@ -96,7 +97,7 @@ export class NpcLayer {
     const smith = n.kind === "smith";
     const g = s.add.graphics();
     // sombra
-    g.fillStyle(0x000000, 0.35).fillEllipse(0, 2, 34, 12);
+    g.fillStyle(0x000000, 0.35).fillEllipse(0, 2, 34, chaoH(24));
     if (smith) {
       // bigorna ao lado e brasa da forja
       g.fillStyle(0x2b2f38, 1).fillRect(14, -12, 22, 8).fillRect(18, -4, 14, 10).fillRect(15, 6, 20, 4);
@@ -176,7 +177,7 @@ export class NpcLayer {
       }
       if (perto) {
         const a = 0.55 + 0.25 * Math.sin(time / 260);
-        v.ring.lineStyle(3, 0xf0cf86, a).strokeEllipse(v.sx, v.sy + 2, 54, 24);
+        v.ring.lineStyle(3, 0xf0cf86, a).strokeEllipse(v.sx, v.sy + 2, 54, chaoH(48));
       }
     }
   }

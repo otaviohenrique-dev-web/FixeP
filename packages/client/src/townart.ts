@@ -2,11 +2,12 @@
  * Arte da cidade de Brasalume gerada por código: cada peça é desenhada UMA vez num canvas 2D e vira textura em cache
  * (casas, árvores, lampiões, baú, fonte...). Em jogo cada peça é só uma Image; nada é redesenhado por quadro.
  *
- * Convenção isométrica (tile 64x32): +x aponta para baixo-direita (32,16) e +y para baixo-esquerda (-32,16).
+ * Convenção do chão (iso.ts, tile 64x46): +x aponta para baixo-direita (HX,HY) e +y para baixo-esquerda (-HX,HY).
  * Luz vinda de cima à esquerda: faces voltadas para +y (esquerda na tela) ficam claras; faces para +x (direita) ficam escuras;
  * as sombras no chão caem para baixo-direita. A arte NÃO tem luz pintada além das janelas e lanternas acesas.
  */
 import Phaser from "phaser";
+import { HX, HY, ISO_K, chaoH } from "./iso";
 
 export type Ctx = CanvasRenderingContext2D;
 export type Pt = [number, number];
@@ -56,9 +57,9 @@ export function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number
 export interface BoxCols { top: string; left: string; right: string; edge?: string }
 /** caixa isométrica: C = quina de baixo da frente; w ao longo de +x (esquerda), d ao longo de -y (direita); medidas em tiles; h em px */
 export function isoBox(c: Ctx, C: Pt, w: number, d: number, h: number, col: BoxCols, h0 = 0): { A: Pt; B: Pt; C: Pt; D: Pt } {
-  const D: Pt = [C[0] - 32 * w, C[1] - 16 * w];
-  const B: Pt = [C[0] + 32 * d, C[1] - 16 * d];
-  const A: Pt = [D[0] + 32 * d, D[1] - 16 * d];
+  const D: Pt = [C[0] - HX * w, C[1] - HY * w];
+  const B: Pt = [C[0] + HX * d, C[1] - HY * d];
+  const A: Pt = [D[0] + HX * d, D[1] - HY * d];
   const e = col.edge;
   poly(c, [up(D, h0), up(C, h0), up(C, h), up(D, h)], col.left, e, 1);
   poly(c, [up(C, h0), up(B, h0), up(B, h), up(C, h)], col.right, e, 1);
@@ -97,8 +98,8 @@ export function houseTex(scene: Phaser.Scene, s: HouseSpec): Tex {
   const key = `town_h_${s.id}`;
   const { w, d } = s;
   const H = s.floors === 2 ? 78 : 48, H0 = 9, ov = 0.3, rise = 16 + 9 * d;
-  const leftExt = 32 * (w + ov) + 10, rightExt = 32 * (d + ov) + 34;
-  const top = 16 * (w + d) + H + rise + 62;
+  const leftExt = HX * (w + ov) + 10, rightExt = HX * (d + ov) + 34;
+  const top = HY * (w + d) + H + rise + 62;
   const bottom = 46;
   const W = Math.ceil(leftExt + rightExt), Hh = Math.ceil(top + bottom);
   const tex: Tex = { key, ax: leftExt, ay: top, w: W, h: Hh };
@@ -106,12 +107,12 @@ export function houseTex(scene: Phaser.Scene, s: HouseSpec): Tex {
   canvasTex(scene, key, W, Hh, (c) => {
     const rnd = rngOf(s.seed);
     const C: Pt = [leftExt, top];
-    const D: Pt = [C[0] - 32 * w, C[1] - 16 * w];
-    const B: Pt = [C[0] + 32 * d, C[1] - 16 * d];
-    const A: Pt = [D[0] + 32 * d, D[1] - 16 * d];
+    const D: Pt = [C[0] - HX * w, C[1] - HY * w];
+    const B: Pt = [C[0] + HX * d, C[1] - HY * d];
+    const A: Pt = [D[0] + HX * d, D[1] - HY * d];
     const wallL = s.wall, wallR = shade(s.wall, 0.74);
     const stoneL = s.stone, stoneR = shade(s.stone, 0.74);
-    const wp = (side: "L" | "R", t: number, v: number): Pt => (side === "L" ? [D[0] + 32 * t, D[1] + 16 * t - v] : [C[0] + 32 * t, C[1] - 16 * t - v]);
+    const wp = (side: "L" | "R", t: number, v: number): Pt => (side === "L" ? [D[0] + HX * t, D[1] + HY * t - v] : [C[0] + HX * t, C[1] - HY * t - v]);
     const len = (side: "L" | "R") => (side === "L" ? w : d);
     const dark = shade(s.trim, 0.7);
     const stoneWalls = s.kind === "smith";
@@ -272,7 +273,7 @@ export function houseTex(scene: Phaser.Scene, s: HouseSpec): Tex {
     poly(c, [wp("R", 0, H - 7), wp("R", d, H - 7), wp("R", d, H), wp("R", 0, H)], "rgba(30,18,8,0.38)");
 
     // ---- telhado de duas águas (cumeeira ao longo de +x) com beiral
-    const Dr: Pt = [D[0] - 64 * ov, D[1]], Cr: Pt = [C[0], C[1] + 32 * ov], Br: Pt = [B[0] + 64 * ov, B[1]], Ar: Pt = [A[0], A[1] - 32 * ov];
+    const Dr: Pt = [D[0] - 2 * HX * ov, D[1]], Cr: Pt = [C[0], C[1] + 2 * HY * ov], Br: Pt = [B[0] + 2 * HX * ov, B[1]], Ar: Pt = [A[0], A[1] - 2 * HY * ov];
     const he = H - 3, hr = H + rise;
     const eave = (u: number) => up(lerp(Dr, Cr, u), he);
     const ridge = (u: number) => up(lerp(lerp(Dr, Ar, 0.5), lerp(Cr, Br, 0.5), u), hr);
@@ -466,9 +467,9 @@ export function fountainTex(scene: Phaser.Scene): Tex {
   const key = "town_fountain", W = 260, H = 240, ax = 130, ay = 150; // ay = centro do piso da fonte
   canvasTex(scene, key, W, H, (c) => {
     const ell = (x: number, y: number, rx: number, ry: number, fill: string, stroke?: string, lw = 1) => { c.fillStyle = fill; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, 7); c.fill(); if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw; c.stroke(); } };
-    groundShadow(c, ax + 16, ay + 8, 108, 44, 0.32);
+    groundShadow(c, ax + 16, ay + 8, 108, chaoH(88), 0.32);
     // bacia: parede externa (cilindro), borda superior, água
-    const R = 92, RY = 46, wallH = 18;
+    const R = 92, RY = Math.round(R * ISO_K), wallH = 18;
     const gr = c.createLinearGradient(ax - R, 0, ax + R, 0); gr.addColorStop(0, "#b3a88f"); gr.addColorStop(0.55, "#9a8f7a"); gr.addColorStop(1, "#6a604f");
     c.fillStyle = gr; c.beginPath(); c.ellipse(ax, ay, R, RY, 0, 0, Math.PI); c.lineTo(ax - R, ay - wallH); c.lineTo(ax + R, ay - wallH); c.lineTo(ax + R, ay); c.closePath(); c.fill();
     for (let i = 0; i < 14; i++) { const a = Math.PI * (i / 14); line(c, [ax + Math.cos(a) * R, ay + Math.sin(a) * RY], [ax + Math.cos(a) * R, ay + Math.sin(a) * RY - wallH], "rgba(0,0,0,0.16)", 1); }
@@ -508,15 +509,15 @@ export function chestTex(scene: Phaser.Scene): Tex {
   const key = "town_chest", W = 120, H = 120, ax = 60, ay = 88;
   canvasTex(scene, key, W, H, (c) => {
     const s = 0.98; // lado da base em tiles (cabe no losango do tile com folga)
-    const Cf: Pt = [ax, ay + 16 * s]; // quina da frente da base
+    const Cf: Pt = [ax, ay + HY * s]; // quina da frente da base
     // sombra de contato: losango um pouco maior, deslocado ao sul-leste
-    const sh = (k: number, ox: number, oy: number, a: string) => poly(c, [[ax + ox, ay - 16 * s * k + oy], [ax + 32 * s * k + ox, ay + oy], [ax + ox, ay + 16 * s * k + oy], [ax - 32 * s * k + ox, ay + oy]], a);
+    const sh = (k: number, ox: number, oy: number, a: string) => poly(c, [[ax + ox, ay - HY * s * k + oy], [ax + HX * s * k + ox, ay + oy], [ax + ox, ay + HY * s * k + oy], [ax - HX * s * k + ox, ay + oy]], a);
     sh(1.28, 7, 5, "rgba(0,0,0,0.20)"); sh(1.12, 4, 3, "rgba(0,0,0,0.26)"); sh(1.0, 0, 1, "rgba(0,0,0,0.34)");
     const bodyH = 21, lidH = 12;
     const tone = { top: "#a27a46", left: "#85592f", right: "#5f3d1d", edge: "#2a190b" };
     const bx = isoBox(c, Cf, s, s, bodyH, tone);
     // tábuas (linhas horizontais, simétricas nas duas faces)
-    const D: Pt = [Cf[0] - 32 * s, Cf[1] - 16 * s], B: Pt = [Cf[0] + 32 * s, Cf[1] - 16 * s];
+    const D: Pt = [Cf[0] - HX * s, Cf[1] - HY * s], B: Pt = [Cf[0] + HX * s, Cf[1] - HY * s];
     for (const v of [bodyH / 3, (2 * bodyH) / 3]) { line(c, [D[0], D[1] - v], [Cf[0], Cf[1] - v], "rgba(0,0,0,0.28)", 1); line(c, [Cf[0], Cf[1] - v], [B[0], B[1] - v], "rgba(0,0,0,0.28)", 1); }
     // tampa: caixa levemente recuada + faixa superior (cantos arredondados simulados pelo recuo)
     const Cl: Pt = [Cf[0], Cf[1] - bodyH];
@@ -532,7 +533,7 @@ export function chestTex(scene: Phaser.Scene): Tex {
     for (const u of [0.2, 0.8]) { band("L", u); band("R", u); }
     // cinta de topo ao longo da tampa (as duas direções)
     const tc: Pt = [Cl[0], Cl[1] - lidH];
-    line(c, [tc[0] - 32 * s, tc[1] - 16 * s], tc, iron, 2); line(c, tc, [tc[0] + 32 * s, tc[1] - 16 * s], iron, 2);
+    line(c, [tc[0] - HX * s, tc[1] - HY * s], tc, iron, 2); line(c, tc, [tc[0] + HX * s, tc[1] - HY * s], iron, 2);
     // rebites
     c.fillStyle = "#c9a85a";
     for (const u of [0.2, 0.8]) for (const v of [4, bodyH + 5]) { c.fillRect(D[0] + (Cf[0] - D[0]) * u - 1, D[1] + (Cf[1] - D[1]) * u - v, 2, 2); c.fillRect(Cf[0] + (B[0] - Cf[0]) * u - 1, Cf[1] + (B[1] - Cf[1]) * u - v, 2, 2); }

@@ -1,4 +1,4 @@
-import { ITEMS, RARITIES, WEAPON_TYPES, rarityIndex, type ItemDef, type Rarity } from "./items";
+import { ITEMS, RARITIES, RARIDADES_CRAFT, SUFIXO_RARIDADE, WEAPON_TYPES, rarityIndex, type ItemDef, type Rarity } from "./items";
 import type { CharClass } from "./index";
 import { COIN_IRON, COIN_OBOL } from "./economy";
 
@@ -32,16 +32,16 @@ for (const [id, m] of Object.entries(MATERIAL_DEFS)) {
 }
 
 // ------------------------------------------------------------ tabelas (uma fórmula para cada tipo)
-/** multiplicador por raridade (na ordem de RARITIES: comum, incomum, raro, épico, lendário, mítico) */
-export const CRAFT_MULT = [1, 2, 4, 7, 11, 16];
+/** multiplicador por raridade (na ordem de RARITIES: lixo, comum, incomum, raro, épico, lendário, mítico, ancestral). Também pesa no custo do refino */
+export const CRAFT_MULT = [1, 1, 2, 4, 7, 11, 16, 24];
 
 /** base da receita de ARMA (multiplicada pela raridade) e Óbolos por raridade (fixos, não multiplicam) */
 export const ARMA_BASE = { ferro: 3, couro: 2, essencia: 2, tostoes: 40 };
-export const ARMA_OBOLOS = [0, 0, 0, 2, 4, 8];
+export const ARMA_OBOLOS = [0, 0, 0, 0, 2, 4, 8, 16];
 
 /** base da receita de PEÇA (vale para armadura, elmo, botas, capa e secundária) e Óbolos por raridade */
 export const PECA_BASE = { ferro: 2, couro: 2, essencia: 1, tostoes: 25 };
-export const PECA_OBOLOS = [0, 0, 0, 1, 2, 4];
+export const PECA_OBOLOS = [0, 0, 0, 0, 1, 2, 4, 8];
 
 /** peças que formam um set (uma por slot de armadura da classe) */
 export const PECAS_SET = ["armor", "helmet", "boots", "cape"] as const;
@@ -60,7 +60,6 @@ export interface Receita {
   obolos: number;
 }
 
-const RARIDADES_CRAFT: readonly Rarity[] = RARITIES;
 const multiplicador = (r: Rarity) => CRAFT_MULT[rarityIndex(r)];
 
 function montar(item: string, r: Rarity, base: { ferro: number; couro: number; essencia: number; tostoes: number }, obolos: number[]): Receita {
@@ -90,7 +89,7 @@ const familiaDoItem = (d: ItemDef) => d.id.slice(0, d.id.length - d.rarity.lengt
 export function nomeFamilia(familia: string): string {
   const d = ITEMS[`${familia}_${RARITIES[0]}`];
   if (WEAPON_TYPES[familia]) return WEAPON_TYPES[familia].name;
-  return d ? d.name.replace(/ (Simples|de Ferro|da Geada|Solar|Carmesim|do Abismo)$/, "") : familia;
+  return d ? d.name.replace(new RegExp(` (${SUFIXO_RARIDADE.join("|")})$`), "") : familia;
 }
 
 /** Receita de UMA arma (qualquer família e raridade). null se a família ou a raridade não existem. */

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { drawVeil } from "./gate";
+import { HX, HY, ISO_K } from "./iso";
 import { VAULT_REACH, zoneNpcs, type ZoneDef } from "@frixep/shared";
 import {
   houseTex, treeTex, lampTex, barrelTex, crateTex, benchTex, bannerTex, braziertTex, fxTextures, fountainTex, chestTex, canvasTex, isoBox, poly, line, rngOf, shade,
@@ -232,7 +233,7 @@ export function drawTown(scene: Phaser.Scene, zone: ZoneDef, toScreen: ToScreen,
       fGlow.setAlpha(0.15 + 0.05 * Math.sin(time / 600));
       const p = 0.5 + 0.5 * Math.sin(time / 520);
       veilG.clear();
-      drawVeil(veilG, veilAt[0], veilAt[1], [32, 16], 2, 58, 12, time, 0xffc873);
+      drawVeil(veilG, veilAt[0], veilAt[1], [HX, HY], 2, 58, 12, time, 0xffc873);
       void p;
       flies.setPosition(cam.worldView.centerX, cam.worldView.centerY);
       const near = !!me && Math.hypot(me.x - vault.x, me.y - vault.y) <= VAULT_REACH;
@@ -295,7 +296,7 @@ function bakeGround(c: Ctx, W: number, Hh: number, TW: number, TH: number, S: (x
   c.globalCompositeOperation = "lighter";
   const pool = (gx: number, gy: number, r: number, a: number, rgb: string) => {
     const [sx, sy] = S(gx, gy);
-    c.save(); c.translate(sx, sy); c.scale(1, 0.5);
+    c.save(); c.translate(sx, sy); c.scale(1, ISO_K);
     const g = c.createRadialGradient(0, 0, 0, 0, 0, r); g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(1, `rgba(${rgb},0)`);
     c.fillStyle = g; c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.restore();
   };
@@ -344,9 +345,9 @@ function bakeGround(c: Ctx, W: number, Hh: number, TW: number, TH: number, S: (x
     const t = isoBox(c, C0, w, 2.2, TH_, towerCols);
     void t;
     // juntas
-    const D0: Pt = [C0[0] - 32 * w, C0[1] - 16 * w];
+    const D0: Pt = [C0[0] - HX * w, C0[1] - HY * w];
     courses(D0, C0, TH_, false);
-    courses(C0, [C0[0] + 32 * 2.2, C0[1] - 16 * 2.2], TH_, true);
+    courses(C0, [C0[0] + HX * 2.2, C0[1] - HY * 2.2], TH_, true);
     // ameias
     for (let i = 0; i < Math.floor(w * 2); i += 2) { const bx = xr - w + 0.15 + i * 0.5; isoBox(c, [S(bx + 0.4, -0.5)[0], S(bx + 0.4, -0.5)[1] - TH_], 0.4, 0.5, 9, { top: shade(wallStone, 1.3), left: shade(wallStone, 1.1), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.35)" }); }
     // seteira iluminada
@@ -374,7 +375,7 @@ function bakeGround(c: Ctx, W: number, Hh: number, TW: number, TH: number, S: (x
   // torre de canto (noroeste)
   isoBox(c, S(-0.5, -0.5), 2.2, 2.2, 82, { top: shade(wallStone, 1.2), left: shade(wallStone, 1.08), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.4)" });
   for (const [mx, my] of [[-2.2, -2.2], [-1.2, -2.2], [-2.2, -1.2], [-0.8, -1.4]] as const) isoBox(c, [S(mx + 0.5, my + 0.5)[0], S(mx + 0.5, my + 0.5)[1] - 82], 0.5, 0.5, 9, { top: shade(wallStone, 1.3), left: shade(wallStone, 1.1), right: shade(wallStone, 0.72), edge: "rgba(0,0,0,0.35)" });
-  { const C0 = S(-0.5, -0.5); courses([C0[0] - 32 * 2.2, C0[1] - 16 * 2.2], C0, 82, false); courses(C0, [C0[0] + 32 * 2.2, C0[1] - 16 * 2.2], 82, true); }
+  { const C0 = S(-0.5, -0.5); courses([C0[0] - HX * 2.2, C0[1] - HY * 2.2], C0, 82, false); courses(C0, [C0[0] + HX * 2.2, C0[1] - HY * 2.2], 82, true); }
 
   // ---------------------------------------------------------------- cerca baixa ao sul e a leste (rente ao chão, por cima do mapa)
   const LH = 22;

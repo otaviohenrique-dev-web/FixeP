@@ -191,7 +191,7 @@ export function mountTalentos(opts: TalentosOpts): TalentosUi {
 
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && aberto) return close();
+    if (e.key === "Escape" && aberto) { e.preventDefault(); return close(); }
     if (e.code !== "KeyT" || e.repeat || isTypingTarget()) return;
     if (aberto) close(); else open();
   });

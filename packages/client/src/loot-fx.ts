@@ -1,4 +1,4 @@
-import { RARITY_COLOR, RARITY_NAME, rarityIndex, type ItemDef, type Rarity } from "@frixep/shared";
+import { RARITY_COLOR, RARITY_NAME, tierVisual, type ItemDef, type Rarity } from "@frixep/shared";
 
 /**
  * Animação no centro da tela quando cai equipamento raro ou melhor. A intensidade cresce com a raridade:
@@ -17,8 +17,8 @@ const CSS = `
 .rv-txt{position:relative;display:flex;flex-direction:column;gap:4px;align-items:center;animation:rv-pop var(--d) ease-out forwards}
 .rv-tier{font-size:12px;font-weight:700;letter-spacing:.5em;text-transform:uppercase;color:#fff;text-shadow:0 0 10px var(--c),0 0 4px var(--c),0 0 18px var(--c),0 2px 4px #000}
 .rv-name{font-size:21px;font-weight:700;letter-spacing:.06em;color:#fff;text-shadow:0 0 14px var(--c),0 0 4px var(--c),0 2px 6px #000;max-width:92vw}
-.rv.t3 .rv-name,.rv.t4 .rv-name,.rv.t5 .rv-name{font-size:26px}
-.rv.t5 .rv-aura{animation:rv-pulse 1.1s ease-in-out infinite,rv-fade var(--d) linear forwards}
+.rv.t3 .rv-name,.rv.t4 .rv-name,.rv.t5 .rv-name,.rv.t6 .rv-name{font-size:26px}
+.rv.t5 .rv-aura,.rv.t6 .rv-aura{animation:rv-pulse 1.1s ease-in-out infinite,rv-fade var(--d) linear forwards}
 .rv.t4 .rv-aura{animation:rv-flick .22s steps(2) infinite,rv-fade var(--d) linear forwards}
 @keyframes rv-aura{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}25%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.25)}}
 @keyframes rv-rays{0%{opacity:0;transform:translate(-50%,-50%) rotate(0) scale(.5)}20%{opacity:.9}100%{opacity:0;transform:translate(-50%,-50%) rotate(60deg) scale(1.1)}}
@@ -35,17 +35,18 @@ let style: HTMLStyleElement | null = null;
 let current: HTMLElement | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-/** duração, quantidade de faíscas, raios e anéis por raridade (índice 2 = raro ... 5 = mítico) */
+/** duração, quantidade de faíscas, raios e anéis por raridade (tierVisual: 2 = raro ... 5 = mítico, 6 = ancestral) */
 const TIER = [
   null, null,
   { d: 2.2, sparks: 10, rays: false, rings: 1 },
   { d: 3.2, sparks: 24, rays: true, rings: 2 },
   { d: 4.0, sparks: 36, rays: true, rings: 3 },
   { d: 5.0, sparks: 48, rays: true, rings: 4 },
+  { d: 6.0, sparks: 64, rays: true, rings: 5 },
 ] as const;
 
 export function showRarityReveal(title: string, rarity: Rarity, sub?: string): void {
-  const t = rarityIndex(rarity);
+  const t = tierVisual(rarity);
   const cfg = TIER[t];
   if (!cfg) return; // comum e incomum só ganham o aviso normal
   if (!style) { style = document.createElement("style"); style.textContent = CSS; document.head.append(style); }

@@ -28,7 +28,7 @@ check("todo afixo tem nome, descrição e 6 valores (um por raridade)", AFIXOS.e
 check("todo afixo tem raridade mínima válida", AFIXOS.every((a) => ORDEM.includes(a.minRaridade)));
 check("valores não negativos", AFIXOS.every((a) => a.valores.every((v) => v >= 0)));
 check("o limite são 3 afixos por item", MAX_AFIXOS === 3);
-check("raridades de equipamento: 6 (comum..mítico)", RARITIES.length === 6);
+check("raridades de equipamento: 8 (Lixo..Ancestral)", RARITIES.length === 8);
 
 console.log("\n== Distribuição por raridade");
 check("roubo de vida só a partir de lendário", AFIXO_BY_ID["roubo_de_vida"].minRaridade === "legendary");

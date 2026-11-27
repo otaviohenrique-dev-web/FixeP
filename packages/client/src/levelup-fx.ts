@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { chaoH } from "./iso";
 import { LEVEL_TIER_COLORS, LEVEL_TIER_TITLES, levelTier } from "@frixep/shared";
 /**
  * Efeitos de subir de nível:
@@ -61,13 +62,13 @@ export function showLevelUpBanner(level: number): void {
 export function levelUpGlow(scene: Phaser.Scene, target: Phaser.GameObjects.GameObject & { x: number; y: number; depth: number }, level: number): void {
   const col = LEVEL_TIER_COLORS[levelTier(level)];
   const x = target.x, y = target.y;
-  const ring = scene.add.ellipse(x, y, 60, 30).setStrokeStyle(3, col, 0.95).setDepth(target.depth - 1);
+  const ring = scene.add.ellipse(x, y, 60, chaoH(60)).setStrokeStyle(3, col, 0.95).setDepth(target.depth - 1);
   scene.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 900, ease: "Quad.easeOut", onComplete: () => ring.destroy() });
 
   const beam = scene.add.rectangle(x, y - 40, 14, 120, col, 0.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(target.depth - 1);
   scene.tweens.add({ targets: beam, scaleX: 0.2, alpha: 0, y: y - 80, duration: 1300, ease: "Quad.easeOut", onComplete: () => beam.destroy() });
 
-  const glow = scene.add.ellipse(x, y, 52, 26, col, 0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(target.depth - 1);
+  const glow = scene.add.ellipse(x, y, 52, chaoH(52), col, 0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(target.depth - 1);
   scene.tweens.add({ targets: glow, alpha: { from: 0.2, to: 0.55 }, duration: 500, yoyo: true, repeat: 2, ease: "Sine.easeInOut" });
   const follow = () => glow.setPosition(target.x, target.y); // o halo anda com o personagem
   scene.events.on("update", follow);

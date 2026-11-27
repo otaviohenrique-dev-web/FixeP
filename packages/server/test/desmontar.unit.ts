@@ -2,7 +2,7 @@
 // NENHUM lucro infinito (craft -> desmontar devolve menos do que o craft gastou), e troca atômica (tudo ou nada).
 // Uso: npx tsx test/desmontar.unit.ts  (a partir de packages/server)
 import {
-  RARITIES, MAT_FERRO, MAT_COURO, MAT_ESSENCIA, familiasArma, receitaArma, receitaPeca, materiaisDesmonte, precisaConfirmarDesmonte,
+  RARITIES, RARIDADES_CRAFT, rarityIndex, MAT_FERRO, MAT_COURO, MAT_ESSENCIA, familiasArma, receitaArma, receitaPeca, materiaisDesmonte, precisaConfirmarDesmonte,
   DESMONTAR_CONFIRM_FROM, PECAS_SET, type CharClass, type Rarity,
 } from "@frixep/shared";
 import { emptyInventory, addItem, canFit } from "../src/game/inventory.js";
@@ -25,7 +25,7 @@ const comum = materiaisDesmonte(`${ARMA_FAM}_common`, 0)!;
 check("comum rende 1 Ferro Bruto e nada mais", comum[MAT_FERRO] === 1 && !(MAT_COURO in comum) && !(MAT_ESSENCIA in comum), JSON.stringify(comum));
 check("Essência só aparece a partir do raro", !(MAT_ESSENCIA in (materiaisDesmonte(`${ARMA_FAM}_uncommon`, 0) ?? {})) && MAT_ESSENCIA in materiaisDesmonte(`${ARMA_FAM}_rare`, 0)!);
 const totais = RARITIES.map((r) => soma(materiaisDesmonte(`${ARMA_FAM}_${r}`, 0) ?? {}));
-check("quantidade cresce com a raridade (estritamente)", totais.every((t, i) => i === 0 || t > totais[i - 1]), totais.join(" < "));
+check("quantidade cresce com a raridade (estritamente a partir do Comum; Lixo rende o mesmo que o Comum)", totais.every((t, i) => i === 0 || t > totais[i - 1] || (i === 1 && t === totais[0])), totais.join(" < "));
 check("junk/poção/material não desmontam", materiaisDesmonte("pocao_de_vida", 0) === null && materiaisDesmonte("mat_ferro_bruto", 0) === null && materiaisDesmonte("nao_existe", 0) === null);
 
 console.log("\n== Refino devolve um pouco mais");
@@ -35,12 +35,12 @@ check("+5 devolve +2 Ferro Bruto a mais que o +0", refinado - base === 2, `${bas
 check("refino inválido (negativo, NaN) conta como +0", materiaisDesmonte(`${ARMA_FAM}_epic`, -3)![MAT_FERRO] === base && materiaisDesmonte(`${ARMA_FAM}_epic`, NaN)![MAT_FERRO] === base);
 
 console.log("\n== Confirmação a partir de raro");
-check("confirma a partir do raro, não antes", DESMONTAR_CONFIRM_FROM === 2 && !precisaConfirmarDesmonte("uncommon" as Rarity) && precisaConfirmarDesmonte("rare") && precisaConfirmarDesmonte("mythic"));
+check("confirma a partir do raro, não antes", DESMONTAR_CONFIRM_FROM === rarityIndex("rare") && !precisaConfirmarDesmonte("uncommon" as Rarity) && precisaConfirmarDesmonte("rare") && precisaConfirmarDesmonte("mythic"));
 
 console.log("\n== Sem lucro infinito: craft -> desmontar nunca devolve o que o craft gastou");
 let todosMenores = true;
 const piorCaso: string[] = [];
-for (const r of RARITIES) {
+for (const r of RARIDADES_CRAFT) {
   const receitas = [
     ...familiasArma(CLS).map((f) => receitaArma(f, r)),
     ...PECAS_SET.map((p) => receitaPeca(p, r, CLS)),
@@ -53,7 +53,7 @@ for (const r of RARITIES) {
 }
 check("para toda receita de arma e de peça de set, desmontar rende menos que o craft gasta", todosMenores, piorCaso.join("; "));
 const totalRefinoMax = (r: Rarity) => soma(materiaisDesmonte(`${ARMA_FAM}_${r}`, 5) ?? {});
-check("mesmo +5 não passa do custo de craft da mesma raridade", RARITIES.every((r) => {
+check("mesmo +5 não passa do custo de craft da mesma raridade", RARIDADES_CRAFT.every((r) => {
   const rc = receitaArma(ARMA_FAM, r)!;
   return totalRefinoMax(r) < soma(rc.mats);
 }));

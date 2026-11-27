@@ -3,8 +3,8 @@
 // ordem das raridades é copiada aqui, como em afixos.ts, e nada daqui volta para items.ts.
 import type { ItemKind, Rarity } from "./items";
 
-/** Ordem das raridades de equipamento (cópia de RARITIES de items.ts, para não criar ciclo). */
-const ORDEM: readonly Rarity[] = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+/** Ordem das raridades a partir do Comum (Comum = 0 ... Mítico = 5, Ancestral = 6; Lixo conta como Comum). Cópia, para não criar ciclo. */
+const ORDEM: readonly Rarity[] = ["common", "uncommon", "rare", "epic", "legendary", "mythic", "ancestral"];
 
 /** Nível máximo de refino (+N), igual para todas as raridades. */
 export const MAX_REFINO = 5;

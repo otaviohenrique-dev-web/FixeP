@@ -5,7 +5,7 @@ import { bindItemTip } from "./itemtip";
 import {
   ITEMS, INV_SLOTS, Msg, RARITY_COLOR, RARITY_NAME, COIN_IRON, COIN_OBOL, MERGE_COUNT, TRADE_MAX_ITEMS, BREAK_CONFIRM_FROM, BREAK_STRONG_FROM, MAX_COINS,
   rarityIndex, itemValue, buyPrice, sellPrice, breakValue, shopStock, checkMerge, zoneRarityCap, coinName, CLASS_DEFS, type CharClass,
-  TRADE_CHAT_MAX_LEN, RARITIES, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, materiaisDesmonte, precisaConfirmarDesmonte, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, GEMAS, GEMA_BY_ID, espacosDe, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketPricesEvent, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
+  TRADE_CHAT_MAX_LEN, RARITIES, RARIDADES_CRAFT, PECA_NOME, PECAS_CRAFT, familiasArma, familiasSecundaria, nomeFamilia, receitaArma, receitaPeca, faltasReceita, materiaisDesmonte, precisaConfirmarDesmonte, progressoSet, nomeIngrediente, custoRefino, faltasRefino, bonusRefino, isRefinavel, rotuloRefino, MAX_REFINO, GEMAS, GEMA_BY_ID, espacosDe, EQUIP_SLOTS, type EquipSlot, type PecaCraft, type Rarity, type Receita, type InventorySnapshot, type ItemDef, type NpcDef, type TradeEvent, type TradeOfferSide, type MarketPage, type MarketPricesEvent, type MarketMineEvent, type MarketDoneEvent, type QuestEvent, type QuestDefsEvent,
 } from "@frixep/shared";
 
 /**
@@ -422,7 +422,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
       list.append(lbl("Peça"), seg(PECAS_CRAFT.map((p) => [p, PECA_NOME[p]] as [PecaCraft, string]), craftSel.peca, (v) => { craftSel.peca = v; }));
       if (craftSel.peca === "secundaria") list.append(lbl("Mão secundária"), seg(secs.map((f) => [f, nomeFamilia(f)] as [string, string]), craftSel.sec, (v) => { craftSel.sec = v; }));
     }
-    list.append(lbl("Raridade"), seg(RARITIES.map((r) => [r, RARITY_NAME[r]] as [Rarity, string]), craftSel.raridade, (v) => { craftSel.raridade = v; }));
+    list.append(lbl("Raridade"), seg(RARIDADES_CRAFT.map((r) => [r, RARITY_NAME[r]] as [Rarity, string]), craftSel.raridade, (v) => { craftSel.raridade = v; }));
 
     const pecaSet = craftSel.tipo === "peca" && craftSel.peca !== "secundaria";
     const r: Receita | null = craftSel.tipo === "arma"

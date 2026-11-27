@@ -8,9 +8,12 @@
 //  - a faixa de valor é uma tabela por raridade (valores[0] = comum ... valores[5] = mítico): nada é sorteado no valor.
 import type { ItemKind, Rarity } from "./items"; // só tipo: items.ts importa daqui (sem ciclo em tempo de execução)
 
-/** Ordem das raridades que recebem equipamento (cópia de RARITIES de items.ts, para não criar import circular). */
-const ORDEM: readonly Rarity[] = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+/** Ordem das 8 raridades (cópia de RARITIES de items.ts, para não criar import circular). */
+const ORDEM: readonly Rarity[] = ["junk", "common", "uncommon", "rare", "epic", "legendary", "mythic", "ancestral"];
 const rarityIndex = (r: Rarity) => ORDEM.indexOf(r);
+/** Os valores de cada afixo têm 6 posições (Comum a Mítico). Lixo não tem afixo; Ancestral vale o mítico x ANCESTRAL_MULT. */
+const ANCESTRAL_MULT = 1.3;
+const COLUNA_VALOR: Partial<Record<Rarity, number>> = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4, mythic: 5 };
 
 export const MAX_AFIXOS = 3;
 
@@ -106,9 +109,10 @@ export function afixoElegivel(a: Afixo, kind: ItemKind, rarity: Rarity): boolean
 /** Valor do afixo para esta raridade (0 se ela não o libera). */
 export function valorDoAfixo(id: string, rarity: Rarity): number {
   const a = AFIXO_BY_ID[id];
-  const i = ORDEM.indexOf(rarity);
-  if (!a || i < 0 || rarityIndex(rarity) < rarityIndex(a.minRaridade)) return 0;
-  return a.valores[i] ?? 0;
+  if (!a || rarityIndex(rarity) < 0 || rarityIndex(rarity) < rarityIndex(a.minRaridade)) return 0;
+  if (rarity === "ancestral") { const m = (a.valores[5] ?? 0) * ANCESTRAL_MULT; return m >= 10 ? Math.round(m) : Math.round(m * 10) / 10; }
+  const i = COLUNA_VALOR[rarity];
+  return i === undefined ? 0 : a.valores[i] ?? 0;
 }
 
 /** Afixos de ARMA (arma e mão secundária) que são ofensivos: são os únicos que saem em arma de raridade rara ou acima. */

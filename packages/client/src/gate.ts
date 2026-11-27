@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import type { ZoneTheme } from "@frixep/shared";
+import { HX, HY } from "./iso";
 
 /**
  * Portões das zonas (substituem o antigo anel no chão): dois pilares de pedra com base e capitel, viga e arco, tochas, runas que pulsam,
@@ -114,7 +115,7 @@ export class GateLayer {
   private build(toScreen: ToScreen, s: GateSpec) {
     const { sx: cx, sy: cy } = toScreen(s.x, s.y);
     // vetores de tela por tile: u = ao longo do vão, v = atravessando a muralha
-    const ux: Pt = [32, 16], uy: Pt = [-32, 16];
+    const ux: Pt = [HX, HY], uy: Pt = [-HX, HY];
     const u = s.axis === "x" ? ux : uy, v = s.axis === "x" ? uy : ux;
     const col = STONE[s.stone];
     const off = s.r + PILLAR * 0.5 + 0.1; // centro dos pilares, em tiles a partir do centro do vão
