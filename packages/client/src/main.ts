@@ -105,7 +105,8 @@ function zoomPcSalvo(): number {
   try { const v = Number(localStorage.getItem(ZOOM_PC_KEY)); return v >= ZOOM_PC_MIN && v <= ZOOM_PC_MAX ? v : 1; } catch { return 1; }
 }
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
-const menuOpen = () => !!document.querySelector(".gm-back.open");
+// qualquer janela aberta (menu, mochila, baú, economia, missões, configurações) tira o foco do personagem: sem dash/atalhos de combate
+const menuOpen = () => !!document.querySelector(".gm-back.open, .iv-back.open, .ec-back.open, .qst-back.open, .vt-back.open, .cf-back.open");
 
 /** qual animação do personagem corresponde a cada ação (as 3 habilidades usam a mesma, "skill") */
 const animFor = (a: ActionId): ActionAnim => (a === "attack" ? "attack" : a === "dodge" ? "dodge" : "skill");

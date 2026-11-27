@@ -468,7 +468,10 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
       bindDoubleTap(b, `e${s}`, () => opts.send(Msg.InvUnequip, { slot: s }));
       attachTip(b, () => ({ def, af: snap.equipAf?.[s], rf: snap.equipRf?.[s], gm: snap.equipGm?.[s], extra: "Duplo clique: desequipar" }));
     } else b.insertAdjacentHTML("afterbegin", ICONS[s]);
-    b.onclick = () => { sel = def ? { kind: "equip", s } : null; confirmDrop = false; render(); };
+    b.onclick = (e) => {
+      if (e.shiftKey && def) { opts.send(Msg.InvUnequip, { slot: s }); return; } // Shift+clique (PC): tira o equipamento para a mochila
+      sel = def ? { kind: "equip", s } : null; confirmDrop = false; render();
+    };
     b.ondragover = (e) => { if (drag?.from === "slot" && dragDef()?.kind === s) e.preventDefault(); };
     b.ondrop = (e) => {
       e.preventDefault();
@@ -642,7 +645,13 @@ export function mountInventory(opts: { send(type: string, payload: unknown): voi
         bindDoubleTap(b, `s${i}`, () => { if (def.kind === "potion") opts.send(Msg.InvUse, { slot: i }); else opts.send(Msg.InvEquip, { slot: i }); });
         attachTip(b, () => ({ def, af: st.af, rf: st.rf, gm: st.gm, cmp: def.kind !== "potion" ? equippedDef(def.kind as EquipSlot) : null }));
       }
-      b.onclick = () => { sel = def ? { kind: "slot", i } : null; confirmDrop = false; render(); };
+      b.onclick = (e) => {
+        if (e.shiftKey && def) { // Shift+clique (PC): equipa o item, ou usa a poção (mesma ação do duplo clique)
+          if (def.kind === "potion") opts.send(Msg.InvUse, { slot: i }); else opts.send(Msg.InvEquip, { slot: i });
+          return;
+        }
+        sel = def ? { kind: "slot", i } : null; confirmDrop = false; render();
+      };
       gridEl.append(b);
     });
     renderDetail();
