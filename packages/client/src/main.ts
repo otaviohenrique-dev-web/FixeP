@@ -481,6 +481,8 @@ class WorldScene extends Phaser.Scene {
       if (a && this.aimA === a) { this.hud.trigger(a); this.aimEnd(); }
     });
     window.addEventListener("pointerdown", (e) => { if (e.button === 2 && this.aimA) this.aimEnd(); }); // botão direito com a mira aberta: cancela a skill
+    // botão direito sobre o mundo não abre o menu do navegador (campos de texto e o resto da página continuam normais)
+    window.addEventListener("contextmenu", (e) => { if (e.target instanceof HTMLCanvasElement) e.preventDefault(); });
     window.addEventListener("blur", () => this.aimEnd()); // perdeu o foco da janela com a tecla segurada: cancela a mira em vez de ficar presa
   }
 
