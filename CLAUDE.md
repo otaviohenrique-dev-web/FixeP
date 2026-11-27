@@ -57,7 +57,7 @@ Não é preciso Google, Discord nem Supabase para desenvolver.
 Projeto solo: uma pessoa cuida de código (`packages/`), arte (`assets/`, `docs/ART_GUIDE.md`), banco, deploy e integração. Não há mais dev de arte nem divisão de papéis.
 
 ## Especificações de arte (resumo; completo em `docs/ART_GUIDE.md`)
-- Pixel art. Tile isométrico **64 x 32 px**. Personagens em quadro de **64 x 64 px**.
+- Pixel art. Tile do chão **64 x 46 px** (câmera inclinada a ~45°, estilo Albion; decidido em 27/11/2026, antes era 64 x 32). Medidas no código: `packages/client/src/iso.ts`. Personagens em quadro de **64 x 64 px**.
 - Direções: **decidido (17/11/2026) começar com 4 diagonais** (desenhar SE e NE; o jogo espelha SW e NW). As 8 direções (5 desenhadas + 3 espelhadas) entram depois, no marco M8 de `docs/GUIA_ARTE_INICIAL.pdf`.
 - Entrega: PNG com transparência + JSON de atlas no formato do Phaser; atlas de no máximo **2048 x 2048 px**.
 - Nomes de arquivo em minúsculas, com sublinhado, sem acento nem espaço (ex.: `warrior_walk_se_00.png`).

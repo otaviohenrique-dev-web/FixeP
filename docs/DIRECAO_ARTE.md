@@ -97,7 +97,7 @@ Regras:
 ### 4.5 Cenário e tiles
 - **4 zonas:** Cinzas (ash), Floresta Gélida (frost), Catacumbas (crypt), Cidade de Brasalume (town).
 - Cada zona: **3 a 4 variações de chão** e transições de borda.
-- Tile isométrico **64 x 32 px** (losango 2:1). Mapas de 40 x 40 a 48 x 48 tiles.
+- Tile do chão **64 x 46 px** (losango; câmera a ~45°, estilo Albion, desde 27/11/2026). Mapas de 40 x 40 a 48 x 48 tiles.
 - Cada zona tem paleta própria dentro da base da seção 2.1. Cinzas começa primeiro (fria, cinza, brasa de fogueira).
 - Decoração (árvores, pedras, ruínas) ainda não está no código. Quando entrar, objeto alto tem origem na base.
 
@@ -130,7 +130,7 @@ Regras:
 | Poção de Vida | `assets/items/` | `item_pocao_vida.png` | 48 x 48 |
 | Personagem | `assets/characters/` | `warrior_walk_se_00.png` | 64 x 64 |
 | Monstro | `assets/monsters/` | `skeleton_attack_se_00.png` | 64 x 64 ou maior |
-| Tile | `assets/tiles/` | `tile_cinzas_grama_01.png` | 64 x 32 |
+| Tile | `assets/tiles/` | `tile_cinzas_grama_01.png` | 64 x 46 |
 | Efeito | `assets/fx/` | `fx_hit_slash_00.png` | conforme o efeito |
 
 - Minúsculas, sublinhado, sem acento e sem espaço.
