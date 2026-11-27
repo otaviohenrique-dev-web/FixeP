@@ -92,27 +92,78 @@ X, Y, Z = (1, 0, 0), (0, 1, 0), (0, 0, 1)
 def base_parada():
     """braços para baixo (o modelo vem em pose A) e mãos relaxadas"""
     zerar()
-    girar("upperarm_l", Y, 40); girar("upperarm_r", Y, -40)   # 40° (antes 48°): o braço passa por fora da couraça, que é ~3 cm maior que o corpo
+    girar("upperarm_l", Y, 40); girar("upperarm_r", Y, -33)   # 40° (antes 48°): o braço passa por fora da couraça, que é ~3 cm maior que o corpo
     girar("lowerarm_l", X, -3); girar("lowerarm_r", X, -3)
-    fechar_mao("r", 72); fechar_mao("l", 35)
+    mirar_pulso("r", DIR_LAMINA)
+    mao_empunhadura("r", 1.0); mao_empunhadura("l", 0.45, polegar=False)
 
-SINAL_CURL = {}
 def cabeca_mundo(n): return rig.matrix_world @ P[n].head
 def cauda_mundo(n): return rig.matrix_world @ P[n].tail
-def fechar_mao(lado, graus):
-    """dobra cada falange em torno do eixo do punho (do mindinho ao indicador); o sentido é o que leva as pontas dos dedos para a palma"""
-    eixo = (cabeca_mundo(f"index_01_{lado}") - cabeca_mundo(f"pinky_01_{lado}")).normalized()
-    if lado not in SINAL_CURL:
-        palma = cabeca_mundo(f"hand_{lado}")
-        antes = (cauda_mundo(f"middle_03_{lado}") - palma).length
-        girar(f"middle_01_{lado}", tuple(eixo), 40); depois = (cauda_mundo(f"middle_03_{lado}") - palma).length
-        girar(f"middle_01_{lado}", tuple(eixo), -40)
-        SINAL_CURL[lado] = 1 if depois < antes else -1
-    sg = SINAL_CURL[lado]
-    for dedo in ("index", "middle", "ring", "pinky"):
-        for seg, frac in (("01", 0.9), ("02", 1.1), ("03", 0.8)):
-            girar(f"{dedo}_{seg}_{lado}", tuple(eixo), sg * graus * frac)
-    girar(f"thumb_02_{lado}", tuple(eixo), sg * graus * 0.45); girar(f"thumb_03_{lado}", tuple(eixo), sg * graus * 0.45)
+DEDOS = ("index", "middle", "ring", "pinky")
+def eixos_mao(lado):
+    """a = através do punho (mindinho -> indicador); f = sentido dos dedos; n = normal da palma (lado do polegar/palma)"""
+    a = (cabeca_mundo(f"index_01_{lado}") - cabeca_mundo(f"pinky_01_{lado}")).normalized()
+    f = (cauda_mundo(f"middle_01_{lado}") - cabeca_mundo(f"middle_01_{lado}")).normalized()
+    f = (f - a * f.dot(a)).normalized()
+    n = a.cross(f).normalized()
+    pol = cabeca_mundo(f"thumb_02_{lado}") - cabeca_mundo(f"hand_{lado}")
+    if pol.dot(n) < 0: n = -n
+    return a, f, n
+DIR_LAMINA = Vector((-0.08, -0.62, -0.78)).normalized()   # espada da mão direita: para a frente e para baixo
+def mirar_pulso(lado, alvo, limite=65):
+    """gira o pulso para o eixo do punho (a) apontar para 'alvo' (até 'limite' graus): a arma aponta sem sair da mão"""
+    a, f, n = eixos_mao(lado)
+    q = a.rotation_difference(alvo); ang = math.degrees(q.angle)
+    if ang < 0.5: return
+    girar(f"hand_{lado}", tuple(q.axis), min(ang, limite))
+def mao_empunhadura(lado, fechamento=1.0, polegar=True):
+    """pose padrão de quem segura um cabo de ~3,5 cm: dedos em volta do cabo, polegar fechando por cima do indicador"""
+    a, f, n = eixos_mao(lado)
+    # sentido do dobrar: o que leva a ponta do dedo médio para o lado da palma (n)
+    ponta0 = cauda_mundo(f"middle_03_{lado}").dot(n)
+    girar(f"middle_01_{lado}", tuple(a), 20); sg = 1 if cauda_mundo(f"middle_03_{lado}").dot(n) > ponta0 else -1
+    girar(f"middle_01_{lado}", tuple(a), -20)
+    for d in DEDOS:
+        for seg, ang in (("01", 58), ("02", 80), ("03", 52)):
+            girar(f"{d}_{seg}_{lado}", tuple(a), sg * ang * fechamento)
+    if not polegar: return
+    if lado in POLEGAR:  # já calculado no primeiro frame: reaplica a mesma pose do polegar (rápido e igual em todos)
+        _, r1, r2, c = POLEGAR[lado]
+        girar(f"thumb_01_{lado}", tuple(f), r1); girar(f"thumb_01_{lado}", tuple(n), r2)
+        td = (cauda_mundo(f"thumb_02_{lado}") - cabeca_mundo(f"thumb_02_{lado}")).normalized(); eixo_c = td.cross(n).normalized()
+        girar(f"thumb_02_{lado}", tuple(eixo_c), c * 0.5); girar(f"thumb_03_{lado}", tuple(eixo_c), c)
+        return
+    # polegar: busca a rotação que leva a ponta para cima da 2ª falange do indicador (sem "joinha")
+    alvo = cabeca_mundo(f"index_02_{lado}") + n * 0.012 + f * 0.01
+    melhor = (1e9, 0, 0, 0)
+    base = {b: P[b].matrix.copy() for b in (f"thumb_01_{lado}", f"thumb_02_{lado}", f"thumb_03_{lado}")}
+    def repor():
+        for b, m in base.items(): P[b].matrix = m; bpy.context.view_layer.update()
+    for r1 in range(-70, 71, 14):
+        for r2 in range(-50, 51, 10):
+            for c in (20, 45, 70):
+                repor()
+                girar(f"thumb_01_{lado}", tuple(f), r1); girar(f"thumb_01_{lado}", tuple(n), r2)
+                td = (cauda_mundo(f"thumb_02_{lado}") - cabeca_mundo(f"thumb_02_{lado}")).normalized()
+                eixo_c = td.cross(n).normalized()
+                girar(f"thumb_02_{lado}", tuple(eixo_c), c * 0.5); girar(f"thumb_03_{lado}", tuple(eixo_c), c)
+                dist = (cauda_mundo(f"thumb_03_{lado}") - alvo).length
+                if dist < melhor[0]: melhor = (dist, r1, r2, c)
+    repor()
+    _, r1, r2, c = melhor
+    girar(f"thumb_01_{lado}", tuple(f), r1); girar(f"thumb_01_{lado}", tuple(n), r2)
+    td = (cauda_mundo(f"thumb_02_{lado}") - cabeca_mundo(f"thumb_02_{lado}")).normalized(); eixo_c = td.cross(n).normalized()
+    girar(f"thumb_02_{lado}", tuple(eixo_c), c * 0.5); girar(f"thumb_03_{lado}", tuple(eixo_c), c)
+    POLEGAR[lado] = melhor
+POLEGAR = {}
+def encaixe_mao(lado):
+    """ponto de encaixe da arma: centro do punho fechado, eixo Z = através do punho (lado do polegar)"""
+    a, f, n = eixos_mao(lado)
+    f1 = sum((cabeca_mundo(f"{d}_01_{lado}") for d in DEDOS), Vector()) / 4
+    f2 = sum((cauda_mundo(f"{d}_02_{lado}") for d in DEDOS), Vector()) / 4
+    c = (f1 + f2) / 2
+    m = Matrix((f, n, a)).transposed().to_4x4(); m.translation = c   # X = dedos, Y = palma, Z = cabo
+    return m
 
 def pose(perna_D=0, perna_E=0, joelho_D=0, joelho_E=0, braco=0, sobe=0.0, respira=0.0):
     """ângulos em graus: perna + = pé para a frente (-Y). braco + = braço da espada para a frente"""
@@ -123,7 +174,8 @@ def pose(perna_D=0, perna_E=0, joelho_D=0, joelho_E=0, braco=0, sobe=0.0, respir
     girar("thigh_r", X, -perna_D); girar("thigh_l", X, -perna_E)
     girar("calf_r", X, joelho_D); girar("calf_l", X, joelho_E)
     girar("foot_r", X, perna_D * 0.5 - joelho_D * 0.35); girar("foot_l", X, perna_E * 0.5 - joelho_E * 0.35)
-    girar("upperarm_r", X, -(braco * 0.45 - 8)); girar("upperarm_l", X, braco)
+    girar("upperarm_r", X, -max(-6.0, braco * 0.45 - 8) if braco * 0.45 - 8 < 0 else -(braco * 0.45 - 8))  # braço da arma: para trás no máximo 6°
+    girar("upperarm_l", X, braco)
     girar("lowerarm_r", X, -(6 + max(0, braco) * 0.4)); girar("lowerarm_l", X, -(3 + max(0, -braco) * 0.4))
 
 WALK = [
@@ -191,21 +243,12 @@ casca("friso_gola", TRONCO | {"neck_01"}, 0.795, 0.83, 0.04, ACENTO, espessura=0
 for lado, s_ in (("D", "r"), ("E", "l")):
     casca(f"ombreira_{lado}", {f"upperarm_{s_}", f"clavicle_{s_}"}, 0.74, 0.86, 0.045, ACO_CLARO, facetado=0.7)
     casca(f"ombreira_aro_{lado}", {f"upperarm_{s_}"}, 0.728, 0.76, 0.054, ACENTO, espessura=0.01)
-casca("faldas", {"pelvis", "thigh_l", "thigh_r", "spine_01"}, 0.44, 0.565, 0.035, ACO, facetado=0.7)
-casca("faldas_aro", {"pelvis", "thigh_l", "thigh_r"}, 0.435, 0.462, 0.046, ACENTO, espessura=0.01)
+casca("faldas", {"pelvis", "thigh_l", "thigh_r", "spine_01"}, 0.45, 0.565, 0.024, ACO, facetado=0.7)
+casca("faldas_aro", {"pelvis", "thigh_l", "thigh_r"}, 0.446, 0.468, 0.032, ACENTO, espessura=0.008)
 
 # espada encaixada no punho fechado: o cabo atravessa o punho (do mindinho ao indicador), a lâmina sai pelo lado do mindinho.
 # Montada num referencial da própria mão e presa ao osso hand_r: acompanha o pulso em qualquer pose.
-idx, pnk = cabeca_mundo("index_02_r"), cabeca_mundo("pinky_02_r")
-g = (idx - pnk).normalized()                                   # eixo do cabo (aponta para o lado do indicador/polegar)
-dedos = (cauda_mundo("middle_01_r") - cabeca_mundo("middle_01_r")).normalized()
-# a lâmina sai pelo lado do polegar, para a frente e para baixo (empunhadura de quem caminha com a espada solta ao lado)
-lamina_dir = Vector((-0.10, -0.62, -0.78)).normalized()        # para a frente (-Y, sentido da caminhada), para baixo e levemente para fora (lado direito)
-g = -lamina_dir                                                  # +Z local = pomo; -Z local = ponta
-ladox = (dedos - g * dedos.dot(g)).normalized()                # largura da lâmina: no sentido dos dedos (a face aparece de lado)
-ladoy = g.cross(ladox)
-centro = (idx + pnk) / 2 + (cabeca_mundo("hand_r") - (idx + pnk) / 2) * 0.25
-REF = Matrix((ladox, ladoy, g)).transposed().to_4x4(); REF.translation = centro
+REF = encaixe_mao("r") @ Matrix.Rotation(math.pi, 4, "X")   # local -Z (ponta) = lado do polegar
 def peca_espada(nome, prim, local, esc, material, bevel=0.006, **kw):
     getattr(bpy.ops.mesh, prim)(location=(0, 0, 0), **kw)
     o = bpy.context.object; o.name = nome; o.scale = esc; bpy.ops.object.transform_apply(scale=True)
@@ -272,6 +315,22 @@ def preparar(camada):
                 for s in o.material_slots: s.material = BRANCO if ORIG[o.name][0] is ACENTO else HOLD
 
 CAMADAS = ["corpo", "couraca", "couraca_acento", "espada", "espada_acento"]
+if "--close" in argv:
+    restaurar()
+    for nome in COLECOES:
+        if nome != "cena": lc = bpy.context.view_layer.layer_collection.children[nome]; lc.exclude = False; lc.holdout = False
+    os.makedirs(SAIDA, exist_ok=True)
+    print("polegar (dist, r1, r2, curl):", POLEGAR.get("r"))
+    for nome_pose, pp in (("idle", IDLE[0]), ("walk1", WALK[0]), ("walk4", WALK[3])):
+        pose(**pp)
+        for az in (-45, -90, 0, -135):
+            for zoom, centro in ((0.55, cabeca_mundo("hand_r")), (1.1, cabeca_mundo("upperarm_r"))):
+                a_ = math.radians(az); cam.data.ortho_scale = zoom
+                cam.location = centro + Vector((math.sin(a_) * math.cos(ELEV) * 6, -math.cos(a_) * math.cos(ELEV) * 6, math.sin(ELEV) * 6))
+                cam.rotation_euler = (centro - cam.location).to_track_quat("-Z", "Y").to_euler()
+                sol.rotation_euler = Euler((math.radians(48), 0, a_ - math.radians(35)), "XYZ")
+                r.filepath = os.path.join(SAIDA, f"close_{nome_pose}_az{az}_{'mao' if zoom < 1 else 'braco'}.png"); bpy.ops.render.render(write_still=True)
+    print("ok close"); sys.exit(0)
 for d in DIRS:
     camera(d)
     for anim in ANIMS:
