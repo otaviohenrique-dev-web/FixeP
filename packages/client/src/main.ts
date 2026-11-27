@@ -57,11 +57,10 @@ import { mountParty, type PartyUi } from "./party";
 import { checkGpu } from "./gpucheck";
 
 import { loadAtlases, ActorView, type ActorAtlas, type ActionAnim, type AtlasSpec } from "./sprites";
+import { TILE_W, TILE_H, chaoH } from "./iso";
 
-const TILE_W = 64;
 const AIM_DEAD_PX = 24; // arrasto menor que isso mantém a mira automática no alvo travado
 const AIM_FULL_PX = 110; // arrasto que chega ao alcance máximo
-const TILE_H = 32;
 // projeção iso: grade (x,y) -> tela, e inversa
 const toScreen = (x: number, y: number) => ({ sx: (x - y) * (TILE_W / 2), sy: (x + y) * (TILE_H / 2) });
 const toGrid = (sx: number, sy: number) => ({
@@ -82,7 +81,7 @@ const dirScreen = (ang: number) => {
   const l = Math.hypot(dx, dy) || 1;
   return { x: dx / l, y: dy / l };
 };
-/** Cores provisórias de cada tema de zona (sem arte externa): chão em losangos 64x32 gerados por código. */
+/** Cores provisórias de cada tema de zona (sem arte externa): chão em losangos 64x46 (iso.ts) gerados por código. */
 const THEMES: Record<ZoneTheme, { bg: string; a: number; b: number; line: number; fleck: number; border: number; portal: number }> = {
   ash: { bg: "#0b0b10", a: 0x25242b, b: 0x2c2b33, line: 0x3a3945, fleck: 0x4a4852, border: 0x6b5a45, portal: 0xc9a86a },
   frost: { bg: "#08111a", a: 0x2b3e52, b: 0x334a60, line: 0x4a6a84, fleck: 0xe3f0fa, border: 0x8fc4e8, portal: 0x7fd0ff },
@@ -99,6 +98,12 @@ const SEM_SPRITES = MODO === "sem-sprites"; // Teste B
 const NO_DRAW: unknown = new Proxy({}, { get: () => () => NO_DRAW });
 const DPR = Math.max(1, Math.min(COARSE ? 2 : 3, window.devicePixelRatio || 1)); // celular: no máximo 2x (menos pixels = mais FPS)
 const rdpr = () => DPR * config().escalaRender; // resolução do canvas: DPR da tela × escala de renderização (Configurações > Gráficos)
+/** PC: zoom pela roda do mouse (1 = padrão). Limites e passo; o valor escolhido fica salvo neste navegador */
+const ZOOM_PC_MIN = 0.75, ZOOM_PC_MAX = 1.5, ZOOM_PC_PASSO = 0.125;
+const ZOOM_PC_KEY = "frixep.zoom";
+function zoomPcSalvo(): number {
+  try { const v = Number(localStorage.getItem(ZOOM_PC_KEY)); return v >= ZOOM_PC_MIN && v <= ZOOM_PC_MAX ? v : 1; } catch { return 1; }
+}
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
 const menuOpen = () => !!document.querySelector(".gm-back.open");
 
@@ -137,6 +142,8 @@ class WorldScene extends Phaser.Scene {
   private emitters!: Record<"orange" | "red" | "gold" | "green", { explode(n: number, x: number, y: number): void }>;
   private hitstopUntil = 0;
   private touchMode = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  private zoomPc = zoomPcSalvo(); // PC: aproximar/afastar com a roda do mouse
+  private zoomTween?: Phaser.Tweens.Tween;
   private joy!: ReturnType<typeof mountJoystick>;
   private joyAt = 0;
   private joyMoving = false;
@@ -396,6 +403,7 @@ class WorldScene extends Phaser.Scene {
     this.party.setTouch(this.touchMode);
     // painel de FPS e ping (canto superior direito; F3 liga/desliga)
     this.stats = mountStats({ sendPing: (t) => this.room?.send(Msg.Ping, { t }), game: this.game });
+    this.input.on("wheel", (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => this.rodaZoom(dy)); // PC: zoom
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       if (this.busy) return;
       const npc = this.npcs.hit(ptr.worldX, ptr.worldY); // clicar num NPC: conversa se estiver perto; senão, anda até ele
@@ -628,7 +636,7 @@ class WorldScene extends Phaser.Scene {
   }
 
 
-  /** chão da zona: losangos 64x32 em xadrez com variação por código, detalhes e borda do mapa */
+  /** chão da zona: losangos 64x46 (iso.ts) em xadrez com variação por código, detalhes e borda do mapa */
   private drawZoneMap(zone: (typeof ZONES)[number]) {
     const th = THEMES[zone.theme];
     this.cameras.main.setBackgroundColor(th.bg);
@@ -716,17 +724,37 @@ class WorldScene extends Phaser.Scene {
     else this.inv.toast("Você não tem poções.", "#ffb3a6");
   }
 
+  /**
+   * zoom da câmera: celular em múltiplos de 0,5 pixel de tela por pixel de arte (em DPR 3 cai em 2,0 exato), sem escala
+   * fracionária que borre; PC segue a roda do mouse em passos de 1/8.
+   */
+  private zoomDaCamera(): number {
+    if (this.touchMode) return Math.max(0.5, Math.round(TOUCH_ZOOM * rdpr() * 2) / 2);
+    return Math.max(0.5, Math.round(this.zoomPc * rdpr() * 8) / 8);
+  }
+
+  /** PC: roda do mouse aproxima (para cima) ou afasta (para baixo) a câmera do personagem, entre ZOOM_PC_MIN e ZOOM_PC_MAX */
+  private rodaZoom(dy: number) {
+    if (this.touchMode || !dy) return;
+    const novo = Math.min(ZOOM_PC_MAX, Math.max(ZOOM_PC_MIN, this.zoomPc + (dy < 0 ? ZOOM_PC_PASSO : -ZOOM_PC_PASSO)));
+    if (novo === this.zoomPc) return;
+    this.zoomPc = novo;
+    try { localStorage.setItem(ZOOM_PC_KEY, String(novo)); } catch { /* sem armazenamento: vale só nesta sessão */ }
+    this.uiScale = Math.min(1.25, 1 / novo);
+    this.zoomTween?.stop();
+    this.zoomTween = this.tweens.add({ targets: this.cameras.main, zoom: this.zoomDaCamera(), duration: 140, ease: "Sine.easeOut" });
+  }
+
   /** liga ou desliga o layout de toque (joystick à esquerda, botões em arco à direita) */
   private applyTouch() {
     this.hud?.setTouch(this.touchMode);
     this.joy?.setEnabled(this.touchMode);
     this.party?.setTouch(this.touchMode);
     // celular: câmera mais afastada para enxergar mais ao redor (os textos ganham contra-escala para continuarem legíveis)
-    const zoom = this.touchMode ? TOUCH_ZOOM : 1;
-    // zoom em múltiplos de 0,5 pixel de tela por pixel de arte (em DPR 3 o celular cai em 2,0 exato): sem escala fracionária que borre
-    this.cameras.main.setZoom(Math.max(0.5, Math.round(zoom * rdpr() * 2) / 2));
+    this.zoomTween?.stop();
+    this.cameras.main.setZoom(this.zoomDaCamera());
     this.cameras.main.roundPixels = true;
-    this.uiScale = Math.min(1.25, 1 / zoom);
+    this.uiScale = Math.min(1.25, 1 / (this.touchMode ? TOUCH_ZOOM : this.zoomPc));
     setMobileUi(this.touchMode);
     if (!this.touchMode) this.lockKey = "";
   }
@@ -766,8 +794,8 @@ class WorldScene extends Phaser.Scene {
   /** marcador de destino do clique (estilo RTS): anel que fecha sobre o ponto e some */
   private moveMarker(gx: number, gy: number) {
     const { sx, sy } = toScreen(gx, gy);
-    const ring = this.add.ellipse(sx, sy, 46, 23, 0x000000, 0).setStrokeStyle(2, 0xbff5c8, 0.9).setDepth(0.6).setScale(1.5);
-    const dot = this.add.ellipse(sx, sy, 8, 4, 0xbff5c8, 0.9).setDepth(0.6);
+    const ring = this.add.ellipse(sx, sy, 46, chaoH(46), 0x000000, 0).setStrokeStyle(2, 0xbff5c8, 0.9).setDepth(0.6).setScale(1.5);
+    const dot = this.add.ellipse(sx, sy, 8, chaoH(8), 0xbff5c8, 0.9).setDepth(0.6);
     this.tweens.add({ targets: ring, scale: 0.55, alpha: 0, duration: 520, ease: "Cubic.easeOut", onComplete: () => ring.destroy() });
     this.tweens.add({ targets: dot, alpha: 0, duration: 520, ease: "Quad.easeIn", onComplete: () => dot.destroy() });
   }
@@ -1040,7 +1068,7 @@ class WorldScene extends Phaser.Scene {
     const { sx, sy } = toScreen(m.x, m.y);
     if (m.s === "set") {
       const ring = this.add.ellipse(sx, sy, m.r * ELL_W, m.r * ELL_H, 0x7dff9a, 0.08).setStrokeStyle(2, 0x7dff9a, 0.7).setDepth(0.4);
-      const core = this.add.ellipse(sx, sy, 22, 11, 0xd9c58a, 0.9).setStrokeStyle(2, 0x3a2f12, 1).setDepth(0.45);
+      const core = this.add.ellipse(sx, sy, 22, chaoH(22), 0xd9c58a, 0.9).setStrokeStyle(2, 0x3a2f12, 1).setDepth(0.45);
       this.tweens.add({ targets: ring, alpha: { from: 0.5, to: 1 }, duration: 700, yoyo: true, repeat: -1 });
       this.traps.set(m.id, [ring, core]);
       return;
@@ -1592,7 +1620,7 @@ class WorldScene extends Phaser.Scene {
     this.aimG.lineStyle(3, 0xffe08a, 0.85).lineBetween(from.sx, from.sy, to.sx, to.sy);
     if (this.cls === "cleric" && !this.aimScreen) { // Cura Focada: anel verde no aliado que vai receber a cura
       const t = toScreen(mira.x, mira.y);
-      this.aimG.lineStyle(3, 0x6fe08a, 0.95).strokeEllipse(t.sx, t.sy, 56, 28).lineBetween(from.sx, from.sy, t.sx, t.sy);
+      this.aimG.lineStyle(3, 0x6fe08a, 0.95).strokeEllipse(t.sx, t.sy, 56, chaoH(56)).lineBetween(from.sx, from.sy, t.sx, t.sy);
     }
   }
 
@@ -1605,7 +1633,7 @@ class WorldScene extends Phaser.Scene {
       const v = this.sprites.get(`p:${this.selId}`);
       if (!v || !this.state.players.has(this.selId)) this.deselect();
       else if (v.obj.visible) {
-        this.selG.lineStyle(2, 0x6fe08a, 0.55 + 0.15 * Math.sin(time / 300)).strokeEllipse(v.obj.x, v.obj.y, 50, 25).fillStyle(0x6fe08a, 0.08).fillEllipse(v.obj.x, v.obj.y, 50, 25);
+        this.selG.lineStyle(2, 0x6fe08a, 0.55 + 0.15 * Math.sin(time / 300)).strokeEllipse(v.obj.x, v.obj.y, 50, chaoH(50)).fillStyle(0x6fe08a, 0.08).fillEllipse(v.obj.x, v.obj.y, 50, chaoH(50));
         // linha do próprio jogador até o alvo (mostra onde ele está em relação a você)
         const mine = this.sprites.get(`p:${this.room.sessionId}`);
         if (mine?.obj.visible) this.selG.lineStyle(2, 0x6fe08a, 0.5).lineBetween(mine.obj.x, mine.obj.y, v.obj.x, v.obj.y);
@@ -1620,7 +1648,7 @@ class WorldScene extends Phaser.Scene {
         const ft = this.targets().find((q) => q.key === this.lockKey);
         const inR = !!me && !!ft && Math.hypot(ft.x - me.x, ft.y - me.y) <= this.reach("attack");
         const col = inR ? 0xff5a4a : 0x9aa3b0, alpha = inR ? 1 : 0.5;
-        this.selG.lineStyle(3, col, 0.9 * alpha).strokeEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k).fillStyle(col, 0.12 * alpha).fillEllipse(v.obj.x, v.obj.y, 54 * k, 27 * k);
+        this.selG.lineStyle(3, col, 0.9 * alpha).strokeEllipse(v.obj.x, v.obj.y, 54 * k, chaoH(54 * k)).fillStyle(col, 0.12 * alpha).fillEllipse(v.obj.x, v.obj.y, 54 * k, chaoH(54 * k));
       }
     }
   }
@@ -1784,7 +1812,7 @@ class WorldScene extends Phaser.Scene {
       }
       if (s.x < wv.x - 140 || s.x > wv.right + 140 || s.y < wv.y - 160 || s.y > wv.bottom + 160) { this.labels.get(key)?.setVisible(false); this.levelTags.get(key)?.setVisible(false); return; }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (v.isSprite && !SEM_DESENHOS) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, 12 * s.scaleX));
+      if (v.isSprite && !SEM_DESENHOS) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, chaoH(24) * s.scaleX));
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
       count("placas");
       const pg = timed("placas", () => drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time }));
@@ -1800,15 +1828,15 @@ class WorldScene extends Phaser.Scene {
         this.bars.lineStyle(3, 0xffffff, 0.85).lineBetween(s.x, s.y, s.x + d.x * 16, s.y + d.y * 16);
       }
       if (o.shield) drawShieldBubble(this.bars, s.x, s.y, time, o.shield); // bolha de chegada (imune a dano)
-      if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, 18); // Brasa ativa
+      if (o.ember) this.bars.lineStyle(2, 0xffc861, 0.9).strokeEllipse(s.x, s.y + (v.isSprite ? 0 : 8), 36, chaoH(36)); // Brasa ativa
       if (o.reflect) { // Escudo Refletor: cúpula azul-aço que pulsa em volta do guerreiro
         const k = 1 + 0.05 * Math.sin(time / 160), cy = s.y - 16;
         this.bars.fillStyle(0x8fd0ff, 0.13).fillEllipse(s.x, cy, 54 * k, 66 * k).lineStyle(2, 0xcfeaff, 0.85).strokeEllipse(s.x, cy, 54 * k, 66 * k);
         this.bars.lineStyle(2, 0xffffff, 0.5).beginPath().arc(s.x, cy, 24 * k, Math.PI * 1.15, Math.PI * 1.55).strokePath();
-        this.bars.lineStyle(2, 0x8fd0ff, 0.7).strokeEllipse(s.x, s.y + 2, 46 * k, 20 * k);
+        this.bars.lineStyle(2, 0x8fd0ff, 0.7).strokeEllipse(s.x, s.y + 2, 46 * k, chaoH(40 * k));
       }
       if (o.root) { // enraizado: elos de corrente e raízes em volta dos pés
-        this.bars.lineStyle(2, 0x9aa3ad, 0.95).strokeEllipse(s.x, s.y + 2, 44, 20);
+        this.bars.lineStyle(2, 0x9aa3ad, 0.95).strokeEllipse(s.x, s.y + 2, 44, chaoH(40));
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2, x = s.x + Math.cos(a) * 22, y = s.y + 2 + Math.sin(a) * 10;
           this.bars.fillStyle(0xc4cbd4, 1).fillEllipse(x, y, i % 2 ? 8 : 5, 5).lineStyle(2, 0x4a3a22, 1).lineBetween(x, y, x + Math.cos(a) * 3, y - 9);

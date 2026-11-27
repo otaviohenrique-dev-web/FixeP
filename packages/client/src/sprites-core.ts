@@ -3,6 +3,7 @@
  * Fica separada para ser testada sem navegador. Convenção em docs/GUIA_ARTE_INICIAL.pdf.
  */
 
+import { HX, HY } from "./iso";
 export type Dir = "e" | "se" | "s" | "sw" | "w" | "nw" | "n" | "ne";
 /** índice = setor de 45° na tela, começando em Leste e girando para baixo (sentido horário, y da tela cresce para baixo) */
 export const DIRS: readonly Dir[] = ["e", "se", "s", "sw", "w", "nw", "n", "ne"];
@@ -22,8 +23,8 @@ export function dirFromScreen(vx: number, vy: number): Dir {
 
 /** Direção da tela a partir do ângulo de olhar no espaço da GRADE (a simulação do servidor). */
 export function gridAngleToDir(angle: number): Dir {
-  const vx = (Math.cos(angle) - Math.sin(angle)) * 32; // projeção isométrica 64x32
-  const vy = (Math.cos(angle) + Math.sin(angle)) * 16;
+  const vx = (Math.cos(angle) - Math.sin(angle)) * HX; // projeção do chão (iso.ts)
+  const vy = (Math.cos(angle) + Math.sin(angle)) * HY;
   return dirFromScreen(vx, vy);
 }
 

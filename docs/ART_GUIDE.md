@@ -11,7 +11,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 - Sem iluminação "assada" no sprite: dia e noite são feitos por código (tint e luzes). Fogueiras, janelas e olhos brilhantes vão em **camadas emissivas separadas**.
 
 ## 2. Projeção e grid
-- Tile isométrico 2:1: **64 x 32 px** (losango). A altura dos objetos conta a partir do centro da base do tile.
+- Tile do chão: **64 x 46 px** (losango; câmera inclinada a ~45°, estilo Albion, desde 27/11/2026; antes 64 x 32). A altura dos objetos conta a partir do centro da base do tile. Medidas no código: `packages/client/src/iso.ts`.
 - Mapas: as zonas têm entre 40 x 40 e 48 x 48 tiles (a simulação é ortogonal no servidor; o isométrico é só visual).
 - Objetos altos (árvores, paredes, pilares) têm **origem na base**: o ponto de ancoragem é o centro inferior do tile que ocupam.
 
@@ -55,7 +55,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 
 ## 8. Modelos e marcos
 - O plano de marcos (M0 a M8), tempos de animação, tamanhos de efeito e convenção de exportação estão em `docs/GUIA_ARTE_INICIAL.pdf`.
-- Modelos (grade isométrica 64x32, quadro de personagem 64x64 com o ponto dos pés e paleta inicial) em `assets/source/templates/`.
+- Modelos (grade do chão 64x46, quadro de personagem 64x64 com o ponto dos pés e paleta inicial) em `assets/source/templates/`.
 
 ## 9. Ver a arte no jogo
 - O carregador de sprites lê os atlas de `assets/characters/` e `assets/monsters/`. Recarregue o jogo depois de salvar.
