@@ -133,9 +133,19 @@ export function mountGameMenu(opts: GameMenuOptions) {
   syncInst();
   onInstallChange(syncInst);
 
+  // proteção contra clique acidental: o 1º clique só arma; o 2º (em até 4 s) é que desconecta
+  let saidaArmada: number | undefined;
   const logout = botao("Desconectar", ICONE_SAIR, async () => {
+    const rotulo = logout.querySelector("span")!;
+    if (saidaArmada === undefined) {
+      rotulo.textContent = "Clique de novo para sair";
+      saidaArmada = window.setTimeout(() => { saidaArmada = undefined; rotulo.textContent = "Desconectar"; }, 4000);
+      return;
+    }
+    window.clearTimeout(saidaArmada);
+    saidaArmada = undefined;
     logout.disabled = true;
-    logout.querySelector("span")!.textContent = "Saindo...";
+    rotulo.textContent = "Saindo...";
     await opts.onLogout();
   });
   logout.classList.add("gm-danger");
@@ -202,7 +212,8 @@ export function mountGameMenu(opts: GameMenuOptions) {
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || isTypingTarget()) return;
     if (document.querySelector(".cf-back.open")) return; // com a janela de Configurações aberta, o ESC é dela
-    (isOpen() ? close : open)();
+    // ESC é coringa: se uma janela aberta tratou o ESC (preventDefault), o menu não abre. Decide depois de todos os ouvintes.
+    window.setTimeout(() => { if (!e.defaultPrevented) (isOpen() ? close : open)(); }, 0);
   });
   // Atalhos do jogo que o menu mostra com a tecla: o ponto de pendência acompanha os painéis
   window.setInterval(() => {

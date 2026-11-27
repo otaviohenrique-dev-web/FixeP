@@ -454,7 +454,18 @@ class WorldScene extends Phaser.Scene {
     };
     window.addEventListener("keydown", (e) => {
       if (isTypingTarget() || this.busy) return; // digitando no chat
-      if (e.code === "Escape") { this.lockKey = ""; this.chase = null; if (this.selId) this.deselect(); }
+      if (e.code === "Escape") {
+        if (this.aimA) { e.preventDefault(); this.aimEnd(); return; } // ESC com a mira de uma skill aberta: cancela a skill (nada é gasto nem lançado)
+        this.lockKey = ""; this.chase = null; if (this.selId) this.deselect();
+      }
+      if (e.code === "KeyS" && !e.repeat && !menuOpen()) { // S: para o personagem onde ele está (cancela o caminho em andamento)
+        const me = this.me();
+        if (me && this.room) {
+          this.chase = null; this.pendingNpc = null; this.pendingVault = false;
+          this.room.send(Msg.MoveTo, { x: me.x, y: me.y, stop: true });
+        }
+        return;
+      }
       if (e.code === "KeyZ" && !e.repeat && !menuOpen() && this.cls === "cleric") { this.hud.toggleQ(); return; } // Z: alterna o Q do Clérigo
       if (e.code === "F10" && !e.repeat && ehAdmin() && !menuOpen()) { // F10 (admin): painel direto na aba Modo Deus
         e.preventDefault();
@@ -477,6 +488,9 @@ class WorldScene extends Phaser.Scene {
       const a = keys[e.code];
       if (a && this.aimA === a) { this.hud.trigger(a); this.aimEnd(); }
     });
+    window.addEventListener("pointerdown", (e) => { if (e.button === 2 && this.aimA) this.aimEnd(); }); // botão direito com a mira aberta: cancela a skill
+    // botão direito sobre o mundo não abre o menu do navegador (campos de texto e o resto da página continuam normais)
+    window.addEventListener("contextmenu", (e) => { if (e.target instanceof HTMLCanvasElement) e.preventDefault(); });
     window.addEventListener("blur", () => this.aimEnd()); // perdeu o foco da janela com a tecla segurada: cancela a mira em vez de ficar presa
   }
 

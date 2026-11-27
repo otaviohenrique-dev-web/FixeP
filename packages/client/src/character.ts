@@ -162,7 +162,16 @@ function createScreen(token: string, voltar?: () => Promise<CharacterInfo>): Pro
     out.type = "button";
     out.className = "fc-link";
     out.textContent = "Desconectar";
-    out.onclick = () => logout();
+    // proteção contra clique acidental: o 1º clique só arma; o 2º (em até 4 s) desconecta
+    let saidaArmada: number | undefined;
+    out.onclick = () => {
+      if (saidaArmada === undefined) {
+        out.textContent = "Clique de novo para sair";
+        saidaArmada = window.setTimeout(() => { saidaArmada = undefined; out.textContent = "Desconectar"; }, 4000);
+        return;
+      }
+      logout();
+    };
     s.panel.insertBefore(out, s.msg);
 
     // atalho "Personagens" no canto superior esquerdo: volta à lista da conta sem recarregar a sessão (só se a conta já tem personagem)
