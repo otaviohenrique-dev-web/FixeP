@@ -93,6 +93,9 @@ def zerar():
     bpy.context.view_layer.update()
 def girar(osso, eixo, graus):
     """gira o osso em torno do eixo do MUNDO que passa pela cabeça dele"""
+    eixo = Vector(eixo)
+    if not (eixo.length > 1e-6) or not math.isfinite(graus): return   # eixo indefinido (NaN/zero): não gira (evita vértices "explodindo")
+    eixo.normalize()
     pb = P[osso]; bpy.context.view_layer.update()
     m = pb.matrix.copy(); cabeca = m.to_translation()
     R = Matrix.Translation(cabeca) @ Matrix.Rotation(math.radians(graus), 4, Vector(eixo)) @ Matrix.Translation(-cabeca)
@@ -219,9 +222,10 @@ def encaixe_mao(lado):
     m = Matrix((f, n, a)).transposed().to_4x4(); m.translation = c   # X = dedos, Y = palma, Z = cabo
     return m
 
-def pose(fase=None, respira=0.0, sobe=0.0, peso=0.0):
+def pose(fase=None, respira=0.0, sobe=0.0, peso=0.0, golpe=None):
     """fase (0..1) = ciclo da caminhada (0 = contato do pé direito à frente); sem fase = parado (respiração e peso)"""
     base_parada()
+    if golpe is not None: pose_golpe(golpe); return
     if fase is None:   # PARADO: respiração. Quadril, pernas e pés NÃO se mexem (nada desliza); só o peito abre e os ombros sobem
         girar("spine_02", X, -2)                                  # postura
         girar("spine_03", X, -2.5 * respira)                      # peito sobe/abre ao inspirar
@@ -260,13 +264,92 @@ def pose(fase=None, respira=0.0, sobe=0.0, peso=0.0):
             girar(f"lowerarm_{lado}", X, -(6 + 34 * (0.5 + 0.5 * atraso) ** 1.6))   # atrás: braço quase reto; à frente: dobra
             girar(f"hand_{lado}", X, 6 * atraso)        # o pulso acompanha, solto
 
+# ---- ATAQUE BÁSICO (espada de uma mão): corte diagonal de cima/direita para baixo/esquerda. Pés fixos no chão; o tronco
+# gira (prepara para a direita, corta para a esquerda). Braço por DIREÇÕES no mundo (braço, antebraço, lâmina) em
+# quadros-chave; a lâmina é apontada pelo giro do antebraço + desvio pequeno do pulso (o pulso nunca dobra).
+# personagem olha para -Y; direita = -X. Torção (graus, + = ombro direito vai à frente); inclinação (+ = à frente).
+# AUTO ATAQUE = 3 golpes simples em sequência (referência do usuário: autoAtack.gif do Albion), 5 quadros cada:
+#   attack1: corte horizontal da direita para a esquerda | attack2: golpe vertical de cima para baixo |
+#   attack3: golpe baixo para a frente (estocada). O escudo abre para o lado esquerdo durante o golpe.
+GOLPE_CHAVES = {
+    "h_prep": dict(braco=(-0.85, 0.30, -0.10), antebraco=(-0.55, 0.55, 0.25), lamina=(-0.20, 0.85, -0.20), torcao=-26, inclina=-2, escudo=0.4),
+    "h_imp":  dict(braco=(-0.20, -0.95, -0.20), antebraco=(0.30, -0.95, -0.05), lamina=(0.85, -0.45, -0.10), torcao=20, inclina=8, escudo=0.9),
+    "h_seg":  dict(braco=(0.35, -0.85, -0.30), antebraco=(0.75, -0.50, -0.30), lamina=(0.75, 0.60, -0.20), torcao=32, inclina=10, escudo=0.8),
+    "v_prep": dict(braco=(-0.35, 0.05, 0.93), antebraco=(-0.10, 0.15, 0.98), lamina=(0.25, 0.65, 0.72), torcao=-10, inclina=-6, escudo=0.7),
+    "v_imp":  dict(braco=(-0.20, -0.85, -0.45), antebraco=(-0.05, -0.85, -0.52), lamina=(0.35, -0.45, -0.82), torcao=12, inclina=14, escudo=0.9),
+    "v_seg":  dict(braco=(-0.15, -0.50, -0.85), antebraco=(0.05, -0.60, -0.80), lamina=(0.40, -0.10, -0.90), torcao=14, inclina=16, escudo=0.8),
+    "e_prep": dict(braco=(-0.35, 0.45, -0.82), antebraco=(-0.20, 0.00, -0.98), lamina=(0.00, -0.85, -0.50), torcao=-18, inclina=0, escudo=0.5),
+    "e_imp":  dict(braco=(-0.15, -0.90, -0.40), antebraco=(0.00, -0.90, -0.43), lamina=(0.60, -0.60, -0.52), torcao=18, inclina=16, escudo=0.9),
+}
+# quadros de cada golpe: (chave A, chave B, mistura); "base" = guarda parada
+GOLPES = {
+    "attack1": [("base", "h_prep", 0.6), ("h_prep", "h_prep", 0.0), ("h_imp", "h_imp", 0.0), ("h_seg", "h_seg", 0.0), ("h_seg", "base", 0.6)],
+    "attack2": [("base", "v_prep", 0.6), ("v_prep", "v_prep", 0.0), ("v_imp", "v_imp", 0.0), ("v_seg", "v_seg", 0.0), ("v_seg", "base", 0.6)],
+    "attack3": [("base", "e_prep", 0.6), ("e_prep", "e_prep", 0.0), ("e_imp", "e_imp", 0.0), ("e_imp", "base", 0.3), ("e_imp", "base", 0.7)],
+}
+def direcao(osso): return (cauda_mundo(osso) - cabeca_mundo(osso)).normalized()
+def apontar(osso, alvo):
+    atual, alvo = direcao(osso), Vector(alvo).normalized()
+    if atual.dot(alvo) < -0.999:   # quase oposto: o eixo da diferença fica indefinido; gira 90° por um eixo perpendicular antes
+        perp = atual.cross(Vector((1, 0, 0)) if abs(atual.x) < 0.9 else Vector((0, 1, 0))).normalized()
+        girar(osso, tuple(perp), 90); atual = direcao(osso)
+    q = atual.rotation_difference(alvo)
+    if math.degrees(q.angle) > 0.3: girar(osso, tuple(q.axis), math.degrees(q.angle))
+def mirar_lamina(lado, alvo, desvio_max=30):   # no golpe o pulso desvia mais para o lado do mindinho (natural ao cortar)
+    """gira o antebraço no próprio eixo e desvia o pulso de leve (<= desvio_max) para a lâmina apontar para 'alvo'"""
+    alvo = Vector(alvo).normalized()
+    base = {b: P[b].matrix.copy() for b in (f"lowerarm_{lado}", f"hand_{lado}")}
+    def repor():
+        for b in (f"lowerarm_{lado}", f"hand_{lado}"): P[b].matrix = base[b]; bpy.context.view_layer.update()
+    melhor = (9e9, 0, 0)
+    for tw in range(-180, 180, 10):
+        for dv in range(-desvio_max, desvio_max + 1, 6):
+            repor(); _girar_pegada(lado, tw, dv)
+            e = math.degrees(dir_espada(lado).angle(alvo)) + 0.1 * abs(dv)
+            if e < melhor[0]: melhor = (e, tw, dv)
+    _, tw, dv = melhor
+    for t2 in range(tw - 8, tw + 9, 2):   # refina
+        for d2 in range(max(-desvio_max, dv - 5), min(desvio_max, dv + 5) + 1):
+            repor(); _girar_pegada(lado, t2, d2)
+            e = math.degrees(dir_espada(lado).angle(alvo)) + 0.1 * abs(d2)
+            if e < melhor[0]: melhor = (e, t2, d2)
+    repor(); _girar_pegada(lado, melhor[1], melhor[2]); return melhor[0]
+def chave_golpe(nome):
+    if nome != "base": return GOLPE_CHAVES[nome]
+    return dict(braco=tuple(BASE_GOLPE["braco"]), antebraco=tuple(BASE_GOLPE["antebraco"]), lamina=tuple(BASE_GOLPE["lamina"]), torcao=0, inclina=0, escudo=0.0)
+BASE_GOLPE = {}
+def pose_golpe(i):
+    base_parada()
+    if not BASE_GOLPE:   # direções da guarda parada (ponto de partida e de volta do golpe)
+        BASE_GOLPE.update(braco=direcao("upperarm_r"), antebraco=direcao("lowerarm_r"), lamina=dir_espada("r"))
+    nome_golpe, i = i
+    ka, kb, t = GOLPES[nome_golpe][i]
+    A, B = chave_golpe(ka), chave_golpe(kb)
+    t = t * t * (3 - 2 * t)   # suaviza
+    mix = lambda k: Vector(A[k]).normalized().slerp(Vector(B[k]).normalized(), t) if A[k] != B[k] else Vector(A[k]).normalized()
+    num = lambda k: A[k] + (B[k] - A[k]) * t
+    tor, inc = num("torcao"), num("inclina")
+    # tronco: torção dividida entre as 3 vértebras (quadril e pernas ficam parados: os pés não deslizam)
+    for o in ("spine_01", "spine_02", "spine_03"): girar(o, Z, tor / 3)   # Z+ leva o ombro direito (-X) para a frente (-Y)
+    girar("spine_02", X, -2 + inc * 0.6); girar("spine_03", X, inc * 0.4)
+    girar("head", Z, -tor * 0.8); girar("head", X, -inc * 0.7)   # a cabeça continua olhando o alvo, à frente
+    # joelhos levemente dobrados na base de combate
+    for l in ("l", "r"): girar(f"thigh_{l}", X, -6); girar(f"calf_{l}", X, 10); girar(f"foot_{l}", X, -4)
+    mover_pelvis(0, 0, -0.012)
+    # braço da espada
+    apontar("upperarm_r", mix("braco")); apontar("lowerarm_r", mix("antebraco"))
+    erro = mirar_lamina("r", mix("lamina"))
+    # braço do escudo: traz o escudo um pouco à frente durante o golpe (guarda)
+    e = num("escudo"); girar("upperarm_l", Y, -35 * e); girar("upperarm_l", X, -15 * e); girar("lowerarm_l", X, -25 * e)   # abre o escudo para o lado
+    print("golpe", nome_golpe, "quadro", i, "erro da lâmina", round(erro, 1))
+
 def mover_pelvis(dx, dy, dz):
     pm = P["pelvis"].matrix.copy(); pm.translation += Vector((dx, dy, dz)); P["pelvis"].matrix = pm; bpy.context.view_layer.update()
 
 N_WALK, N_IDLE = 8, 6
 WALK = [dict(fase=i / N_WALK) for i in range(N_WALK)]
 IDLE = [dict(respira=0.5 * (1 - math.cos(2 * math.pi * i / N_IDLE))) for i in range(N_IDLE)]   # 0 (expira) .. 1 (inspira) .. 0
-POSES = {"walk": WALK, "idle": IDLE}
+POSES = {"walk": WALK, "idle": IDLE, **{g: [dict(golpe=(g, i)) for i in range(len(q))] for g, q in GOLPES.items()}}
 
 # ------------------------------------------------------------------ equipamento criado na pose parada e preso aos ossos
 pose()
@@ -617,11 +700,12 @@ if "--exemplo" in argv:   # exemplo isolado para aprovação: volta de 360° na 
     for nome in COLECOES:
         if nome != "cena": lc = bpy.context.view_layer.layer_collection.children[nome]; lc.exclude = nome not in mostrar; lc.holdout = False
     os.makedirs(SAIDA, exist_ok=True)
-    if arg("--anim"):   # quadros de uma animação, cor cheia, nas direções pedidas
-        for d in DIRS:
-            camera(d)
-            for i, pp in enumerate(POSES[arg("--anim")]):
-                pose(**pp); r.filepath = os.path.join(SAIDA, f"{arg('--anim')}_{d}_{i:02d}.png"); bpy.ops.render.render(write_still=True)
+    if arg("--anim"):   # quadros de uma ou mais animações (separadas por vírgula), cor cheia, nas direções pedidas
+        for an in arg("--anim").split(","):
+            for d in DIRS:
+                camera(d)
+                for i, pp in enumerate(POSES[an]):
+                    pose(**pp); r.filepath = os.path.join(SAIDA, f"{an}_{d}_{i:02d}.png"); bpy.ops.render.render(write_still=True)
         print("ok exemplo"); sys.exit(0)
     pose(**IDLE[0])
     alvo_cab = (cabeca_mundo("head") + cauda_mundo("head")) / 2 + Vector((0, 0, -0.06))
