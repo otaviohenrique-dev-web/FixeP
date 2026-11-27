@@ -510,13 +510,35 @@ peca_em("capa_fecho", "primitive_cube_add", (0, 0, 0), (0.07, 0.025, 0.045), ACO
 # que contém a lâmina (faces chatas para os lados, fios para a frente/trás: nada de fio virado para cima)
 _D = dir_espada("r"); _W = (Vector((0, 0, 1)) - _D * _D.z).normalized()
 REF = Matrix((_W, (-_D).cross(_W), -_D)).transposed().to_4x4(); REF.translation = encaixe_mao("r").translation
-COMP = 0.70
-peca_em("cabo", "primitive_cylinder_add", (0, 0, 0.0), (1, 1, 1), COURO, REF, "hand_r", "espada", vertices=10, radius=0.022, depth=0.17)
-peca_em("pomo", "primitive_uv_sphere_add", (0, 0, 0.10), (1, 1, 1), ACO_ESCURO, REF, "hand_r", "espada", bevel=0, segments=12, ring_count=8, radius=0.034)
-peca_em("guarda", "primitive_cube_add", (0, 0, -0.10), (0.20, 0.045, 0.035), ACO_CLARO, REF, "hand_r", "espada", size=1)
-peca_em("guarda_acab", "primitive_cube_add", (0, 0, -0.10), (0.215, 0.05, 0.016), ACENTO, REF, "hand_r", "espada", bevel=0, size=1)
-peca_em("lamina", "primitive_cube_add", (0, 0, -0.12 - COMP / 2), (0.085, 0.024, COMP), LAMINA, REF, "hand_r", "espada", bevel=0.008, size=1)
-peca_em("ponta", "primitive_cone_add", (0, 0, -0.12 - COMP - 0.05), (1, 0.28, 1), LAMINA, REF, "hand_r", "espada", vertices=4, radius1=0.06, radius2=0.0, depth=0.10, rotation=(math.pi, 0, math.radians(45)))
+COMP = 0.74   # lâmina leve de uma mão: estreita, afinando até uma ponta simétrica no eixo
+def lamina_espada(nome, ref, osso, z0=-0.10):
+    """lâmina numa malha só, seção em losango (fio dos dois lados, nervura no meio), afinando de forma contínua até a
+    ponta, que fica exatamente no eixo da lâmina (sem peça separada: nada de 'seta' deslocada)"""
+    # (fração do comprimento, meia-largura, meia-espessura da nervura)
+    perfil = [(0.0, 0.031, 0.0085), (0.10, 0.030, 0.0082), (0.55, 0.026, 0.0072), (0.80, 0.022, 0.0062),
+              (0.90, 0.016, 0.0050), (0.96, 0.008, 0.0032)]
+    bm = bmesh.new(); aneis = []
+    for fr, w, t in perfil:
+        z = z0 - fr * COMP
+        aneis.append([bm.verts.new((w, 0, z)), bm.verts.new((0, t, z)), bm.verts.new((-w, 0, z)), bm.verts.new((0, -t, z))])
+    ponta = bm.verts.new((0, 0, z0 - COMP))
+    for a, b in zip(aneis, aneis[1:]):
+        for k in range(4): bm.faces.new((a[k], a[(k + 1) % 4], b[(k + 1) % 4], b[k]))
+    for k in range(4): bm.faces.new((aneis[-1][k], aneis[-1][(k + 1) % 4], ponta))
+    bm.faces.new(list(reversed(aneis[0])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new(nome); bm.to_mesh(me); bm.free()
+    for f in me.polygons: f.use_smooth = False   # faces planas: o brilho marca a nervura e os fios
+    o = bpy.data.objects.new(nome, me); cena.collection.objects.link(o); me.materials.append(LAMINA)
+    o.matrix_world = ref
+    mw = o.matrix_world.copy(); o.parent = rig; o.parent_type = "BONE"; o.parent_bone = osso
+    bpy.context.view_layer.update(); o.matrix_world = mw
+    mover_para(o, "espada"); return o
+peca_em("cabo", "primitive_cylinder_add", (0, 0, 0.0), (1, 1, 1), COURO, REF, "hand_r", "espada", vertices=10, radius=0.018, depth=0.15)
+peca_em("pomo", "primitive_uv_sphere_add", (0, 0, 0.088), (1, 1, 1), ACO_ESCURO, REF, "hand_r", "espada", bevel=0, segments=12, ring_count=8, radius=0.026)
+peca_em("guarda", "primitive_cube_add", (0, 0, -0.088), (0.15, 0.026, 0.022), ACO_CLARO, REF, "hand_r", "espada", bevel=0.006, size=1)
+peca_em("guarda_acab", "primitive_cube_add", (0, 0, -0.088), (0.158, 0.03, 0.009), ACENTO, REF, "hand_r", "espada", bevel=0, size=1)
+lamina_espada("lamina", REF, "hand_r", z0=-0.099)
 
 # ---- ESCUDO REDONDO no antebraço esquerdo: face de aço claro, umbo, aro, 4 placas laranja na borda; costas com alças de couro
 ab0, ab1 = cabeca_mundo("lowerarm_l"), cabeca_mundo("hand_l")
@@ -600,6 +622,8 @@ if "--exemplo" in argv:   # exemplo isolado para aprovação: volta de 360° na 
     alvo_cab = (cabeca_mundo("head") + cauda_mundo("head")) / 2 + Vector((0, 0, -0.06))
     zoom_volta = 0.75
     if arg("--volta", "cabeca") == "corpo": alvo_cab = ALVO + Vector((0, 0, 0.10)); zoom_volta = 2.4
+    if arg("--volta", "cabeca") == "espada":   # a espada sozinha, de perto, girando em volta do centro dela
+        alvo_cab = REF @ Vector((0, 0, -0.30)); zoom_volta = 1.15
     if arg("--volta", "cabeca") == "mao": alvo_cab = cabeca_mundo("hand_r") + Vector((0, -0.12, -0.12)); zoom_volta = 1.0
     for k, az in enumerate(range(0, 360, 30)):
         a_ = math.radians(-45 - az); cam.data.ortho_scale = zoom_volta
