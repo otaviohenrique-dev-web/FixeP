@@ -45,7 +45,7 @@ def mat(nome, cor, metal=0.0, rug=0.75):
     return m
 PELE = mat("pele", (0.60, 0.39, 0.29))
 CABELO = mat("cabelo", (0.13, 0.08, 0.05), rug=0.9)
-ROUPA = mat("roupa_baixo", (0.17, 0.15, 0.14), rug=0.9)
+ROUPA = mat("roupa_baixo", (0.07, 0.08, 0.12), rug=0.9)   # cinza-azulado escuro: não se confunde com a sombra da pele em 128 px
 ACO = mat("aco", (0.16, 0.165, 0.18), 0.5, 0.5)
 ACO_CLARO = mat("aco_claro", (0.34, 0.35, 0.38), 0.55, 0.45)
 COURO = mat("couro", (0.20, 0.12, 0.07))
