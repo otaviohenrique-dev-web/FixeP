@@ -97,7 +97,10 @@ Regras:
 ### 4.5 Cenário e tiles
 - **4 zonas:** Cinzas (ash), Floresta Gélida (frost), Catacumbas (crypt), Cidade de Brasalume (town).
 - Cada zona: **3 a 4 variações de chão** e transições de borda.
-- Tile do chão **64 x 46 px** (losango; câmera a ~45°, estilo Albion, desde 27/11/2026). Mapas de 40 x 40 a 48 x 48 tiles.
+- Tile do chão **64 x 46 px** (losango; câmera a ~45°, estilo Albion, desde 27/11/2026).
+- **Mapas: 240 x 240 tiles de alvo** (faixa de 180 a 360 por lado; travessia de 45 s a 1 min 30 s a pé). Regras completas em [ZONAS.md](ZONAS.md).
+- **Proibido criar mapa por código.** Terreno e cenário saem do editor (Tiled) com arte de tiles e props.
+- Estilo: 2D isométrico em pixel art com profundidade visual (2.5D de apresentação), sem 3D real. Referências: Diablo II e Albion Online.
 - Cada zona tem paleta própria dentro da base da seção 2.1. Cinzas começa primeiro (fria, cinza, brasa de fogueira).
 - Decoração (árvores, pedras, ruínas) ainda não está no código. Quando entrar, objeto alto tem origem na base.
 

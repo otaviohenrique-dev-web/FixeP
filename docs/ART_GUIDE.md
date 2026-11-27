@@ -12,7 +12,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 
 ## 2. Projeção e grid
 - Tile do chão: **64 x 46 px** (losango; câmera inclinada a ~45°, estilo Albion, desde 27/11/2026; antes 64 x 32). A altura dos objetos conta a partir do centro da base do tile. Medidas no código: `packages/client/src/iso.ts`.
-- Mapas: as zonas têm entre 40 x 40 e 48 x 48 tiles (a simulação é ortogonal no servidor; o isométrico é só visual).
+- Mapas: alvo de **240 x 240 tiles** por zona (faixa de 180 a 360 por lado), ver [ZONAS.md](ZONAS.md). A simulação é ortogonal no servidor; o isométrico é só visual.
 - Objetos altos (árvores, paredes, pilares) têm **origem na base**: o ponto de ancoragem é o centro inferior do tile que ocupam.
 
 ## 3. Personagens e monstros
@@ -23,7 +23,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 - Equipamento e cosméticos em **camadas separadas** (corpo, armadura, arma, capa, aura), alinhadas ao mesmo grid de quadros, para trocar cosméticos sem refazer o corpo.
 
 ## 4. Cenário
-- Tilesets por zona. Hoje o chão é desenhado por código (cores por tema); a arte de cenário entra por zona, começando pela Cinzas.
+- Tilesets por zona. O mapa é montado no Tiled com tiles de arte; **código desenhando cenário está proibido** (ver [ZONAS.md](ZONAS.md)). A primeira zona de arte é Brasalume; depois a Cinzas.
 - Variações de chão (3 a 4 por tipo) para quebrar repetição, mais transições de borda.
 - Props interativos (fogueira, baú, mural) com estado "inativo" e "ativo".
 - Ambientes contam história só com imagem: murais e ruínas não usam texto longo.
