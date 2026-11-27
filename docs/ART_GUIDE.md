@@ -45,6 +45,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 
 ## 7. Ordem de produção
 > Direção geral, paleta, raridades e fila detalhada: ver [DIRECAO_ARTE.md](DIRECAO_ARTE.md). Esta seção é o resumo.
+> Personagens e equipamentos são feitos em 3D e pré-renderizados em camadas: ver [PIPELINE_PERSONAGENS_3D.md](PIPELINE_PERSONAGENS_3D.md).
 
 1. **Validar o estilo:** 1 classe (Guerreiro) completa + 1 monstro + chão da Cinzas + efeito de hit; depois 1 família de ícones (Espada de Uma Mão) nas 8 raridades.
 2. **Próximas classes e zonas:** Arqueiro e Clérigo, Mago, Floresta Gélida, Catacumbas.
