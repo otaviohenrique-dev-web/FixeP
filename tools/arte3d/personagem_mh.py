@@ -171,28 +171,42 @@ def encaixe_mao(lado):
     m = Matrix((f, n, a)).transposed().to_4x4(); m.translation = c   # X = dedos, Y = palma, Z = cabo
     return m
 
-def pose(perna_D=0, perna_E=0, joelho_D=0, joelho_E=0, braco=0, sobe=0.0, respira=0.0):
-    """ângulos em graus: perna + = pé para a frente (-Y). braco + = braço da espada para a frente"""
+def pose(fase=None, respira=0.0, sobe=0.0, peso=0.0):
+    """fase (0..1) = ciclo da caminhada (0 = contato do pé direito à frente); sem fase = parado (respiração e peso)"""
     base_parada()
-    P["pelvis"].location = (0, 0, 0); bpy.context.view_layer.update()
-    pm = P["pelvis"].matrix.copy(); pm.translation += Vector((0, 0, sobe)); P["pelvis"].matrix = pm; bpy.context.view_layer.update()
-    girar("spine_02", X, -3 - respira * 80)
-    girar("thigh_r", X, -perna_D); girar("thigh_l", X, -perna_E)
-    girar("calf_r", X, joelho_D); girar("calf_l", X, joelho_E)
-    girar("foot_r", X, perna_D * 0.5 - joelho_D * 0.35); girar("foot_l", X, perna_E * 0.5 - joelho_E * 0.35)
-    girar("upperarm_r", X, -max(-6.0, braco * 0.45 - 8) if braco * 0.45 - 8 < 0 else -(braco * 0.45 - 8))  # braço da arma: para trás no máximo 6°
-    girar("upperarm_l", X, braco)
-    girar("lowerarm_r", X, -(6 + max(0, braco) * 0.4)); girar("lowerarm_l", X, -(3 + max(0, -braco) * 0.4))
+    if fase is None:   # PARADO: respira, transfere o peso de leve de um pé para o outro, braços soltos
+        mover_pelvis(0, peso * 0.012, sobe)
+        girar("pelvis", Y, peso * 1.5); girar("spine_02", Y, -peso * 1.8)
+        girar("spine_02", X, -2 - respira * 80); girar("head", X, respira * 30)
+        girar("upperarm_l", X, respira * 120); girar("upperarm_r", X, -respira * 60)
+        return
+    c, s2 = math.cos(2 * math.pi * fase), math.sin(2 * math.pi * fase)
+    cD, cE = c, -c                                     # perna direita à frente em fase 0, esquerda em 0,5
+    def joelho(f):   # flexão: um pouco no apoio (amortece) e bastante quando a perna passa à frente
+        a = math.sin(2 * math.pi * f)
+        return 5 + 12 * max(0.0, a) + 46 * max(0.0, -a) ** 1.3
+    jD, jE = joelho(fase), joelho(fase + 0.5)
+    mover_pelvis(0, 0, 0.012 * (1 - math.cos(4 * math.pi * fase)))      # sobe no meio do apoio, desce no contato
+    girar("pelvis", Z, 6 * c)                           # quadril gira: o lado da perna da frente avança
+    girar("pelvis", Y, 3 * s2)                          # e inclina de leve para o lado do apoio
+    girar("spine_02", Z, -5 * c); girar("spine_03", Z, -4 * c)   # ombros giram contra o quadril
+    girar("spine_02", X, -4)                            # leve inclinação à frente
+    girar("head", Z, -3 * c)                            # a cabeça compensa e continua olhando à frente
+    girar("thigh_r", X, -24 * cD); girar("thigh_l", X, -24 * cE)
+    girar("calf_r", X, jD); girar("calf_l", X, jE)
+    # pé: calcanhar no contato, ponta no impulso (rola do calcanhar para a ponta)
+    girar("foot_r", X, 24 * cD * 0.5 - jD * 0.35 + 10 * max(0.0, math.sin(2 * math.pi * (fase - 0.35))) ** 2)
+    girar("foot_l", X, 24 * cE * 0.5 - jE * 0.35 + 10 * max(0.0, math.sin(2 * math.pi * (fase + 0.15))) ** 2)
+    # braços: oposição às pernas; cotovelo dobra mais quando o braço vai à frente
+    girar("upperarm_l", X, -18 * cD); girar("lowerarm_l", X, -(4 + 10 * max(0.0, cD)))
+    girar("upperarm_r", X, -(9 * cE)); girar("lowerarm_r", X, -(5 + 6 * max(0.0, cE)))
 
-WALK = [
-    dict(perna_D=26, perna_E=-22, joelho_D=4, joelho_E=20, braco=-22, sobe=0.0),
-    dict(perna_D=8, perna_E=4, joelho_D=6, joelho_E=46, braco=-8, sobe=0.03),
-    dict(perna_D=-16, perna_E=18, joelho_D=10, joelho_E=8, braco=14, sobe=0.008),
-    dict(perna_D=-22, perna_E=26, joelho_D=20, joelho_E=4, braco=22, sobe=0.0),
-    dict(perna_D=4, perna_E=8, joelho_D=46, joelho_E=6, braco=8, sobe=0.03),
-    dict(perna_D=18, perna_E=-16, joelho_D=8, joelho_E=10, braco=-14, sobe=0.008),
-]
-IDLE = [dict(respira=x, sobe=-x * 0.4) for x in (0.0, 0.008, 0.016, 0.008)]
+def mover_pelvis(dx, dy, dz):
+    pm = P["pelvis"].matrix.copy(); pm.translation += Vector((dx, dy, dz)); P["pelvis"].matrix = pm; bpy.context.view_layer.update()
+
+N_WALK, N_IDLE = 8, 6
+WALK = [dict(fase=i / N_WALK) for i in range(N_WALK)]
+IDLE = [dict(respira=0.008 * (1 - math.cos(2 * math.pi * i / N_IDLE)), sobe=-0.003 * (1 - math.cos(2 * math.pi * i / N_IDLE)), peso=math.sin(2 * math.pi * i / N_IDLE)) for i in range(N_IDLE)]
 POSES = {"walk": WALK, "idle": IDLE}
 
 # ------------------------------------------------------------------ equipamento criado na pose parada e preso aos ossos
@@ -266,34 +280,38 @@ def peca_em(nome, prim, local, esc, material, ref, osso, colecao_nome, bevel=0.0
     bpy.context.view_layer.update(); o.matrix_world = mw
     mover_para(o, colecao_nome); return o
 
-# ---- COURAÇA: peitoral, ombreiras e faldas em aço claro; cinto laranja (acento)
+# ---- ARMADURA (slot do peito): cobre o corpo todo, menos a cabeça (elmo) e os pés (botas), como no Albion
 TRONCO = {"spine_01", "spine_02", "spine_03", "pelvis", "clavicle_l", "clavicle_r"}
-casca("peitoral", TRONCO, 0.56, 0.82, 0.028, ACO, facetado=0.7)
+MAOS = {f"{d}_{k}_{l}" for d in ("index", "middle", "ring", "pinky", "thumb") for k in ("01", "02", "03") for l in ("l", "r")} | {"hand_l", "hand_r"}
+casca("peitoral", TRONCO | {"neck_01"}, 0.50, 0.855, 0.028, ACO, facetado=0.7)
 for lado, s_ in (("D", "r"), ("E", "l")):
     casca(f"ombreira_{lado}", {f"upperarm_{s_}", f"clavicle_{s_}"}, 0.74, 0.86, 0.045, ACO_CLARO, facetado=0.7)
-casca("faldas", {"pelvis", "thigh_l", "thigh_r", "spine_01"}, 0.45, 0.565, 0.024, ACO, facetado=0.7)
+    casca(f"braco_{lado}", {f"upperarm_{s_}", f"lowerarm_{s_}"}, 0.0, 0.80, 0.016, ACO, facetado=0.8)
+casca("manoplas", MAOS, 0.0, 1.0, 0.005, ACO_ESCURO, espessura=0.006)
+casca("faldas", {"pelvis", "thigh_l", "thigh_r", "spine_01"}, 0.42, 0.56, 0.03, ACO, facetado=0.7)
+casca("pernas", {"thigh_l", "thigh_r", "calf_l", "calf_r"}, 0.065, 0.53, 0.014, ACO, facetado=0.8)
 casca("cinto", TRONCO, 0.548, 0.588, 0.042, ACENTO, espessura=0.012)
 
-# ---- BOTAS: grevas de placa até o joelho, faixa laranja no topo
-PERNAS_BAIXO = {"calf_l", "calf_r", "foot_l", "foot_r", "ball_l", "ball_r"}
-casca("grevas", PERNAS_BAIXO, 0.0, 0.285, 0.009, ACO, facetado=0.85, espessura=0.008, colecao_nome="botas")
-casca("botas_aro", {"calf_l", "calf_r"}, 0.266, 0.292, 0.016, ACENTO, espessura=0.008, colecao_nome="botas")
+# ---- BOTAS (slot dos pés): calçado de placa até o tornozelo, faixa laranja no cano
+PES = {"foot_l", "foot_r", "ball_l", "ball_r", "calf_l", "calf_r"}
+casca("sapatos", PES, 0.0, 0.10, 0.016, ACO_CLARO, facetado=0.85, espessura=0.01, colecao_nome="botas")
+casca("botas_aro", {"calf_l", "calf_r", "foot_l", "foot_r"}, 0.082, 0.105, 0.024, ACENTO, espessura=0.008, colecao_nome="botas")
 
 # ---- ELMO: elmo fechado com fenda do visor, nervura central e crista (acento) de frente para trás
-cab_pts = pontos({"head", "neck_01"}, 0.865, 1.0) + [cab.matrix_world @ v.co for v in cab.data.vertices]
+cab_pts = pontos({"head"}, 0.885, 1.0) + [cab.matrix_world @ v.co for v in cab.data.vertices]
 cx = sum(p.x for p in cab_pts) / len(cab_pts); cy = sum(p.y for p in cab_pts) / len(cab_pts)
-zmin = 0.865 * ALTURA; zmax = max(p.z for p in cab_pts)
+zmin = 0.878 * ALTURA; zmax = max(p.z for p in cab_pts)
 rx = max(abs(p.x - cx) for p in cab_pts); ry = max(abs(p.y - cy) for p in cab_pts)
-R = max(rx, ry) * 1.16; H = (zmax - zmin) * 0.80
+R = max(rx, ry) * 1.05; H = (zmax - zmin) * 0.76   # rente à cabeça (antes 1.16: cabeção)
 REF_CAB = Matrix.Translation(Vector((cx, cy, zmin)))
 peca_em("elmo", "primitive_cylinder_add", (0, 0, H / 2), (1, 1.05, 1), ACO, REF_CAB, "head", "elmo", vertices=16, radius=R, depth=H)
-peca_em("elmo_topo", "primitive_uv_sphere_add", (0, 0, H * 0.98), (1, 1.05, 0.85), ACO, REF_CAB, "head", "elmo", bevel=0, liso=True, segments=16, ring_count=8, radius=R)
+peca_em("elmo_topo", "primitive_uv_sphere_add", (0, 0, H * 0.98), (1, 1.05, 0.80), ACO, REF_CAB, "head", "elmo", bevel=0, liso=True, segments=16, ring_count=8, radius=R)
 z_olho = (0.935 * ALTURA) - zmin
 peca_em("visor_fenda", "primitive_cube_add", (0, -R * 1.02, z_olho), (R * 1.15, 0.03, 0.022), FENDA, REF_CAB, "head", "elmo", bevel=0, size=1)
 peca_em("visor_nervura", "primitive_cube_add", (0, -R * 1.04, H * 0.45), (0.018, 0.02, H * 0.95), ACO_CLARO, REF_CAB, "head", "elmo", size=1)
 peca_em("elmo_aro", "primitive_cylinder_add", (0, 0, 0.012), (1, 1.05, 1), ACO_CLARO, REF_CAB, "head", "elmo", vertices=16, radius=R * 1.02, depth=0.024)
-for k, (yy, zz, alto) in enumerate(((-0.7, 1.20, 0.07), (-0.35, 1.32, 0.10), (0.0, 1.36, 0.115), (0.35, 1.32, 0.105), (0.7, 1.18, 0.09))):
-    peca_em(f"crista_{k}", "primitive_cube_add", (0, yy * R, H * zz - 0.02), (0.035, R * 0.42, alto), ACENTO, REF_CAB, "head", "elmo", size=1)
+for k, (yy, zz, alto) in enumerate(((-0.7, 1.16, 0.045), (-0.35, 1.26, 0.065), (0.0, 1.29, 0.075), (0.35, 1.26, 0.07), (0.7, 1.14, 0.06))):
+    peca_em(f"crista_{k}", "primitive_cube_add", (0, yy * R, H * zz - 0.012), (0.028, R * 0.42, alto), ACENTO, REF_CAB, "head", "elmo", size=1)
 
 # ---- CAPA: tecido cinza-amarronzado atrás, forro escuro, faixas laranja nos ombros, fecho de metal
 costas = pontos({"spine_02", "spine_03"}, 0.70, 0.80)          # só o tronco (sem braços)
@@ -403,7 +421,7 @@ if "--close" in argv:
         if nome != "cena": lc = bpy.context.view_layer.layer_collection.children[nome]; lc.exclude = False; lc.holdout = False
     os.makedirs(SAIDA, exist_ok=True)
     print("polegar (dist, r1, r2, curl):", POLEGAR.get("r"))
-    for nome_pose, pp in (("idle", IDLE[0]), ("walk1", WALK[0]), ("walk4", WALK[3])):
+    for nome_pose, pp in (("idle", IDLE[0]), ("walk1", WALK[0]), ("walk4", WALK[3])):  # walk4 = fase 3/8
         pose(**pp)
         for az in (-45, -90, 0, -135):
             for zoom, centro in ((0.55, cabeca_mundo("hand_r")), (1.1, cabeca_mundo("upperarm_r")), (2.5, ALVO)):
