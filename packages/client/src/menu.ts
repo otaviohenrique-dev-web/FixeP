@@ -212,7 +212,8 @@ export function mountGameMenu(opts: GameMenuOptions) {
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || isTypingTarget()) return;
     if (document.querySelector(".cf-back.open")) return; // com a janela de Configurações aberta, o ESC é dela
-    (isOpen() ? close : open)();
+    // ESC é coringa: se uma janela aberta tratou o ESC (preventDefault), o menu não abre. Decide depois de todos os ouvintes.
+    window.setTimeout(() => { if (!e.defaultPrevented) (isOpen() ? close : open)(); }, 0);
   });
   // Atalhos do jogo que o menu mostra com a tecla: o ponto de pendência acompanha os painéis
   window.setInterval(() => {

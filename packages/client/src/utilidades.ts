@@ -97,7 +97,7 @@ export function mountUtilidades(itens: UtilItem[]): { atualiza(): void } {
   document.addEventListener("pointerdown", (e) => {
     if (aberto() && !pop.contains(e.target as Node) && !btn.contains(e.target as Node)) fechar();
   });
-  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && aberto() && !isTypingTarget()) fechar(); });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && aberto() && !isTypingTarget()) { e.preventDefault(); fechar(); } });
 
   function atualiza() {
     let algum = false;
