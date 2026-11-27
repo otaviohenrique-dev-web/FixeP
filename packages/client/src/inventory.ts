@@ -26,7 +26,7 @@ const CSS = `
 .iv-btn svg{width:22px;height:22px}
 .iv-back{position:fixed;inset:0;z-index:19;display:none;align-items:center;justify-content:center;background:rgba(2,5,11,.55);padding:12px;font-family:"Cinzel",Georgia,serif}
 .iv-back.open{display:flex}
-.iv-card{width:min(660px,100%);display:flex;flex-direction:column;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:hidden;padding:16px;border-radius:8px;color:#dbeaff;
+.iv-card{width:min(880px,100%);display:flex;flex-direction:column;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:hidden;padding:16px;border-radius:8px;color:#dbeaff;
   background:linear-gradient(180deg,rgba(20,34,52,.97),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4);box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 1px 0 rgba(180,220,255,.12)}
 .iv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .iv-id{display:flex;align-items:center;gap:12px}
@@ -58,7 +58,7 @@ const CSS = `
   --rc:rgba(160,200,240,.35);background:radial-gradient(circle at 50% 35%,rgba(26,38,56,.92),rgba(5,9,15,.96));border:2px solid var(--rc);box-shadow:inset 0 0 10px rgba(0,0,0,.8);
   transition:transform .12s,box-shadow .18s,border-color .15s}
 .iv-es:hover:not(:disabled){transform:translate(-50%,-50%) scale(1.07);border-color:#ffd08a}
-.iv-es.full{box-shadow:0 0 9px var(--rc),inset 0 0 10px rgba(0,0,0,.7)}
+.iv-es.full{box-shadow:0 0 9px var(--rc),inset 0 0 10px rgba(0,0,0,.7);background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--rc) 30%,#0c1220),#05080e)}
 .iv-es[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 14px rgba(255,190,100,.55),inset 0 0 8px rgba(0,0,0,.7)}
 .iv-es svg{width:56%;height:56%;opacity:.55}
 .iv-es .iv-ic{width:82%;height:82%}
@@ -139,13 +139,14 @@ const CSS = `
 .iv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .iv-slot{position:relative;aspect-ratio:1;border-radius:5px;cursor:pointer;display:grid;place-items:center;padding:0;color:inherit;--rc:rgba(160,200,240,.2);
   background:radial-gradient(circle at 50% 35%,rgba(20,30,46,.9),rgba(5,9,15,.9));border:1.5px solid var(--rc);transition:border-color .15s,transform .12s}
-.iv-slot.full{box-shadow:0 0 6px var(--rc)}
+.iv-slot.full{box-shadow:0 0 6px var(--rc);background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--rc) 30%,#0c1220),#05080e)} /* fundo do tier: mesma cor para todo item da raridade */
+.iv-slot .iv-ic{width:86%;height:86%}
 .iv-slot.drop{border-color:#7dd68a}
 .iv-slot:hover{border-color:#ff9a4d;transform:scale(1.04)}
 .iv-slot[aria-pressed=true]{border-color:#ffd08a;box-shadow:0 0 14px rgba(255,170,80,.4)}
 .iv-slot svg,.iv-eqs svg{width:70%;height:70%}
 .iv-eqs svg{width:34px;height:34px;flex:none}
-.iv-ic{image-rendering:pixelated;object-fit:contain;flex:none;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
+.iv-ic{image-rendering:auto;object-fit:contain;flex:none;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
 .iv-qty{position:absolute;right:3px;bottom:2px;font:700 10px/1 "Cinzel",Georgia,serif;text-shadow:0 1px 3px #000}
 .iv-det{margin-top:10px;min-height:92px;padding:10px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.2)}
 .iv-det h3{margin:0 0 2px;font:700 13px/1.2 "Cinzel",Georgia,serif}
