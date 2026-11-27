@@ -14,8 +14,8 @@ PALETAS = {"pele": (["corpo", "cabelo"], 14), "equip": (PECAS, 15)}   # 14 + 15 
 CONTORNO = (16, 13, 18, 255)
 # ordem de desenho (de trás para a frente) por direção; o acento de cada peça vai logo depois dela
 ORDEM = {
-    "se": ["capa", "escudo", "corpo", "cabelo", "botas", "couraca", "elmo", "espada"],
-    "ne": ["escudo", "corpo", "cabelo", "botas", "couraca", "elmo", "capa", "espada"],
+    "se": ["capa", "escudo", "corpo", "cabelo", "couraca", "botas", "elmo", "espada"],
+    "ne": ["escudo", "corpo", "cabelo", "couraca", "botas", "elmo", "capa", "espada"],
 }
 anims_dirs = sorted({f.rsplit("_", 1)[0] for f in os.listdir(os.path.join(R, "corpo")) if f.endswith(".png")})
 
