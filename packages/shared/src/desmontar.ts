@@ -12,17 +12,19 @@ import { MAT_FERRO, MAT_COURO, MAT_ESSENCIA } from "./crafting";
 import { isRefinavel } from "./refino";
 import { refinoValido } from "./refino_stats";
 
-/** índice (em RARITIES) a partir do qual desmontar pede confirmação: raro = 2 */
-export const DESMONTAR_CONFIRM_FROM = 2;
+/** índice (em RARITIES) a partir do qual desmontar pede confirmação: raro = 3 */
+export const DESMONTAR_CONFIRM_FROM = 3;
 
-/** material devolvido por raridade, na ordem de RARITIES: comum, incomum, raro, épico, lendário, mítico */
+/** material devolvido por raridade, na ordem de RARITIES: lixo, comum, incomum, raro, épico, lendário, mítico, ancestral */
 export const DESMONTAR_MATS: readonly { ferro: number; couro: number; essencia: number }[] = [
+  { ferro: 1, couro: 0, essencia: 0 }, // lixo
   { ferro: 1, couro: 0, essencia: 0 }, // comum
   { ferro: 1, couro: 1, essencia: 0 }, // incomum
   { ferro: 2, couro: 1, essencia: 1 }, // raro
   { ferro: 3, couro: 2, essencia: 1 }, // épico
   { ferro: 4, couro: 3, essencia: 2 }, // lendário
   { ferro: 6, couro: 4, essencia: 2 }, // mítico
+  { ferro: 9, couro: 6, essencia: 4 }, // ancestral
 ];
 
 /** Bônus de Ferro Bruto de um item refinado: +1 a cada 2 níveis de refino. */

@@ -8,7 +8,7 @@ import { RARITY_HEX } from "@frixep/shared";
  * A posição é a da mão (em pixels do quadro 64x64, a partir dos pés); espelha quando o personagem olha para a esquerda.
  */
 
-const ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+const ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic", "ancestral"]; // lixo fica de fora (-1): sem aura, como comum
 
 /** Mão da frente por classe (x para a direita, y para baixo; negativo = para cima). */
 const HAND: Record<string, [number, number]> = {

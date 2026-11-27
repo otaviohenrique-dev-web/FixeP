@@ -54,8 +54,8 @@ console.log("\n== Compra ==");
   const id = shopStock("warrior").find((x) => x === "espada_1m_common")!;
   const p = buyPrice(id);
   // o dev mudou a regra: o comerciante NÃO vende mais verde (incomum); só comum e poção. Verdes saem de drop, quest e craft.
-  check("o comerciante vende poção e equipamento só COMUM, da classe do jogador", shopStock("mage")[0] === "pocao_de_vida" && shopStock("mage").slice(1).every((x) => ITEMS[x].cls === "mage" && rarityIndex(ITEMS[x].rarity) === 0) && shopStock("mage").length > 3);
-  check("nenhum item verde (incomum) ou acima aparece na loja de nenhuma classe", (["warrior", "archer", "cleric", "mage"] as const).every((c) => shopStock(c).every((x) => x === "pocao_de_vida" || rarityIndex(ITEMS[x].rarity) === 0)));
+  check("o comerciante vende poção e equipamento só COMUM, da classe do jogador", shopStock("mage")[0] === "pocao_de_vida" && shopStock("mage").slice(1).every((x) => ITEMS[x].cls === "mage" && ITEMS[x].rarity === "common") && shopStock("mage").length > 3);
+  check("nenhum item verde (incomum) ou acima aparece na loja de nenhuma classe", (["warrior", "archer", "cleric", "mage"] as const).every((c) => shopStock(c).every((x) => x === "pocao_de_vida" || ITEMS[x].rarity === "common")));
   check("o verde do guerreiro (espada de uma mão incomum) não está à venda nem se compra", !shopStock("warrior").includes("espada_1m_uncommon") && !buyItem(i, "warrior", "espada_1m_uncommon", 1).ok);
   const r = buyItem(i, "warrior", id, 1);
   check("comprar cobra o preço e põe o item na mochila", r.ok && i.iron === 1000 - p && count(i, id) === 1, `iron ${i.iron}`);
@@ -146,7 +146,7 @@ console.log("\n== Fusão (ferreira) ==");
   const ids = new Set<string>();
   for (let k = 0; k < 30; k++) { const j = mk(["montante_uncommon", "espada_larga_uncommon", "lamina_runica_uncommon"]); const rr = mergeItems(j, [0, 1, 2], 2, seq(0, Math.random())); if (rr.ok && rr.success) ids.add(rr.id); }
   check("o resultado sai na raridade superior (raro) e na classe certa", [...ids].every((x) => ITEMS[x].rarity === "rare" && ITEMS[x].cls === "warrior" && ITEMS[x].kind === "weapon") && ids.size >= 1);
-  check("a chance de sucesso cai com a raridade", [0, 1, 2, 3, 4].map((k) => mergeChance(RARITIES[k])).every((c, k, a) => k === 0 || c < a[k - 1]) && mergeChance("mythic") === 0);
+  check("a chance de sucesso cai com a raridade (Lixo e Comum sobem sempre; Ancestral é o teto)", (["common", "uncommon", "rare", "epic", "legendary", "mythic"] as const).map((r) => mergeChance(r)).every((c, k, a) => k === 0 || c < a[k - 1]) && mergeChance("junk") === 1 && mergeChance("ancestral") === 0);
   check("nunca sobram nem faltam itens: total conservado ou reduzido em 1", (() => { let ok = true; for (let k = 0; k < 40; k++) { const j = mk(three("warrior_armor_uncommon")); mergeItems(j, [0, 1, 2], 2); ok &&= total(j) === 1 || total(j) === 2; } return ok; })());
   check("MERGE_COUNT é 3", MERGE_COUNT === 3);
 }

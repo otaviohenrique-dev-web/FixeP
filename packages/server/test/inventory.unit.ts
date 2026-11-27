@@ -28,7 +28,7 @@ console.log("\n== Catálogo de itens ==");
 {
   const all = Object.values(ITEMS);
   check("8 níveis de raridade, cada um com nome e cor próprios (inferior e ancestral ainda sem itens)", RARITIES_ALL.length === 8 && new Set(RARITIES_ALL.map((r) => RARITY_COLOR[r])).size === 8 && RARITIES_ALL.every((r) => !!RARITY_NAME[r]) && RARITIES_ALL[0] === "junk" && RARITIES_ALL[7] === "ancestral" && RARITIES.every((r) => RARITIES_ALL.includes(r)));
-  check("6 raridades com cores distintas", RARITIES.length === 6 && new Set(RARITIES.map((r) => RARITY_COLOR[r])).size === 6);
+  check("8 raridades (Lixo a Ancestral) com cores distintas", RARITIES.length === 8 && new Set(RARITIES.map((r) => RARITY_COLOR[r])).size === 8);
   check("4 classes jogáveis, incluindo o Mago", PLAYABLE_CLASSES.length === 4 && PLAYABLE_CLASSES.includes("mage"));
   check("cada classe tem 3 ou mais tipos de arma", PLAYABLE_CLASSES.every((c) => Object.values(WEAPON_TYPES).filter((t) => t.cls === c).length >= 3));
   check("o Guerreiro tem 3 espadas de duas mãos e 1 de uma mão", Object.values(WEAPON_TYPES).filter((t) => t.cls === "warrior" && t.hands === 2).length === 3 && Object.values(WEAPON_TYPES).filter((t) => t.cls === "warrior" && t.hands === 1).length === 1);
@@ -36,7 +36,7 @@ console.log("\n== Catálogo de itens ==");
   // materiais de craft (mat_*): sem classe, empilháveis, não equipáveis, vendáveis (o dev definiu os 3 tipos)
   check("materiais de craft: 3 tipos, empilháveis, sem classe e de tipo 'material'", ["mat_ferro_bruto", "mat_couro_curtido", "mat_essencia_arcana"].every((id) => ITEMS[id]?.kind === "material" && ITEMS[id].stack > 1 && !ITEMS[id].cls));
   check("cada classe tem arma, mão secundária, elmo, armadura, botas e capa em TODAS as raridades", PLAYABLE_CLASSES.every((c) => RARITIES.every((r) => (["weapon", "offhand", "helmet", "armor", "boots", "cape"] as const).every((k) => all.some((i) => i.cls === c && i.rarity === r && i.kind === k)))));
-  check("raridade maior exige mais nível e dá mais poder", PLAYABLE_CLASSES.every((c) => { const w = RARITIES.map((r) => ITEMS[`${c}_armor_${r}`]); return w.every((x, i) => i === 0 || (x.minLevel > w[i - 1].minLevel && x.hp! > w[i - 1].hp!)); }));
+  check("raridade maior exige mais nível e dá mais poder", PLAYABLE_CLASSES.every((c) => { const w = RARITIES.map((r) => ITEMS[`${c}_armor_${r}`]); return w.every((x, i) => i === 0 || (x.minLevel >= w[i - 1].minLevel && (i === 1 || x.minLevel > w[i - 1].minLevel) && x.hp! > w[i - 1].hp!)); })); // Lixo e Comum: mesmo nível 1
   check("tipos mais exigentes pedem mais nível (Montante > Espada de Uma Mão)", ITEMS.montante_common.minLevel > ITEMS.espada_1m_common.minLevel);
   check("ids únicos e nomes não vazios", new Set(all.map((i) => i.id)).size === all.length && all.every((i) => i.name.length > 2));
   check("o kit de uma arma gera texto para a mochila", kitLines(WEAPON_TYPES.montante.kit).length >= 3);
@@ -197,8 +197,8 @@ console.log("\n== Drops: raridade, teto por zona, taxas ==");
       for (const d of rollMobLoot(z)) {
         if (ITEMS[d.id].kind === "potion") { potion++; continue; }
         if (ITEMS[d.id].kind === "material") { mat++; continue; } // material de craft: conta à parte (ver a checagem de materiais abaixo)
-        if (idx(d.id) === 1) green++;
-        gear++; top = Math.max(top, idx(d.id)); if (idx(d.id) >= 2) rareUp++;
+        if (idx(d.id) === rarityIndex("uncommon")) green++;
+        gear++; top = Math.max(top, idx(d.id)); if (idx(d.id) >= rarityIndex("rare")) rareUp++;
         byCls[ITEMS[d.id].cls!] = (byCls[ITEMS[d.id].cls!] ?? 0) + 1;
       }
     }
@@ -211,13 +211,13 @@ console.log("\n== Drops: raridade, teto por zona, taxas ==");
     check(`${z.name}: itens de TODAS as classes caem (qualquer classe pode dropar qualquer classe)`, PLAYABLE_CLASSES.every((c) => (byCls[c] ?? 0) > gear * 0.18), JSON.stringify(byCls));
   }
   // o dev mudou a regra: zona 1 agora tem raro (10%) na tabela; nada épico+ em nenhuma zona
-  check("zona 1: impossível épico ou melhor (raro é o teto)", Array.from({ length: 80000 }, () => rollMobLoot(ZONES[1])).flat().every((d) => idx(d.id) <= 2));
-  check("zona 2: impossível épico ou melhor em inimigos comuns", Array.from({ length: 80000 }, () => rollMobLoot(ZONES[2])).flat().every((d) => idx(d.id) <= 2));
+  check("zona 1: impossível épico ou melhor (raro é o teto)", Array.from({ length: 80000 }, () => rollMobLoot(ZONES[1])).flat().every((d) => idx(d.id) <= rarityIndex("rare")));
+  check("zona 2: impossível épico ou melhor em inimigos comuns", Array.from({ length: 80000 }, () => rollMobLoot(ZONES[2])).flat().every((d) => idx(d.id) <= rarityIndex("rare")));
   // o dev mudou a regra: NENHUM épico+ de inimigo comum (antes lendário/mítico eram o teto de inimigos da zona 3)
-  check("épico, lendário e mítico NUNCA saem de inimigos comuns de nenhuma zona (nem o teto antigo de lendário)", COMBAT_ZONES.every((z) => Array.from({ length: 50000 }, () => rollMobLoot(ZONES[z])).flat().every((d) => idx(d.id) <= 2)));
+  check("épico, lendário e mítico NUNCA saem de inimigos comuns de nenhuma zona (nem o teto antigo de lendário)", COMBAT_ZONES.every((z) => Array.from({ length: 50000 }, () => rollMobLoot(ZONES[z])).flat().every((d) => idx(d.id) <= rarityIndex("rare"))));
   check("todo drop sorteado existe no catálogo", Array.from({ length: 4000 }, () => rollMobLoot(ZONES[3])).flat().every((d) => ITEMS[d.id] && d.qty >= 1));
   // rng fixo: deterministico
-  check("rng no zero dá equipamento comum; rng alto não dá nada", rollMobLoot(ZONES[1], () => 0).some((d) => ITEMS[d.id].rarity === "common" && ITEMS[d.id].kind !== "potion") && rollMobLoot(ZONES[1], () => 0.999).length === 0);
+  check("rng no zero dá o primeiro da tabela (Lixo); rng alto não dá nada", rollMobLoot(ZONES[1], () => 0).some((d) => ITEMS[d.id].rarity === "junk" && ITEMS[d.id].kind !== "potion") && rollMobLoot(ZONES[1], () => 0.999).length === 0);
   check("pickGear respeita a raridade pedida", RARITIES.every((r) => Array.from({ length: 300 }, () => ITEMS[pickGear(r, Math.random)].rarity).every((x) => x === r)));
 }
 
@@ -226,14 +226,14 @@ console.log("\n== Baús de chefe ==");
   const idx = (id: string) => rarityIndex(ITEMS[id].rarity);
   const gearOf = (z: number) => Array.from({ length: 4000 }, () => rollChestLoot(ZONES[z])).map((c) => c.filter((d) => ITEMS[d.id].kind !== "potion"));
   // o dev mudou a regra (design definitivo): baús de chefe param no RARO (piso raro no 1º item); épico+ fica reservado a chefe de nível >= 45
-  check("zona 1: o baú tem o nº de itens certo, o 1º é raro ou melhor e nada passa de raro", gearOf(1).every((c) => c.length === ZONES[1].boss!.chest.count && c.every((d) => idx(d.id) <= 2) && idx(c[0].id) >= 2));
-  check("zona 2: o baú nunca passa de raro e o 1º item é raro", gearOf(2).every((c) => c.every((d) => idx(d.id) <= 2) && idx(c[0].id) >= 2));
+  check("zona 1: o baú tem o nº de itens certo, o 1º é raro ou melhor e nada passa de raro", gearOf(1).every((c) => c.length === ZONES[1].boss!.chest.count && c.every((d) => idx(d.id) <= rarityIndex("rare")) && idx(c[0].id) >= rarityIndex("rare")));
+  check("zona 2: o baú nunca passa de raro e o 1º item é raro", gearOf(2).every((c) => c.every((d) => idx(d.id) <= rarityIndex("rare")) && idx(c[0].id) >= rarityIndex("rare")));
   const z3 = gearOf(3);
-  check("zona 3: o baú nunca passa de raro (o antigo épico/lendário/mítico saiu) e o 1º é raro", z3.every((c) => c.every((d) => idx(d.id) <= 2) && idx(c[0].id) >= 2));
-  check("zona 3: o baú dá raro (e nada acima dele em 4000 baús)", z3.flat().some((d) => idx(d.id) === 2) && z3.flat().every((d) => idx(d.id) <= 2));
-  check("nenhuma zona atual dropa épico, lendário ou mítico: nem inimigos comuns (tabela) nem baús (tabela e piso)", COMBAT_ZONES.every((z) => Object.keys(ZONES[z].drops.weights).every((r) => rarityIndex(r as Rarity) <= 2) && Object.keys(ZONES[z].boss!.chest.weights).every((r) => rarityIndex(r as Rarity) <= 2) && rarityIndex(ZONES[z].boss!.chest.min) <= 2));
+  check("zona 3: o baú nunca passa de raro (o antigo épico/lendário/mítico saiu) e o 1º é raro", z3.every((c) => c.every((d) => idx(d.id) <= rarityIndex("rare")) && idx(c[0].id) >= rarityIndex("rare")));
+  check("zona 3: o baú dá raro (e nada acima dele em 4000 baús)", z3.flat().some((d) => idx(d.id) === 2) && z3.flat().every((d) => idx(d.id) <= rarityIndex("rare")));
+  check("nenhuma zona atual dropa épico, lendário ou mítico: nem inimigos comuns (tabela) nem baús (tabela e piso)", COMBAT_ZONES.every((z) => Object.keys(ZONES[z].drops.weights).every((r) => rarityIndex(r as Rarity) <= rarityIndex("rare")) && Object.keys(ZONES[z].boss!.chest.weights).every((r) => rarityIndex(r as Rarity) <= rarityIndex("rare")) && rarityIndex(ZONES[z].boss!.chest.min) <= rarityIndex("rare")));
   check("chefe de nível 45 (hipotético) PODE sortear épico: a regra do sorteio libera; abaixo de 45 não", pickRarity({ epic: 1 }, () => 0, { chefe: EPIC_PLUS_MIN_BOSS_LEVEL }) === "epic" && pickRarity({ epic: 1 }, () => 0, { chefe: EPIC_PLUS_MIN_BOSS_LEVEL - 1 }) === "common" && rarityLiberada("mythic", { chefe: 60 }) && !rarityLiberada("epic", { chefe: 44 }));
-  check("o mesmo sorteio num inimigo comum (sem origem de chefe) nunca dá épico, mesmo com peso total nele", Array.from({ length: 2000 }, () => pickRarity({ epic: 1, legendary: 1, mythic: 1 }, Math.random)).every((r) => rarityIndex(r) <= 2));
+  check("o mesmo sorteio num inimigo comum (sem origem de chefe) nunca dá épico, mesmo com peso total nele", Array.from({ length: 2000 }, () => pickRarity({ epic: 1, legendary: 1, mythic: 1 }, Math.random)).every((r) => rarityIndex(r) <= rarityIndex("rare")));
   check("cada zona tem um chefe", COMBAT_ZONES.every((z) => ZONES[z].boss!.kind && ZONES[z].boss!.respawnS >= 120));
 }
 

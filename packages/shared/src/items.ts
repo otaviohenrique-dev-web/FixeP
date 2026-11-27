@@ -15,13 +15,17 @@ export type ItemKind = "weapon" | "offhand" | "helmet" | "armor" | "boots" | "ca
  * Os 8 níveis de raridade (lista definitiva, 2026-11-21):
  * inferior/lixo (cinza), comum (branco), incomum (verde), raro (azul), épico (roxo), lendário (laranja/dourado),
  * mítico (vermelho/rosa-choque), ancestral (ciano). Os ids internos ficam os mesmos de antes (não mexe nos itens salvos).
- * `junk` e `ancestral` já existem como níveis (nome, cor, ordem), mas o catálogo gerado ainda não cria itens deles:
- * por isso `RARITIES` (os níveis que têm equipamento) segue com 6; `RARITIES_ALL` tem os 8, na ordem.
+ * Desde 27/11/2026 o catálogo gera equipamento nas 8 (Lixo e Ancestral inclusive): `RARITIES` e `RARITIES_ALL` são iguais.
+ * `rarityIndex` vai de 0 (Lixo) a 7 (Ancestral). Para efeitos visuais que antes começavam no comum, use `tierVisual`.
  */
 export type Rarity = "junk" | "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythic" | "ancestral";
 export const RARITIES_ALL: readonly Rarity[] = ["junk", "common", "uncommon", "rare", "epic", "legendary", "mythic", "ancestral"];
-export const RARITIES: readonly Rarity[] = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+export const RARITIES: readonly Rarity[] = RARITIES_ALL;
 export const rarityIndex = (r: Rarity) => RARITIES.indexOf(r);
+/** intensidade de efeitos visuais (brilho, revelação): Lixo e Comum = 0, Incomum = 1 ... Mítico = 5, Ancestral = 6 */
+export const tierVisual = (r: Rarity) => Math.max(0, RARITIES.indexOf(r) - 1);
+/** raridades que a forja cria (craft): de Comum a Mítico. Lixo não se cria; Ancestral só sai de chefe, fusão ou Modo Deus */
+export const RARIDADES_CRAFT: readonly Rarity[] = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
 
 export type EquipSlot = "weapon" | "offhand" | "helmet" | "armor" | "boots" | "cape";
 export const EQUIP_SLOTS: readonly EquipSlot[] = ["weapon", "offhand", "helmet", "armor", "boots", "cape"];
@@ -86,15 +90,17 @@ export const RARITY_NAME: Record<Rarity, string> = { junk: "Inferior", common: "
 export const RARITY_HEX: Record<Rarity, number> = { junk: 0x8a8f98, common: 0xf2f2f2, uncommon: 0x5fd17a, rare: 0x2f8bff, epic: 0xa855f7, legendary: 0xff9d2e, mythic: 0xff2e63, ancestral: 0x2de2e6 };
 
 // ------------------------------------------------------------ geração das tabelas
-const SUFFIX = ["Simples", "de Ferro", "da Geada", "Solar", "Carmesim", "do Abismo"]; // sem gênero: servem a qualquer nome
-const LEVEL_BY_RARITY = [1, 3, 6, 14, 26, 40];
-const WEAPON_PCT = [10, 20, 35, 55, 80, 115];
-const ARMOR_HP = [15, 30, 55, 90, 140, 210];
-const ARMOR_DR = [0, 1, 2, 3, 5, 7];
-const BOOT_CDR = [0, 0, 2, 4, 6, 9];
-const HELM_MANA = [0, 0, 5, 10, 18, 30];
-const CAPE_REGEN = [0.2, 0.4, 0.7, 1, 1.4, 2];
-const OFF_PCT = [1, 2, 3, 5, 7, 10];
+// tabelas por raridade, na ordem de RARITIES: Lixo, Comum, Incomum, Raro, Épico, Lendário, Mítico, Ancestral
+export const SUFIXO_RARIDADE = ["de Sucata", "Simples", "de Ferro", "da Geada", "Solar", "Carmesim", "do Abismo", "Ancestral"]; // sem gênero: servem a qualquer nome
+const SUFFIX = SUFIXO_RARIDADE;
+const LEVEL_BY_RARITY = [1, 1, 3, 6, 14, 26, 40, 48];
+const WEAPON_PCT = [5, 10, 20, 35, 55, 80, 115, 160];
+const ARMOR_HP = [8, 15, 30, 55, 90, 140, 210, 300];
+const ARMOR_DR = [0, 0, 1, 2, 3, 5, 7, 10];
+const BOOT_CDR = [0, 0, 0, 2, 4, 6, 9, 12];
+const HELM_MANA = [0, 0, 0, 5, 10, 18, 30, 45];
+const CAPE_REGEN = [0.1, 0.2, 0.4, 0.7, 1, 1.4, 2, 2.8];
+const OFF_PCT = [0, 1, 2, 3, 5, 7, 10, 14];
 /** Quanto do bônus percentual de arma cada classe recebe: as de dano em área (Arqueiro e Mago) ganham menos, para não passarem dos outros. */
 const WEAPON_PCT_SCALE: Record<CharClass, number> = { warrior: 1, cleric: 1, archer: 0.75, mage: 0.7 };
 
@@ -115,8 +121,8 @@ const OFFHANDS: OffFamily[] = [
   { id: "adaga_sombria", cls: "warrior", name: "Adaga", desc: "Mão secundária: golpes críticos.", stats: (r) => ({ crit: OFF_PCT[r], dmgPct: Math.round(WEAPON_PCT[r] * 0.2) }) },
   { id: "aljava", cls: "archer", name: "Aljava", desc: "Mão secundária: pontaria e dano.", stats: (r) => ({ crit: OFF_PCT[r], dmgPct: Math.round(WEAPON_PCT[r] * 0.18) }) },
   { id: "escudo_sagrado", cls: "cleric", name: "Escudo Sagrado", desc: "Mão secundária: vida e defesa.", stats: (r) => ({ hp: Math.round(ARMOR_HP[r] * 0.5), dr: OFF_PCT[r] }) },
-  { id: "relicario", cls: "cleric", name: "Relicário", desc: "Mão secundária: poder e mana.", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.35), mana: HELM_MANA[r] + 4 * r }) },
-  { id: "tomo_arcano", cls: "mage", name: "Tomo Arcano", desc: "Mão secundária: poder e mana.", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.28), mana: HELM_MANA[r] + 4 * r }) },
+  { id: "relicario", cls: "cleric", name: "Relicário", desc: "Mão secundária: poder e mana.", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.35), mana: HELM_MANA[r] + 4 * Math.max(0, r - 1) }) },
+  { id: "tomo_arcano", cls: "mage", name: "Tomo Arcano", desc: "Mão secundária: poder e mana.", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.28), mana: HELM_MANA[r] + 4 * Math.max(0, r - 1) }) },
   { id: "orbe_flutuante", cls: "mage", name: "Orbe Flutuante", desc: "Mão secundária: poder explosivo (crítico).", stats: (r) => ({ dmgPct: Math.round(WEAPON_PCT[r] * 0.2), crit: OFF_PCT[r] }) },
 ];
 for (const f of OFFHANDS) {
@@ -137,7 +143,7 @@ for (const cls of GEAR_CLASSES) {
     add({ ...base, id: `${cls}_armor_${rarity}`, name: `${GEAR_NAMES[cls].armor} ${SUFFIX[r]}`, kind: "armor", hp: ARMOR_HP[r], dr: ARMOR_DR[r], desc: "Proteção para o corpo." });
     add({ ...base, id: `${cls}_helmet_${rarity}`, name: `${GEAR_NAMES[cls].helmet} ${SUFFIX[r]}`, kind: "helmet", hp: Math.round(ARMOR_HP[r] * 0.5), mana: HELM_MANA[r], desc: "Proteção para a cabeça." });
     add({ ...base, id: `${cls}_boots_${rarity}`, name: `${GEAR_NAMES[cls].boots} ${SUFFIX[r]}`, kind: "boots", hp: Math.round(ARMOR_HP[r] * 0.4), cdr: BOOT_CDR[r], desc: "Passos leves: habilidades voltam mais cedo." });
-    add({ ...base, id: `${cls}_cape_${rarity}`, name: `${GEAR_NAMES[cls].cape} ${SUFFIX[r]}`, kind: "cape", hp: Math.round(ARMOR_HP[r] * 0.3), regen: CAPE_REGEN[r], dr: r >= 3 ? r - 2 : 0, desc: "Recupera o recurso da classe mais depressa." });
+    add({ ...base, id: `${cls}_cape_${rarity}`, name: `${GEAR_NAMES[cls].cape} ${SUFFIX[r]}`, kind: "cape", hp: Math.round(ARMOR_HP[r] * 0.3), regen: CAPE_REGEN[r], dr: r >= 4 ? r - 3 : 0, desc: "Recupera o recurso da classe mais depressa." });
   });
 }
 

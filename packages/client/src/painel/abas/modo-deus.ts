@@ -1,7 +1,7 @@
 import type { AbaPainel, InstanciaAba, Painel } from "../tipos";
 import { el, botao, secao, fmtNum, selo, vazio, carregando } from "../ui";
 import {
-  ITEMS, RARITY_NAME, RARITY_COLOR, RARITIES_ALL, AFIXOS, MAX_REFINO, GM_VEL_MIN, GM_VEL_MAX, GM_VINCULO_MSG,
+  ITEMS, RARITY_NAME, RARITY_COLOR, RARITIES_ALL, SUFIXO_RARIDADE, AFIXOS, MAX_REFINO, GM_VEL_MIN, GM_VEL_MAX, GM_VINCULO_MSG,
   CLASS_DEFS, GEAR_CLASSES, WEAPON_TYPES, EQUIP_SLOT_NAME, KINDS_EQUIPAVEIS,
   type ItemDef, type CharClass, type Rarity,
 } from "@frixep/shared";
@@ -19,7 +19,7 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 
 /** colunas de raridade da grade: só as que existem no catálogo, na ordem do jogo (Lixo → Ancestral) */
 const RARIDADES_GRADE: Rarity[] = RARITIES_ALL.filter((r) => Object.values(ITEMS).some((d) => d.rarity === r));
-const SUFIXOS_RARIDADE = [" Simples", " de Ferro", " da Geada", " Solar", " Carmesim", " do Abismo"];
+const SUFIXOS_RARIDADE = SUFIXO_RARIDADE.map((x) => ` ${x}`);
 
 interface Familia { chave: string; nome: string; grupo: Grupo; cls?: CharClass; variantes: ItemDef[]; busca: string }
 /** uma família = o mesmo item base em todas as raridades (id sem o sufixo da raridade) */

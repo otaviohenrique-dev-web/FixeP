@@ -14,7 +14,7 @@ const check = (nome: string, ok: boolean, detalhe = "") => {
 };
 
 // ids reais do jogo (mesmo padrão de items.ts): armaduras de guerreiro e arqueiro, capacetes, material para encher a mochila
-const ids = (prefixo: string) => Object.keys(ITEMS).filter((k) => k.startsWith(prefixo)).sort((a, b) => ITEMS[a].minLevel - ITEMS[b].minLevel);
+const ids = (prefixo: string) => Object.keys(ITEMS).filter((k) => k.startsWith(prefixo) && ITEMS[k].rarity !== "junk").sort((a, b) => ITEMS[a].minLevel - ITEMS[b].minLevel);
 const armaduras = ids("warrior_armor_");
 const capacetes = ids("warrior_helmet_");
 const armaduraArq = ids("archer_armor_");
