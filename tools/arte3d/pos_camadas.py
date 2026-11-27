@@ -7,7 +7,7 @@ import sys, os, json
 from PIL import Image, ImageFilter, ImageChops
 R, OUT = sys.argv[1], sys.argv[2]
 os.makedirs(OUT, exist_ok=True)
-CAMADAS = {"corpo": 12, "couraca": 9, "espada": 5}   # cores por camada (12 + 9 + 5 + contorno + acento <= 32)
+CAMADAS = {"corpo": 16, "couraca": 8, "espada": 5}   # cores por camada (16 + 8 + 5 + contorno + acento <= 32); o corpo precisa de tons para pele E roupa de baixo
 ACENTOS = ["couraca_acento", "espada_acento"]
 CONTORNO = (16, 13, 18, 255)
 anims_dirs = sorted({f.rsplit("_", 1)[0] for f in os.listdir(os.path.join(R, "corpo")) if f.endswith(".png")})  # ex.: idle_se
@@ -29,7 +29,8 @@ def paleta(frames, n):
     vis = [c[:3] for f in frames for c in f.get_flattened_data() if c[3]]
     if not vis: return None
     a = Image.new("RGB", (len(vis), 1)); a.putdata(vis)
-    return a.quantize(colors=n, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    # k-means a partir do octree: preserva áreas pequenas de cor diferente (ex.: roupa de baixo escura sobre a pele)
+    return a.quantize(colors=n, method=Image.Quantize.FASTOCTREE, kmeans=3, dither=Image.Dither.NONE)
 
 def contorno(f):
     a = f.getchannel("A"); borda = a.filter(ImageFilter.MaxFilter(3))
