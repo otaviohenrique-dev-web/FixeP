@@ -9,10 +9,16 @@ export type Dir = "e" | "se" | "s" | "sw" | "w" | "nw" | "n" | "ne";
 export const DIRS: readonly Dir[] = ["e", "se", "s", "sw", "w", "nw", "n", "ne"];
 export const isDir = (s: string): s is Dir => (DIRS as readonly string[]).includes(s);
 
-/** ponto dos pés dentro do quadro 64x64 */
+/**
+ * Tamanho do personagem NO MUNDO (64 unidades) e o ponto dos pés nesse quadro. A arte pode vir em quadros de
+ * 64x64 (antiga) ou 128x128 (padrão desde 27/11/2026, 32 cores): o quadro de 128 é desenhado em escala 0,5, então
+ * ocupa o mesmo lugar na tela e fica mais nítido quando a câmera aproxima. O pé fica na mesma proporção (32/64, 52/64).
+ */
 export const FRAME = 64;
 export const PIVOT_X = 32;
 export const PIVOT_Y = 52;
+/** tamanhos de quadro aceitos no atlas (quadrado) */
+export const QUADROS_ACEITOS: readonly number[] = [64, 128];
 
 /** Direção da tela a partir de um vetor da tela (vx, vy), com y para baixo. */
 export function dirFromScreen(vx: number, vy: number): Dir {
@@ -75,7 +81,7 @@ export function parseTag(name: string): { anim: string; dir: Dir } | null {
 
 export interface AtlasFrame { filename: string; duration: number }
 export interface AtlasTag { name: string; from: number; to: number }
-export type AtlasCheck = { ok: true; frames: AtlasFrame[]; tags: AtlasTag[]; size: { w: number; h: number } } | { ok: false; reason: string };
+export type AtlasCheck = { ok: true; frames: AtlasFrame[]; tags: AtlasTag[]; size: { w: number; h: number }; quadro: number } | { ok: false; reason: string };
 
 /** Confere um JSON exportado pelo Aseprite (json-array, com --list-tags). */
 export function validateAtlasJson(json: unknown): AtlasCheck {
@@ -84,10 +90,13 @@ export function validateAtlasJson(json: unknown): AtlasCheck {
   if (!Array.isArray(j.frames)) return { ok: false, reason: "falta 'frames' como lista: exporte com --format json-array" };
   if (!Array.isArray(j.meta?.frameTags) || j.meta.frameTags.length === 0) return { ok: false, reason: "sem tags de animação: exporte com --list-tags" };
   const frames: AtlasFrame[] = [];
+  let quadro = 0; // tamanho do quadro deste atlas (todos iguais): 64 ou 128
   for (const [i, f] of j.frames.entries()) {
     if (typeof f?.filename !== "string") return { ok: false, reason: `quadro ${i} sem 'filename'` };
-    const sz = f.sourceSize;
-    if (sz && (sz.w !== 64 || sz.h !== 64)) return { ok: false, reason: `quadro ${i} tem ${sz.w}x${sz.h}; o padrão é 64x64 (não use trim)` };
+    const w = Number(f.sourceSize?.w ?? f.frame?.w ?? FRAME), h = Number(f.sourceSize?.h ?? f.frame?.h ?? FRAME);
+    if (w !== h || !QUADROS_ACEITOS.includes(w)) return { ok: false, reason: `quadro ${i} tem ${w}x${h}; o padrão é 128x128 (ou 64x64 na arte antiga), sem trim` };
+    if (quadro && w !== quadro) return { ok: false, reason: `quadro ${i} tem ${w}x${h}, diferente dos outros (${quadro}x${quadro}): use um tamanho só por atlas` };
+    quadro = w;
     const duration = Number.isFinite(f.duration) && f.duration > 0 ? f.duration : 100;
     frames.push({ filename: f.filename, duration });
   }
@@ -98,7 +107,7 @@ export function validateAtlasJson(json: unknown): AtlasCheck {
     if (parseTag(t.name)) tags.push({ name: t.name, from: t.from, to: t.to });
   }
   if (tags.length === 0) return { ok: false, reason: "nenhuma tag no formato <animacao>_<direcao> (ex.: walk_se)" };
-  return { ok: true, frames, tags, size: { w: Number(j.meta?.size?.w) || 0, h: Number(j.meta?.size?.h) || 0 } };
+  return { ok: true, frames, tags, size: { w: Number(j.meta?.size?.w) || 0, h: Number(j.meta?.size?.h) || 0 }, quadro: quadro || FRAME };
 }
 
 export const totalDuration = (frames: { duration: number }[]) => frames.reduce((n, f) => n + f.duration, 0);

@@ -1813,7 +1813,7 @@ class WorldScene extends Phaser.Scene {
       }
       if (s.x < wv.x - 140 || s.x > wv.right + 140 || s.y < wv.y - 160 || s.y > wv.bottom + 160) { this.labels.get(key)?.setVisible(false); this.levelTags.get(key)?.setVisible(false); return; }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (v.isSprite && !SEM_DESENHOS) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, chaoH(24) * s.scaleX));
+      if (v.isSprite && !SEM_DESENHOS) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * v.escalaMundo, chaoH(24) * v.escalaMundo));
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
       count("placas");
       const pg = timed("placas", () => drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time }));
