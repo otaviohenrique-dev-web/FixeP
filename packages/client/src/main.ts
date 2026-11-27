@@ -1900,6 +1900,8 @@ const token = await ensureLogin();
 const character = await ensureCharacter(token); // sem personagem, mostra a criação antes de entrar no jogo
 const loader = mountLoading();
 loader.show({ zone: ZONES[character.zone ?? START_ZONE]?.name ?? "Brasalume", theme: ZONES[character.zone ?? START_ZONE]?.theme, verb: "Entrando em" });
+// clique com o botão direito dentro do jogo não abre o menu do navegador (Salvar imagem, Inspecionar...)
+document.getElementById("game")?.addEventListener("contextmenu", (e) => e.preventDefault());
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: "game",
