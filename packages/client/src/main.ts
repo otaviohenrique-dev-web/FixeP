@@ -6,7 +6,7 @@ import { isTypingTarget } from "./keys";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
-  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, WORLD_GATE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, zoneNpcs, NPC_REACH, COIN_OBOL,
+  Msg, Evt, CLASS_DEFS, classAction, RESPAWN_S, ZONES, START_ZONE, WORLD_GATE, zoneRoomName, enemyKind, xpToNext, ITEMS, RARITY_COLOR, RARITY_HEX, rarityIndex, tierVisual, zoneNpcs, NPC_REACH, COIN_OBOL,
   type CharClass, type SkillFx, type ChestEvent, type TravelEvent, type ZoneTheme, type HealEvent, type ProjEvent, type ProjEndEvent, type TrapEvent,
   type PartyEvent, type PartyInviteEvent, type PartyChatEvent, type InventorySnapshot, type ChatEvent, type PvpEvent, type LootEvent, type NoticeEvent, type CoinsEvent, type TradeEvent, type NpcDef, type MarketPage, type MarketPricesEvent, type MarketMineEvent, type MarketDoneEvent, type VaultSnapshot, type QuestEvent, type QuestDefsEvent,
   type ActionId, type ActPayload, type SwingEvent, type TelegraphEvent, type HitEvent, type DiedEvent, type LevelUpEvent, type XpEvent,
@@ -603,7 +603,7 @@ class WorldScene extends Phaser.Scene {
       if (!d) return;
       this.inv.toast(`+ ${d.name}${m.qty > 1 ? ` x${m.qty}` : ""}`, RARITY_COLOR[d.rarity]);
       sfx.pickup();
-      if (rarityIndex(d.rarity) >= 2) revealItem(d); // raro ou melhor: animação no centro da tela, proporcional à raridade
+      if (rarityIndex(d.rarity) >= rarityIndex("rare")) revealItem(d); // raro ou melhor: animação no centro da tela, proporcional à raridade
     });
     room.onMessage(Evt.Chest, (m: ChestEvent) => this.onChest(m));
     room.onMessage(Evt.Pvp, (m: PvpEvent) => {
@@ -1342,7 +1342,7 @@ class WorldScene extends Phaser.Scene {
   private onChest(m: ChestEvent) {
     const { sx, sy } = toScreen(m.x, m.y);
     const hex = RARITY_HEX[m.rarity];
-    const t = rarityIndex(m.rarity);
+    const t = tierVisual(m.rarity);
     const box = this.add.rectangle(sx, sy - 6, 26, 18, 0x6b4a2e).setStrokeStyle(3, hex).setDepth(sy + 3);
     const beam = this.add.rectangle(sx, sy - 140, 36 + t * 8, 280, hex, 0.5).setBlendMode(Phaser.BlendModes.ADD).setDepth(sy + 2);
     this.tweens.add({ targets: beam, alpha: 0, scaleX: 2.2, duration: 1600, ease: "Cubic.easeOut", onComplete: () => beam.destroy() });

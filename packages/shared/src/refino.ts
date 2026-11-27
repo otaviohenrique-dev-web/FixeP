@@ -11,8 +11,8 @@ import { CRAFT_MULT, MAT_FERRO, MAT_ESSENCIA, faltasReceita, type Falta, type Re
 import { MAX_REFINO, refinoValido } from "./refino_stats";
 
 export const REFINO_TOSTOES_BASE = 20;
-/** a partir desta raridade (índice em RARITIES: épico = 3) o passo também pede Essência Arcana */
-const REFINO_ESSENCIA_A_PARTIR = 3;
+/** a partir desta raridade (índice em RARITIES: épico = 4) o passo também pede Essência Arcana */
+const REFINO_ESSENCIA_A_PARTIR = 4;
 
 /** Tipos de item que podem ser refinados: todo equipamento (arma, mão secundária, elmo, armadura, botas, capa). */
 const REFINAVEIS: readonly ItemKind[] = ["weapon", "offhand", "helmet", "armor", "boots", "cape"];

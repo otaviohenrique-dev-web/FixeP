@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { chaoH } from "./iso";
-import { ITEMS, RARITY_COLOR, RARITY_HEX, COIN_OBOL, isCoinItem, coinName, rarityIndex, type Rarity } from "@frixep/shared";
+import { ITEMS, RARITY_COLOR, RARITY_HEX, COIN_OBOL, isCoinItem, coinName, tierVisual, type Rarity } from "@frixep/shared";
 
 /**
  * Itens no chão: visíveis a todos na cor da raridade (brilho, coluna de luz de rara para cima).
@@ -35,7 +35,7 @@ export class GroundLayer {
     const def = look(d);
     if (!def || this.views.has(id)) return;
     const { sx, sy } = this.toScreen(d.x, d.y);
-    const t = rarityIndex(def.rarity), hex = def.hex;
+    const t = tierVisual(def.rarity), hex = def.hex;
     const parts: Phaser.GameObjects.GameObject[] = [];
     const glow = this.scene.add.ellipse(sx, sy, 34 + t * 6, chaoH(34 + t * 6), hex, 0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(0.65);
     this.scene.tweens.add({ targets: glow, alpha: { from: 0.2, to: t >= 5 ? 0.85 : 0.55 }, scale: t >= 5 ? { from: 0.9, to: 1.4 } : { from: 0.95, to: 1.1 }, duration: t >= 5 ? 520 : 900, yoyo: true, repeat: -1 });

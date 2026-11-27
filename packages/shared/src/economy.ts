@@ -16,7 +16,7 @@ export const isCoinItem = (id: string) => id === COIN_IRON.id || id === COIN_OBO
 export const coinName = (id: string, qty: number) => (id === COIN_OBOL.id ? `${qty} ${qty === 1 ? "Óbolo" : "Óbolos"} de Sangue` : `${qty} Tostões`);
 
 // ------------------------------------------------------------ preço médio de mercado
-const VALUE_BASE = [12, 45, 170, 650, 2800, 13000]; // por raridade (tostões)
+const VALUE_BASE = [4, 12, 45, 170, 650, 2800, 13000, 60000]; // por raridade, na ordem de RARITIES (Lixo ... Ancestral), em tostões
 const VALUE_KIND: Partial<Record<ItemKind, number>> = { weapon: 1.4, offhand: 0.8, helmet: 0.8, armor: 1.2, boots: 0.7, cape: 0.7 };
 export const POTION_VALUE = 10;
 export const MATERIAL_VALUE = 6; // material de craft: vende-se barato (vale mais para o craft do que para o comerciante)
@@ -36,9 +36,9 @@ export const sellPrice = (id: string) => Math.max(1, Math.floor(itemValue(id) * 
 export const breakValue = (id: string) => Math.max(1, Math.floor(itemValue(id) * BREAK_MULT));
 /** Itens que se pode quebrar: só equipamento (poção e material se vendem). */
 export const canBreak = (id: string) => !!ITEMS[id] && ITEMS[id].kind !== "potion" && ITEMS[id].kind !== "material";
-/** Raridade a partir da qual o jogo exige confirmação ao quebrar (1 = incomum... 2 = rara em diante) e a "forte" (épico em diante). */
-export const BREAK_CONFIRM_FROM = 2;
-export const BREAK_STRONG_FROM = 3;
+/** Índice (em RARITIES) a partir do qual o jogo exige confirmação ao quebrar: 3 = rara em diante (0 = lixo, 1 = comum, 2 = incomum). */
+export const BREAK_CONFIRM_FROM = 3;
+export const BREAK_STRONG_FROM = 4; // épico em diante (índice em RARITIES)
 
 // ------------------------------------------------------------ recompensas de abate
 /** Tostões que o abate de um inimigo de nível `level` dá (a todos que estavam por perto, como o XP). */
@@ -76,7 +76,7 @@ export function shopStock(cls: CharClass): string[] {
   const out = ["pocao_de_vida"];
   const cap = rarityIndex(SHOP_MAX_RARITY);
   const order: ItemKind[] = ["weapon", "offhand", "helmet", "armor", "boots", "cape"];
-  const items = Object.values(ITEMS).filter((i) => i.cls === cls && rarityIndex(i.rarity) <= cap);
+  const items = Object.values(ITEMS).filter((i) => i.cls === cls && i.rarity !== "junk" && rarityIndex(i.rarity) <= cap); // Lixo só cai de inimigo
   items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || rarityIndex(a.rarity) - rarityIndex(b.rarity) || a.name.localeCompare(b.name, "pt"));
   for (const i of items) out.push(i.id);
   return out;
@@ -84,8 +84,8 @@ export function shopStock(cls: CharClass): string[] {
 
 // ------------------------------------------------------------ ferreira: fusão
 export const MERGE_COUNT = 3; // itens iguais (mesmo tipo, raridade e classe) por fusão
-/** Chance de sucesso ao subir DE cada raridade (comum->incomum ... lendário->mítico). */
-export const MERGE_CHANCE = [1, 0.85, 0.65, 0.45, 0.25];
+/** Chance de sucesso ao subir DE cada raridade (lixo->comum, comum->incomum ... lendário->mítico, mítico->ancestral). */
+export const MERGE_CHANCE = [1, 1, 0.85, 0.65, 0.45, 0.25, 0.1];
 /** Família do item = id sem o sufixo da raridade (ex.: "montante_epic" -> "montante"). */
 export const itemFamily = (id: string) => (ITEMS[id] ? id.slice(0, id.length - ITEMS[id].rarity.length - 1) : id);
 export const nextRarity = (r: Rarity): Rarity | null => RARITIES[rarityIndex(r) + 1] ?? null;

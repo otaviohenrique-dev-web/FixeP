@@ -40,7 +40,8 @@ export interface ZoneDrops {
   material: number; materials: Partial<Record<MaterialId, number>>;
 }
 
-/** o dev mudou a regra (design definitivo): épico, lendário e mítico NÃO caem em zona nenhuma hoje (nem inimigos, nem baús).
+/** Lixo (cinza) cai de inimigo comum em todas as zonas de caça (vende barato, desmonta em Ferro Bruto e 3 viram 1 Comum na fusão).
+ *  o dev mudou a regra (design definitivo): épico, lendário, mítico e ANCESTRAL NÃO caem em zona nenhuma hoje (nem inimigos, nem baús).
  *  Eles ficam reservados para chefes de nível alto (futuros, a partir deste nível): o sorteio (`rarityLiberada`, em loot.ts) consulta isto.
  *  Hoje nenhum chefe chega a este nível, então nada épico+ sai de drop. */
 export const EPIC_PLUS_MIN_BOSS_LEVEL = 45;
@@ -86,7 +87,7 @@ export const ZONES: Record<number, ZoneDef> = {
     ],
     lootMult: 1,
     // o dev mudou a regra: verde (incomum) domina e sai com frequência; raro é ocasional; nada épico+ (ver EPIC_PLUS_MIN_BOSS_LEVEL)
-    drops: { gear: 0.12, potion: 0.08, weights: { common: 30, uncommon: 70 }, material: 0.25, materials: { mat_ferro_bruto: 70, mat_couro_curtido: 20, mat_essencia_arcana: 10 } },
+    drops: { gear: 0.12, potion: 0.08, weights: { junk: 25, common: 30, uncommon: 70 }, material: 0.25, materials: { mat_ferro_bruto: 70, mat_couro_curtido: 20, mat_essencia_arcana: 10 } },
     boss: { kind: "bone_king", name: "Rei Ossudo", x: 33, y: 7, level: 6, respawnS: 300, chest: { count: 2, min: "rare", weights: { uncommon: 40, rare: 60 } } },
   },
   2: {
@@ -115,7 +116,7 @@ export const ZONES: Record<number, ZoneDef> = {
     ],
     lootMult: 1.6,
     // o dev mudou a regra: verde domina; raro ocasional; sem épico (o baú de chefe também para no raro)
-    drops: { gear: 0.14, potion: 0.1, weights: { common: 20, uncommon: 80 }, material: 0.25, materials: { mat_couro_curtido: 60, mat_ferro_bruto: 25, mat_essencia_arcana: 15 } },
+    drops: { gear: 0.14, potion: 0.1, weights: { junk: 20, common: 20, uncommon: 80 }, material: 0.25, materials: { mat_couro_curtido: 60, mat_ferro_bruto: 25, mat_essencia_arcana: 15 } },
     boss: { kind: "frost_alpha", name: "Lobo Alfa", x: 37, y: 10, level: 11, respawnS: 420, chest: { count: 3, min: "rare", weights: { uncommon: 30, rare: 70 } } },
   },
   3: {
@@ -141,7 +142,7 @@ export const ZONES: Record<number, ZoneDef> = {
     ],
     lootMult: 2.4,
     // o dev mudou a regra: verde domina; raro ocasional; sem épico nem acima (o baú do Soberano para no raro até o nível 45 de chefe)
-    drops: { gear: 0.16, potion: 0.12, weights: { common: 20, uncommon: 80 }, material: 0.25, materials: { mat_essencia_arcana: 60, mat_ferro_bruto: 20, mat_couro_curtido: 20 } },
+    drops: { gear: 0.16, potion: 0.12, weights: { junk: 15, common: 20, uncommon: 80 }, material: 0.25, materials: { mat_essencia_arcana: 60, mat_ferro_bruto: 20, mat_couro_curtido: 20 } },
     boss: { kind: "crypt_lord", name: "Soberano das Catacumbas", x: 36, y: 8, level: 21, respawnS: 600, chest: { count: 3, min: "rare", weights: { uncommon: 25, rare: 75 } } },
   },
   4: {
