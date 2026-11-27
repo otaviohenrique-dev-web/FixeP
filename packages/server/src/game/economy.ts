@@ -3,6 +3,7 @@ import {
   type CharClass, type CoinKind,
 } from "@frixep/shared";
 import { addItem, addItemNovo, canFit, validSlot, type Inventory, type Result } from "./inventory.js";
+import { bloqueioGm } from "../gm/modoDeus.js";
 
 /**
  * Regras da economia, em funções puras sobre o inventário (o ZoneRoom só valida distância e chama aqui).
@@ -39,6 +40,8 @@ export function sellSlot(inv: Inventory, slot: unknown, qty: unknown): Result & 
   if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
   const st = inv.slots[slot];
   if (!st || !ITEMS[st.id]) return { ok: false, error: "Espaço vazio." };
+  const travado = bloqueioGm(st);
+  if (travado) return { ok: false, error: travado };
   const q = wholeQty(qty, st.qty);
   if (!q) return { ok: false, error: "Quantidade inválida." };
   const gain = sellPrice(st.id) * q;
@@ -55,6 +58,8 @@ export function breakSlot(inv: Inventory, slot: unknown, confirm: unknown): Resu
   if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
   const st = inv.slots[slot];
   if (!st || !ITEMS[st.id]) return { ok: false, error: "Espaço vazio." };
+  const travado = bloqueioGm(st);
+  if (travado) return { ok: false, error: travado };
   const def = ITEMS[st.id];
   if (!canBreak(st.id)) return { ok: false, error: "Só equipamentos podem ser quebrados (poções se vendem)." };
   if (rarityIndex(def.rarity) >= BREAK_CONFIRM_FROM && confirm !== true) return { ok: false, error: "Confirme para quebrar um item raro." };
@@ -74,6 +79,8 @@ export function mergeItems(inv: Inventory, slots: unknown, zoneId: number, rng: 
   if (!Array.isArray(slots) || slots.length !== MERGE_COUNT || !slots.every(validSlot) || new Set(slots).size !== MERGE_COUNT) return { ok: false, error: `Escolha ${MERGE_COUNT} itens diferentes da mochila.` };
   const stacks = slots.map((i) => inv.slots[i as number]);
   if (stacks.some((s) => !s || s.qty !== 1)) return { ok: false, error: "Itens inválidos." };
+  const travadoFusao = stacks.map((s) => bloqueioGm(s)).find(Boolean);
+  if (travadoFusao) return { ok: false, error: travadoFusao };
   const ids = stacks.map((s) => s!.id);
   const chk = checkMerge(ids, zoneId);
   if (!chk.ok) return chk;
@@ -114,6 +121,7 @@ export function parseOffer(inv: Inventory, raw: unknown): { ok: true; offer: Tra
     const slot = (e as { slot?: unknown })?.slot, qty = (e as { qty?: unknown })?.qty;
     if (!validSlot(slot) || seen.has(slot)) return { ok: false, error: "Item inválido na oferta." };
     const st = inv.slots[slot];
+    if (st && bloqueioGm(st)) return { ok: false, error: bloqueioGm(st)! };
     if (!st || typeof qty !== "number" || !Number.isInteger(qty) || qty < 1 || qty > st.qty) return { ok: false, error: "Item inválido na oferta." };
     seen.add(slot);
     items.push({ slot, id: st.id, qty });

@@ -4,7 +4,9 @@ import { exigirSessao } from "../auth.js";
 import { isAdmin } from "../moderacao.js";
 import type { Repo } from "../db/repo.js";
 import { nameKey } from "../db/repo.js";
-import { jogadoresPorZona, contaOnline } from "../rooms/ZoneRoom.js";
+import { jogadoresPorZona, contaOnline, salaDaConta } from "../rooms/ZoneRoom.js";
+import { travasAtivas, buscarItens } from "../gm/modoDeus.js";
+import { ZONES } from "@frixep/shared";
 import { painelDisponivel, mascararEmail } from "./email.js";
 import { pedirCodigo, confirmarCodigo, emitirTokenPainel, contaDoTokenPainel, PAINEL_TOKEN_VALIDADE } from "./codigo.js";
 import { registrarAuditoria, listarAuditoria } from "./auditoria.js";
@@ -120,9 +122,9 @@ export function painelRouter(repo: Repo): Router {
     const id = texto(req.params.id);
     const { rows } = await repo.db.query<{
       id: string; account_id: string; name: string; class: CharClass; level: number; xp: number; zone: number; iron: number; obols: number;
-      criado_em: string; email: string | null; conta_criada: string;
+      criado_em: string; email: string | null; conta_criada: string; gm_usado: boolean;
     }>(
-      `select c.id, c.account_id, c.name, c.class, c.level, c.xp, c.zone, c.iron, c.obols,
+      `select c.id, c.account_id, c.name, c.class, c.level, c.xp, c.zone, c.iron, c.obols, c.gm_usado,
               c.created_at::text as criado_em, a.email, a.created_at::text as conta_criada
          from characters c join accounts a on a.id = c.account_id where c.id::text = $1`,
       [id],
@@ -158,6 +160,8 @@ export function painelRouter(repo: Repo): Router {
       inventario: inv.slots.flatMap((s, i) => (s ? [{ slot: i, item: nomeDoItem(s.id), qtd: s.qty }] : [])),
       equipamento,
       sancao: await estadoSancao(repo, c.account_id),
+      // Modo Deus: marca permanente de quem já usou moedas, item ou XP; em produção ela isola o personagem da economia
+      modoDeus: { usado: c.gm_usado === true, isolado: c.gm_usado === true && travasAtivas() },
       logins: logins.rows.map((l) => l.criado_em),
       historico,
     });
@@ -221,6 +225,54 @@ export function painelRouter(repo: Repo): Router {
       detalhes: { denuncia: n },
     });
     res.json({ ok: true });
+  }));
+
+  // ---- Modo Deus: só no PRÓPRIO personagem da conta admin, e só com o jogo aberto (a sala é quem executa).
+  // Cada ação bem-sucedida vai para a auditoria com o estado antes e depois.
+  r.get("/modo-deus", rota(async (req, res) => {
+    const zonas = Object.values(ZONES).map((z) => ({ id: z.id, nome: z.name, w: z.w, h: z.h }));
+    const travas = travasAtivas();
+    const sala = salaDaConta(req.user!.id);
+    if (!sala) return res.json({ online: false, travas, zonas });
+    const pl = sala.room.state.players.get(sala.sid);
+    if (!pl) return res.json({ online: false, travas, zonas });
+    const zona = sala.room.infoZona();
+    const jogadores: { charId: string; nome: string }[] = [];
+    sala.room.state.players.forEach((o) => { if (o.charId !== pl.charId) jogadores.push({ charId: o.charId, nome: o.name }); });
+    res.json({
+      online: true,
+      travas,
+      zonas,
+      zona: { id: zona.zona, nome: zona.nome, w: ZONES[zona.zona]?.w ?? 0, h: ZONES[zona.zona]?.h ?? 0 },
+      personagem: { nome: pl.name, nivel: pl.level, xp: pl.xp, x: Math.round(pl.x), y: Math.round(pl.y), hp: pl.hp, maxHp: pl.maxHp, morto: pl.dead },
+      modo: { ligado: pl.gm, invis: pl.gmInvis, invuln: pl.gmInvuln, vel: pl.gmVel },
+      jogadores,
+    });
+  }));
+
+  r.get("/modo-deus/itens", rota(async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.slice(0, 60) : "";
+    res.json({ itens: buscarItens(q) });
+  }));
+
+  r.post("/modo-deus/acao", rota(async (req, res) => {
+    const sala = salaDaConta(req.user!.id);
+    if (!sala) return res.status(409).json({ error: "Entre no jogo para usar o Modo Deus." });
+    const acao = texto(req.body?.acao);
+    const out = await sala.room.gmAcao(sala.sid, acao, (req.body ?? {}) as Record<string, unknown>);
+    if (!out.ok) return res.status(out.status).json({ error: out.erro });
+    const eu = sala.room.state.players.get(sala.sid);
+    await registrarAuditoria(repo.db, {
+      adminContaId: req.user!.id,
+      acao: `gm_${acao}`,
+      alvoContaId: req.user!.id,
+      alvoPersonagemId: eu?.charId ?? null,
+      alvoNome: eu?.name ?? null,
+      antes: out.antes,
+      depois: out.depois,
+      detalhes: { ...(out.detalhes ?? {}), resumo: out.resumo },
+    });
+    res.json({ ok: true, resumo: out.resumo, depois: out.depois ?? null });
   }));
 
   // auditoria: as ações mais recentes

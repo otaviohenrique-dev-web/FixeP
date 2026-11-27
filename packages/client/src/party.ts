@@ -19,6 +19,8 @@ export interface PartyOptions {
   myName: string;
   /** o menu do jogador selecionado foi fechado (Esc, X ou uma opção escolhida) */
   onMenuClose?(): void;
+  /** clicou no nome de um membro do grupo: foca nele (seleção, como clicar no personagem no mapa) */
+  onFocus?(name: string): void;
 }
 export interface MenuTarget { name: string; level: number; cls: string; inParty: boolean }
 export interface PartyUi {
@@ -44,7 +46,7 @@ const mixWhite = (n: number, t: number) => {
 };
 
 const CSS = `
-.pt{position:fixed;z-index:15;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 172px);width:min(232px,54vw);
+.pt{position:fixed;z-index:15;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 128px);width:min(232px,54vw);
   font-family:"Cinzel",Georgia,serif;color:#e6eef9;pointer-events:none;--gold:#c9a45c;--gold-d:#7a5f2e;--ink:#0c121c;--ink2:#161f2e}
 .pt-tog{pointer-events:auto;position:relative;display:grid;place-items:center;width:30px;height:30px;padding:0;border-radius:8px;cursor:pointer;color:#e9c98a;
   background:linear-gradient(180deg,rgba(34,48,74,.88),rgba(13,21,34,.88));border:2px solid var(--gold-d);box-shadow:0 0 0 1px #000,0 2px 6px rgba(0,0,0,.55);
@@ -262,13 +264,13 @@ export function mountParty(opts: PartyOptions): PartyUi {
     rsB.append(rs);
     mid.append(line, hpB, rsB);
     el.append(lv, mid);
+    // clicar (ou tocar) num membro foca nele; as ações de líder ficam no cartão do alvo (Passar liderança, Expulsar)
+    el.addEventListener("pointerdown", (e) => e.stopPropagation()); // não anda nem ataca
     el.addEventListener("click", (e) => {
       const m = members.find((x) => x.name === name);
-      const me = meInfo();
-      if (!m || !me?.leader || m.name === me.name) return; // só o líder mexe nos outros
+      if (!m || m.name === opts.myName) return;
       e.stopPropagation();
-      const r = el.getBoundingClientRect();
-      openMenu({ name: m.name, level: m.level, cls: m.cls, inParty: true }, r.right + 6, r.top, "member");
+      opts.onFocus?.(m.name);
     });
     return { el, lv, nm, zone, hp, rs, sig: "" };
   }
@@ -307,8 +309,8 @@ export function mountParty(opts: PartyOptions): PartyUi {
       r.el.classList.toggle("me", m.name === opts.myName);
       r.el.classList.toggle("off", away);
       r.el.classList.toggle("dead", m.dead && !away);
-      r.el.classList.toggle("menu", !!me?.leader && m.name !== opts.myName);
-      r.el.title = m.name === opts.myName ? "Você" : me?.leader ? "Clique para passar a liderança ou expulsar" : m.name;
+      r.el.classList.toggle("menu", m.name !== opts.myName);
+      r.el.title = m.name === opts.myName ? "Você" : `Focar em ${m.name}`;
     }
   }
 
@@ -429,6 +431,8 @@ export function mountParty(opts: PartyOptions): PartyUi {
     } else {
       const s = state();
       const soon = "Em breve";
+      // alvo do meu grupo e eu sou o líder: as ações de líder aparecem primeiro
+      if (s.leader && t.name !== opts.myName && members.some((m) => m.name === t.name)) menu.append(item("Passar liderança", send("party_lead")), item("Expulsar do grupo", send("party_kick")));
       const canInvite = (!s.inParty || s.leader) && s.size < PARTY_MAX && !t.inParty;
       const inviteWhy = t.inParty ? "Já está em um grupo" : s.inParty && !s.leader ? "Só o líder convida" : s.size >= PARTY_MAX ? "Seu grupo está cheio" : undefined;
       menu.append(

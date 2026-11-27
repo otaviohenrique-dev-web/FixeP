@@ -22,7 +22,7 @@ const hash = (x: number, y: number) => {
 
 const CX = 24, CY = 24;
 const PLAZA_R = 7.6;
-const GATE = { x: 24, y: 2 }; // o ÚNICO portão da cidade (muralha norte); casa com `zones.ts`
+const GATE = { x: 24, y: 0 }; // o ÚNICO portão da cidade (muralha norte); casa com `zones.ts`
 
 // ---------------------------------------------------------------- casas
 // (x, y) = tile do canto de trás (menor x e y); w x d tiles. Portas: R olha para o leste (rua principal), L para o sul. `lane` = fileira da viela que a porta alcança.

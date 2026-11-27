@@ -62,6 +62,10 @@ config_suite() {
     test/moderacao.mjs) echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1|" ;;
     # Painel de administração (F1): o código de 2FA vai para um arquivo que o teste lê (só fora de produção).
     test/painel_admin.mjs) echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1 PAINEL_CODIGO_ARQUIVO=$PAINEL_ARQ|PAINEL_CODIGO_FILE=$PAINEL_ARQ" ;;
+    # Modo Deus (ferramenta de admin): o admin é a 1ª conta; o código do painel vai para o arquivo que o teste lê.
+    test/modo_deus.mjs)
+      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=4 PAINEL_CODIGO_ARQUIVO=$PAINEL_ARQ|PAINEL_CODIGO_FILE=$PAINEL_ARQ MODO_FASE=1"
+      echo "ADMIN_TEST_FIRST_GUEST=1 API_RATE_MULT=100 TEST_START_ZONE=1 PAINEL_CODIGO_ARQUIVO=$PAINEL_ARQ|PAINEL_CODIGO_FILE=$PAINEL_ARQ MODO_FASE=2" ;;
     # Quests (C1.1) e quest de abate REAL (PD-07).
     test/quests.mjs) echo "QUEST_TEST=1 QUEST_FIXTURE=1 API_RATE_MULT=100|" ;;
     test/quests_combate.mjs) echo "QUEST_TEST=1 QUEST_FIXTURE=1 LOOT_TEST=1 API_RATE_MULT=100|" ;;
@@ -126,6 +130,9 @@ RAN=0
 PORT_NEXT=3400
 LOG_DIR="${TMPDIR:-/tmp}/frixep-test-logs"
 mkdir -p "$LOG_DIR"
+# Os arquivos de código do painel (PAINEL_CODIGO_ARQUIVO) ficam em ../../.data: num checkout limpo a pasta não existe,
+# e o servidor não consegue gravar o código (o teste ficava sem token). Cria antes de qualquer suíte.
+mkdir -p ../../.data
 
 # Sobe o servidor de teste numa porta. Argumentos: porta, variáveis do servidor (string, ex. "LOOT_TEST=1 X=1").
 start_server() {

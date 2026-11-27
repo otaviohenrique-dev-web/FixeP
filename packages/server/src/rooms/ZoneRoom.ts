@@ -8,7 +8,7 @@ import {
   LOOT_LOCK_S, CHEST_LOCK_S, GROUND_TTL_S, PICKUP_AUTO, PICKUP_REACH, GROUND_MAX, type Rarity,
   COIN_OBOL, isCoinItem, mobIron, bossIron, zoneNpcs, NPC_REACH,
   ELIGIBLE_DMG_PCT, PLAYER_REGEN_DELAY_S, PLAYER_REGEN_PCT_S, ENEMY_REGEN, BOSS_RESET_GRACE_S, BOSS_GROUP_MIN, BOSS_COUNT_RADIUS, bossDmgMult, bossEnrageMult,
-  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, mulGrupo, mulXp, mulTostoes, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
+  START_ZONE, HUB_ZONE, TRAVEL_COMBAT_LOCK_S, TRAVEL_COOLDOWN_S, ARRIVAL_SHIELD_CD_S, PORTAL_TRIGGER_RADIUS, ARRIVAL_SHIELD_S, ARRIVAL_SHIELD_WAIT_S, expandSpawns, mulGrupo, mulXp, mulTostoes, VAULT_REACH, TRADE_INVITE_S, TRADE_RANGE, MARKET_MAX_OPEN, type MarketMineEvent, type MarketDoneEvent, type NpcKind, type TradeEvent, type TradeOfferSide,
   VARIACAO_SLOTS, VARIACAO_NIVEL, type VariacaoSlot, variacaoDesbloqueada, limparEscolhas, modificadoresDaEscolha, variacaoPorId, type EscolhasVariacao,
   limparTalentos, podeSubirTalento, subirTalento, aplicarTalentos, resetCusto, talentoPorId, aplicarSets,
   limparLoadouts, validarLoadout, sanitizarNomeLoadout, loadoutNomePadrao, LOADOUT_SLOTS, LOADOUT_COMBAT_LOCK_S, type Loadouts,
@@ -54,6 +54,8 @@ import { Player, Enemy, GroundItem, ZoneState } from "./entities.js";
 import type { Repo, CharacterRow } from "../db/repo.js";
 import { registrarEvento } from "../telemetria.js";
 import { isAdmin, parseComandoAdmin, type ComandoAdmin, sancaoEmCache, guardarSancao, silenciadoAte, horaLegivel, MOTIVO_MAX } from "../moderacao.js";
+import { travasAtivas, velocidadeValida, validarItemGm, bloqueioGm } from "../gm/modoDeus.js";
+import { GM_VEL_MIN, GM_VEL_MAX, MAX_COINS } from "@frixep/shared";
 import { Market } from "../game/market.js";
 import { snapshot, addItem, equipFromSlot, unequip, dropSlot, consumeOne, bonuses, validSlot, sortInventory, type Inventory } from "../game/inventory.js";
 import { rollMobLoot, rollChestLoot, econTest, type Drop } from "../game/loot.js";
@@ -81,7 +83,16 @@ interface JoinAuth { user: AuthUser; character: CharacterRow; inventory: Invento
 
 // uma sessão por conta em TODAS as zonas: conta -> (sala, sessão) atual; a chegada de uma travessia guarda de onde veio
 const active = new Map<string, { room: ZoneRoom; sid: string }>();
+/** Modo Deus: destino de uma teleporte entre zonas, consumido na próxima entrada do personagem */
+const gmDestino = new Map<string, { x: number; y: number }>();
+/** sala e sessão onde a conta joga agora (painel do Modo Deus); undefined = fora do jogo */
+export const salaDaConta = (contaId: string) => active.get(contaId);
+/** resultado de uma ação do Modo Deus (a rota grava a auditoria com antes e depois) */
+export type GmResultado =
+  | { ok: true; resumo: string; antes?: unknown; depois?: unknown; detalhes?: Record<string, unknown> }
+  | { ok: false; status: 400 | 403 | 404 | 409; erro: string };
 const arrivals = new Map<string, number>(); // personagem -> zona de origem da travessia (consumido ao entrar)
+const ultimaBolha = new Map<string, number>(); // personagem -> quando (ms) ganhou a última bolha de chegada por portal (ARRIVAL_SHIELD_CD_S)
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 /** DANO_FIXO_TEST=1 (só fora de produção): sem crítico e sem variação de dano, para os testes de números exatos não sortearem. */
@@ -170,6 +181,9 @@ export class ZoneRoom extends Room<ZoneState> {
       if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y)) return;
       pl.tx = clamp(p.x, 0, this.zone.w - 1);
       pl.ty = clamp(p.y, 0, this.zone.h - 1);
+      // clicou na passagem de um portão: vai até o centro dela (o gatilho é de PORTAL_TRIGGER_RADIUS, encostado)
+      const pt = this.zone.portals.find((q) => dist(pl.tx, pl.ty, q.x, q.y) <= q.r);
+      if (pt) { pl.tx = pt.x; pl.ty = pt.y; }
     });
 
     // O cliente terminou de carregar e o jogador já controla o personagem: a bolha de chegada começa a contar agora (não durante o load).
@@ -191,7 +205,8 @@ export class ZoneRoom extends Room<ZoneState> {
         const gate = this.zone.portals.find((q) => q.to === WORLD_GATE);
         const dest = ZONES[p.to as number];
         if (!gate || !dest || dest.safe) return void client.send(Evt.TravelDenied, {});
-        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
+        // com o mapa-mundo aberto há pouco (30 s), uns passos a mais não fazem a escolha falhar
+        if (dist(pl.x, pl.y, gate.x, gate.y) > gate.r + 0.5 && !(this.t - pl.mapaAt < 30 && dist(pl.x, pl.y, gate.x, gate.y) <= 3)) { client.send(Evt.TravelDenied, {}); return this.notify(client.sessionId, "Você está longe demais do portão."); }
         return void this.travel(client.sessionId, pl, { to: dest.id });
       }
       const portal = this.zone.portals.find((q) => q.to === p.to);
@@ -435,6 +450,7 @@ export class ZoneRoom extends Room<ZoneState> {
   /** Operação no baú pessoal: abre/lê do banco na 1ª vez, valida distância e estado, aplica, grava (bolsa+baú juntos) e devolve as fotografias. */
   private async vaultOp(client: Client, op: (p: Player, v: Vault) => { ok: true } | { ok: false; error: string }) {
     if (!this.allow(client)) return;
+    if (this.gmTravado(client.sessionId)) return;
     const p = this.state.players.get(client.sessionId);
     const at = this.zone.vault;
     if (!p || p.dead || p.traveling || p.vaultBusy) return;
@@ -490,6 +506,11 @@ export class ZoneRoom extends Room<ZoneState> {
       const wait = TRAVEL_COMBAT_LOCK_S - (this.t - p.combatAt);
       if (wait > 0) {
         if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Em combate: espere ${Math.ceil(wait)}s para atravessar.`); this.clients.getById(id)?.send(Evt.TravelDenied, {}); }
+        return;
+      }
+      const espera = p.travelOkAt - this.t; // acabou de chegar por um portal: espera antes de atravessar de novo
+      if (espera > 0) {
+        if (this.t - p.travelNoteAt > 2) { p.travelNoteAt = this.t; this.notify(id, `Recém-chegado: espere ${Math.ceil(espera)}s para viajar de novo.`); this.clients.getById(id)?.send(Evt.TravelDenied, {}); }
         return;
       }
     }
@@ -549,7 +570,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   /** dano de jogador em jogador: só se AMBOS estão em PvP (quem não está nunca é alvo) */
   private canPvpHit(by: string, o: Player, oid: string): boolean {
-    if (!this.zone.pvp || oid === by || o.dead || !o.pvp || o.shield || this.t < o.invulnUntil) return false; // PvP só na arena
+    if (!this.zone.pvp || oid === by || o.dead || !o.pvp || o.shield || this.t < o.invulnUntil || o.gmInvuln || (o.gm && o.gmInvis)) return false; // PvP só na arena (Modo Deus: invisível ou invulnerável não é alvo)
     const a = this.state.players.get(by);
     if (!a || a.dead || !a.pvp) return false;
     return !(a.party && a.party === o.party); // membros do mesmo grupo nunca se ferem
@@ -748,6 +769,7 @@ export class ZoneRoom extends Room<ZoneState> {
    */
   private marketOp(client: Client, npcId: unknown, kind: MarketDoneEvent["kind"], op: (a: { charId: string; name: string; inv: Player["inv"] }) => Promise<{ ok: true; msg: string } | { ok: false; error: string }>) {
     if (!this.allow(client)) return;
+    if (this.gmTravado(client.sessionId)) return;
     const sid = client.sessionId;
     const p = this.state.players.get(sid);
     if (!p || p.dead || p.traveling || !p.charId) return;
@@ -789,6 +811,8 @@ export class ZoneRoom extends Room<ZoneState> {
     if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
     const st = p.inv.slots[slot];
     if (!st) return { ok: false, error: "Espaço vazio." };
+    const travado = bloqueioGm(st);
+    if (travado) return { ok: false, error: travado };
     if (this.t < p.dropAt + 0.3) return { ok: false, error: "Calma! Solte um item por vez." };
     const item = { id: st.id, qty: st.qty };
     dropSlot(p.inv, slot);
@@ -830,11 +854,13 @@ export class ZoneRoom extends Room<ZoneState> {
     const me = this.state.players.get(client.sessionId);
     if (!me || me.dead || me.traveling || typeof rawName !== "string") return;
     if (me.marketBusy) return this.notify(client.sessionId, "Aguarde a operação do mercado.");
+    if (this.gmTravado(client.sessionId)) return;
     if (this.trades.has(client.sessionId)) return this.notify(client.sessionId, "Você já está numa troca.");
     const want = rawName.normalize("NFC").trim().toLowerCase();
     let tid = "", target: Player | undefined;
     this.state.players.forEach((o, oid) => { if (o.name.toLowerCase() === want) { tid = oid; target = o; } });
     if (!target || tid === client.sessionId) return this.notify(client.sessionId, "Jogador não encontrado nesta zona.");
+    if ((target.gm || target.gmUsado) && travasAtivas()) return this.notify(client.sessionId, `${target.name} usou o Modo Deus e não negocia.`);
     if (target.dead || target.traveling || this.tradeBusy(tid)) return this.notify(client.sessionId, `${target.name} está ocupado.`);
     if (dist(me.x, me.y, target.x, target.y) > TRADE_RANGE) return this.notify(client.sessionId, "Chegue mais perto para trocar.");
     this.tradeInvites.set(tid, { from: client.sessionId, until: this.t + TRADE_INVITE_S });
@@ -844,6 +870,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private tradeAccept(client: Client) {
     if (!this.allow(client)) return;
+    if (this.gmTravado(client.sessionId)) return;
     const inv = this.tradeInvites.get(client.sessionId);
     if (!inv) return;
     this.tradeInvites.delete(client.sessionId);
@@ -869,6 +896,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private tradeOffer(client: Client, raw: unknown) {
     if (!this.allow(client)) return;
+    if (this.gmTravado(client.sessionId)) return;
     const tr = this.trades.get(client.sessionId), p = this.state.players.get(client.sessionId);
     if (!tr || !p) return;
     const seq = (raw as { seq?: unknown } | null)?.seq;
@@ -1079,12 +1107,22 @@ export class ZoneRoom extends Room<ZoneState> {
     const pl = new Player();
     const from = arrivals.get(auth.character.id); // chegou por um portal: nasce junto do portal de volta
     arrivals.delete(auth.character.id);
-    const at = (from !== undefined && this.zone.arrive[from]) || this.spawnPoint(options?.load !== true);
+    const gd = gmDestino.get(auth.character.id); // teleporte do Modo Deus entre zonas: nasce na coordenada pedida
+    gmDestino.delete(auth.character.id);
+    const at = gd ?? ((from !== undefined && this.zone.arrive[from]) || this.spawnPoint(options?.load !== true));
     pl.x = pl.tx = at.x;
     pl.y = pl.ty = at.y;
     // o cliente de verdade avisa que vai carregar (options.load): a bolha já vale durante o load e só começa a contar no Msg.Ready.
     // Sem o aviso (bots e testes antigos) não há bolha: ninguém ganha proteção sem o cliente confirmar que a tela está pronta.
-    if (options?.load === true) { pl.shield = true; pl.shieldPending = true; pl.shieldUntil = this.t + ARRIVAL_SHIELD_WAIT_S; }
+    const porPortal = from !== undefined && from !== 0; // 0 = renasceu na cidade (morte): não é travessia
+    if (porPortal) pl.travelOkAt = this.t + TRAVEL_COOLDOWN_S;
+    // a bolha de chegada por portal tem intervalo: atravessar de novo logo em seguida não renova a proteção (login e morte sempre dão)
+    const agora = Date.now();
+    const bolhaLivre = !porPortal || agora - (ultimaBolha.get(auth.character.id) ?? -Infinity) >= ARRIVAL_SHIELD_CD_S * 1000;
+    if (options?.load === true && bolhaLivre) {
+      pl.shield = true; pl.shieldPending = true; pl.shieldUntil = this.t + ARRIVAL_SHIELD_WAIT_S;
+      if (porPortal) ultimaBolha.set(auth.character.id, agora);
+    }
     pl.name = auth.character.name;
     pl.charId = auth.character.id;
     pl.cls = auth.character.class;
@@ -1099,6 +1137,13 @@ export class ZoneRoom extends Room<ZoneState> {
     pl.talentos = JSON.stringify(limparTalentos(auth.character.talentos, pl.cls as CharClass, pl.level)); // os talentos também (C2.3)
     pl.talentosResets = Math.max(0, Math.floor(Number(auth.character.talentos_resets) || 0));
     pl.loadouts = JSON.stringify(limparLoadouts(auth.character.loadouts, pl.cls as CharClass)); // os 3 builds voltam com o personagem (C2.4)
+    pl.gmUsado = auth.character.gm_usado === true; // a marca do personagem volta com ele
+    if (isAdmin(auth.user.id) && auth.character.gm_modo) { // Modo Deus volta com o personagem (só para conta admin)
+      pl.gm = true;
+      pl.gmInvis = auth.character.gm_invis === true;
+      pl.gmInvuln = auth.character.gm_invuln === true;
+      pl.gmVel = Math.min(GM_VEL_MAX, Math.max(GM_VEL_MIN, Number(auth.character.gm_vel) || 1));
+    }
     if (econTest() && !auth.inventory.slots.some(Boolean) && auth.inventory.iron === 0) { // só nos testes (ECON_TEST=1): kit inicial para exercitar loja, fusão e troca sem jogar horas
       const i = auth.inventory;
       i.iron = 50000; i.obols = 2;
@@ -1190,6 +1235,194 @@ export class ZoneRoom extends Room<ZoneState> {
         p.maxHp = novo;
         if (!p.dead) p.hp = Math.max(1, Math.min(novo, Math.round(novo * frac)));
       });
+    }
+  }
+
+  /** Modo Deus ligado (com as travas): o personagem não negocia, não usa mercado nem baú. Avisa quem tentou. */
+  private gmTravado(sid: string): boolean {
+    const pl = this.state.players.get(sid);
+    if (!(pl?.gm || pl?.gmUsado) || !travasAtivas()) return false;
+    this.notify(sid, pl.gmUsado
+      ? "Este personagem usou o Modo Deus: fica isolado da economia (mercado, negociação e baú)."
+      : "Modo Deus ligado: este personagem não negocia, não usa o mercado nem o baú.");
+    return true;
+  }
+
+  /** marca permanente: o personagem usou moedas, item ou XP do Modo Deus */
+  private async marcaGmUsado(p: Player): Promise<void> {
+    if (p.gmUsado) return;
+    p.gmUsado = true;
+    await this.repo.marcarGmUsado(p.charId);
+  }
+
+  private achaJogador(charId: unknown): [string, Player] | null {
+    if (typeof charId !== "string" || !charId) return null;
+    let r: [string, Player] | null = null;
+    this.state.players.forEach((o, oid) => { if (!r && o.charId === charId) r = [oid, o]; });
+    return r;
+  }
+
+  // ------------------------------------------------------------------ Modo Deus (ferramenta de admin)
+  /**
+   * Uma ação do Modo Deus no personagem desta sessão. A rota do painel já confirmou sessão, conta admin e token;
+   * aqui se confere de novo. Quem chama grava a auditoria com `antes` e `depois`.
+   */
+  async gmAcao(sid: string, acao: string, q: Record<string, unknown>): Promise<GmResultado> {
+    const p = this.state.players.get(sid);
+    if (!p || !isAdmin(this.userIds.get(sid))) return { ok: false, status: 403, erro: "Acesso restrito a administradores." };
+    const bad = (erro: string): GmResultado => ({ ok: false, status: 400, erro });
+    const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : NaN);
+    const semMorte = acao !== "modo" && acao !== "reviver";
+    if (p.dead && semMorte) return { ok: false, status: 409, erro: "Você está morto: espere renascer para usar esta ação." };
+
+    switch (acao) {
+      case "modo": {
+        const antes = { modo: p.gm, invis: p.gmInvis, invuln: p.gmInvuln, vel: p.gmVel };
+        if (q.ligado === false) { p.gm = false; p.gmInvis = false; p.gmInvuln = false; p.gmVel = 1; }
+        else {
+          const mexeu = q.ligado === true || q.invis !== undefined || q.invuln !== undefined || q.vel !== undefined;
+          if (!mexeu) return bad("Nada a mudar no Modo Deus.");
+          if (q.ligado === true) p.gm = true;
+          if (q.invis !== undefined && typeof q.invis !== "boolean") return bad("Invisível: sim ou não.");
+          if (q.invuln !== undefined && typeof q.invuln !== "boolean") return bad("Invulnerável: sim ou não.");
+          if (!p.gm && (q.invis !== undefined || q.invuln !== undefined || q.vel !== undefined)) return { ok: false, status: 409, erro: "Ligue o Modo Deus antes de mudar invisibilidade, invulnerabilidade ou velocidade." };
+          if (typeof q.invis === "boolean") p.gmInvis = q.invis;
+          if (typeof q.invuln === "boolean") p.gmInvuln = q.invuln;
+          if (q.vel !== undefined) {
+            const v = velocidadeValida(q.vel);
+            if (v === null) return bad(`Velocidade de ${GM_VEL_MIN} a ${GM_VEL_MAX}.`);
+            p.gmVel = v;
+          }
+        }
+        await this.repo.setGmModo(p.charId, { modo: p.gm, invis: p.gmInvis, invuln: p.gmInvuln, vel: p.gmVel });
+        const depois = { modo: p.gm, invis: p.gmInvis, invuln: p.gmInvuln, vel: p.gmVel };
+        this.notify(sid, p.gm ? "Modo Deus ligado." : "Modo Deus desligado.");
+        return { ok: true, resumo: p.gm ? "Modo Deus ligado" : "Modo Deus desligado", antes, depois };
+      }
+
+      case "xp": {
+        const antes = { nivel: p.level, xp: p.xp };
+        const nivel = q.nivel === undefined ? undefined : num(q.nivel);
+        const xp = q.xp === undefined ? undefined : num(q.xp);
+        if (nivel === undefined && xp === undefined) return bad("Informe XP ou nível.");
+        if (nivel !== undefined && (!Number.isInteger(nivel) || nivel < 1 || nivel > LEVEL_CAP)) return bad(`Nível de 1 a ${LEVEL_CAP}.`);
+        if (xp !== undefined && (!Number.isInteger(xp) || xp < 1 || xp > 10_000_000)) return bad("XP de 1 a 10.000.000.");
+        if (nivel !== undefined) { p.level = nivel; p.xp = 0; }
+        if (xp !== undefined) this.addXp(sid, p, xp);
+        p.dirty = true;
+        this.refreshStats(p);
+        await this.marcaGmUsado(p);
+        return { ok: true, resumo: `Nível ${p.level} (XP ${p.xp})`, antes, depois: { nivel: p.level, xp: p.xp }, detalhes: { nivelPedido: nivel, xpDado: xp } };
+      }
+
+      case "item": {
+        const v = validarItemGm({ id: q.id, qtd: q.qtd, refino: q.refino, afixos: q.afixos });
+        if (!v.ok) return bad(v.error);
+        const teste: Inventory = { ...p.inv, slots: p.inv.slots.map((s) => (s ? { ...s } : null)) };
+        if (addItem(teste, v.id, v.qtd, v.af, v.refino, undefined, true) > 0) return { ok: false, status: 409, erro: "Mochila sem espaço para isso." };
+        p.inv.slots = teste.slots;
+        p.invDirty = true;
+        this.sendInv(sid, p);
+        await this.marcaGmUsado(p);
+        return { ok: true, resumo: `${ITEMS[v.id].name} x${v.qtd} na mochila (vinculado ao GM)`, detalhes: { item: v.id, qtd: v.qtd, refino: v.refino, afixos: v.af } };
+      }
+
+      case "moedas": {
+        const tipo = q.tipo === "obols" ? "obols" : q.tipo === "iron" ? "iron" : null;
+        const qtd = num(q.qtd);
+        if (!tipo) return bad("Moeda: iron (Tostões) ou obols (Óbolos).");
+        if (!Number.isInteger(qtd) || qtd < 1 || qtd > 1_000_000_000) return bad("Quantidade de 1 a 1.000.000.000.");
+        const antes = { [tipo]: p.inv[tipo] };
+        p.inv[tipo] = Math.min(MAX_COINS, p.inv[tipo] + qtd);
+        p.invDirty = true;
+        this.sendInv(sid, p);
+        await this.marcaGmUsado(p);
+        return { ok: true, resumo: `+${qtd} ${tipo === "iron" ? "Tostões" : "Óbolos"}`, antes, depois: { [tipo]: p.inv[tipo] }, detalhes: { moeda: tipo, qtd } };
+      }
+
+      case "curar": {
+        const antes = { hp: p.hp, mana: p.mana };
+        p.hp = p.maxHp;
+        p.manaF = p.maxMana;
+        p.mana = p.maxMana;
+        return { ok: true, resumo: "Vida e recurso cheios", antes, depois: { hp: p.hp, mana: p.mana } };
+      }
+
+      case "teleporte": {
+        if (typeof q.jogador === "string" && q.jogador) { // até um jogador desta zona
+          const alvo = this.achaJogador(q.jogador);
+          if (!alvo || alvo[1] === p) return { ok: false, status: 404, erro: "Jogador não está nesta zona." };
+          const antes = { x: p.x, y: p.y };
+          p.x = p.tx = alvo[1].x;
+          p.y = p.ty = alvo[1].y;
+          return { ok: true, resumo: `Teleportado até ${alvo[1].name}`, antes, depois: { x: p.x, y: p.y }, detalhes: { jogador: q.jogador } };
+        }
+        const zona = q.zona === undefined ? this.zone.id : num(q.zona);
+        const x = num(q.x), y = num(q.y);
+        const dest = ZONES[zona];
+        if (!dest) return bad("Zona inexistente.");
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > dest.w - 1 || y > dest.h - 1) return bad(`Coordenada dentro da zona: x de 0 a ${dest.w - 1}, y de 0 a ${dest.h - 1}.`);
+        if (zona === this.zone.id) {
+          const antes = { x: p.x, y: p.y };
+          p.x = p.tx = x;
+          p.y = p.ty = y;
+          return { ok: true, resumo: `Teleportado para (${x}, ${y})`, antes, depois: { x, y }, detalhes: { zona, x, y } };
+        }
+        if (p.traveling) return { ok: false, status: 409, erro: "Você já está atravessando para outra zona." };
+        gmDestino.set(p.charId, { x, y }); // a próxima entrada nasce na coordenada pedida
+        void this.travel(sid, p, { to: zona }, true); // o admin não passa pelo tempo de combate
+        return { ok: true, resumo: `Teleporte para ${dest.name} (${x}, ${y})`, detalhes: { zona, x, y } };
+      }
+
+      case "puxar": {
+        const alvo = this.achaJogador(q.jogador);
+        if (!alvo || alvo[1] === p) return { ok: false, status: 404, erro: "Jogador não está nesta zona (puxar só vale na mesma zona)." };
+        const [tid, t] = alvo;
+        const antes = { x: t.x, y: t.y };
+        t.x = t.tx = clamp(p.x + 1, 0, this.zone.w - 1);
+        t.y = t.ty = clamp(p.y, 0, this.zone.h - 1);
+        this.notify(tid, `Um administrador puxou você até ele.`);
+        return { ok: true, resumo: `${t.name} puxado até você`, antes, depois: { x: t.x, y: t.y }, detalhes: { jogador: t.charId } };
+      }
+
+      case "reviver": {
+        const alvo = this.achaJogador(q.jogador);
+        if (!alvo) return { ok: false, status: 404, erro: "Jogador não está nesta zona." };
+        const [tid, t] = alvo;
+        if (!t.dead) return bad("Este jogador não está morto.");
+        const antes = { hp: t.hp, morto: true };
+        t.dead = false;
+        t.deadUntil = 0;
+        t.hp = t.maxHp;
+        t.tx = t.x; t.ty = t.y;
+        this.notify(tid, "Um administrador trouxe você de volta.");
+        return { ok: true, resumo: `${t.name} reviveu`, antes, depois: { hp: t.hp, morto: false }, detalhes: { jogador: t.charId } };
+      }
+
+      case "monstros": {
+        const modo = q.modo === "renascer" ? "renascer" : q.modo === "matar" ? "matar" : null; // "acao" já é o nome da ação (monstros)
+        if (!modo) return bad("Use matar ou renascer.");
+        const raio = q.raio === undefined ? 0 : num(q.raio);
+        if (!Number.isFinite(raio) || raio < 0 || raio > 200) return bad("Raio de 0 (zona toda) a 200.");
+        let n = 0;
+        this.state.enemies.forEach((e, eid) => {
+          if (raio > 0 && dist(e.x, e.y, p.x, p.y) > raio) return;
+          if (modo === "matar") {
+            if (e.st === "dead") return;
+            e.hp = 0; e.st = "dead"; e.respawnAt = this.t + enemyKind(e.kind).respawnS;
+            e.targetId = ""; e.contrib.clear(); e.fightStart = 0;
+            this.broadcast(Evt.Died, { k: "e", id: eid });
+          } else {
+            e.hp = e.maxHp; e.x = e.sx; e.y = e.sy; e.st = "idle";
+            e.contrib.clear(); e.fightStart = 0; e.lastHurt = -1e9;
+          }
+          n++;
+        });
+        return { ok: true, resumo: `${n} monstro(s) ${modo === "matar" ? "abatido(s)" : "renascido(s)"}`, detalhes: { modo, raio, quantos: n } };
+      }
+
+      default:
+        return bad("Ação desconhecida.");
     }
   }
 
@@ -1423,9 +1656,9 @@ export class ZoneRoom extends Room<ZoneState> {
       this.updatePvp(id, p);
       this.autoPotTick(id, p);
       if (!p.dead && !p.traveling) { // pisou num portal: atravessa (sem apertar nada)
-        const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= q.r);
+        const portal = this.zone.portals.find((q) => dist(p.x, p.y, q.x, q.y) <= PORTAL_TRIGGER_RADIUS); // só quem encosta na passagem
         if (portal && portal.to === WORLD_GATE) { // portão da cidade: abre o mapa-mundo uma vez por entrada no raio
-          if (!p.atGate) { p.atGate = true; this.clients.getById(id)?.send(Evt.WorldMap, {}); }
+          if (!p.atGate) { p.atGate = true; p.mapaAt = this.t; p.tx = p.x; p.ty = p.y; this.clients.getById(id)?.send(Evt.WorldMap, {}); } // para o personagem enquanto escolhe
         } else if (portal) void this.travel(id, p, portal);
         else p.atGate = false;
       }
@@ -1522,7 +1755,7 @@ export class ZoneRoom extends Room<ZoneState> {
     const dx = p.tx - p.x, dy = p.ty - p.y;
     const d = Math.hypot(dx, dy);
     if (d < 0.01) return;
-    const step = Math.min(d, MOVE_SPEED * dt);
+    const step = Math.min(d, MOVE_SPEED * dt * (p.gm ? p.gmVel : 1)); // Modo Deus: velocidade ajustável (1 = normal)
     p.x += (dx / d) * step;
     p.y += (dy / d) * step;
     p.face = Math.atan2(dy, dx);
@@ -1877,7 +2110,7 @@ export class ZoneRoom extends Room<ZoneState> {
         let healed = 0;
         this.state.players.forEach((o, oid) => {
           if (o.dead || this.hostile(id, p, oid, o) || dist(o.x, o.y, p.x, p.y) > (def.radius ?? 0)) return;
-          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o))); // área: sem "from" (só a cura focada desenha o raio do curandeiro)
+          this.healPlayer(oid, o, Math.round(base * this.healStackMult(o)), undefined, true, id); // área: sem "from" (só a cura focada desenha o raio do curandeiro); `by` diz quem curou (medidor)
           if (def.guardPct) this.grantGuard(o, def.guardPct, def.guardS ?? 0);
           if (def.cleanse) { o.stunUntil = 0; o.rootUntil = 0; } // purifica: aliado curado sai do atordoamento e das raízes
           healed++;
@@ -1896,7 +2129,7 @@ export class ZoneRoom extends Room<ZoneState> {
           if (d <= 2.2 && d < bestD) { bestD = d; target = [oid, o]; }
         });
         const [tid, t] = target;
-        this.healPlayer(tid, t, Math.round((def.heal ?? 0) * power * this.healStackMult(t)), id); // acúmulos atuais valem para esta cura
+        this.healPlayer(tid, t, Math.round((def.heal ?? 0) * power * this.healStackMult(t)), id, true); // acúmulos atuais valem para esta cura
         if (def.stackMax) this.addHealStack(t, def.stackMax, def.stackPct ?? 0, def.stackS ?? 0); // e este uso soma mais um
         break;
       }
@@ -1932,11 +2165,14 @@ export class ZoneRoom extends Room<ZoneState> {
     return focused;
   }
 
-  private healPlayer(id: string, p: Player, amount: number, from?: string) {
+  /** `habilidade`: cura de habilidade (área/focada) avisa mesmo com a vida cheia: amount 0 e `excesso` = o que curaria (o número aparece para todos) */
+  private healPlayer(id: string, p: Player, amount: number, from?: string, habilidade = false, by?: string) {
     const before = p.hp;
-    p.hp = Math.min(p.maxHp, p.hp + Math.round(amount * (1 + p.gear.af.healPct / 100))); // Bênção (afixo): cura mais
+    const bruto = Math.round(amount * (1 + p.gear.af.healPct / 100)); // Bênção (afixo): cura mais
+    p.hp = Math.min(p.maxHp, p.hp + bruto);
     const healed = p.hp - before;
-    if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y, from });
+    if (healed > 0) this.broadcast(Evt.Heal, { id, amount: healed, x: p.x, y: p.y, from, by });
+    else if (habilidade && bruto > 0) this.broadcast(Evt.Heal, { id, amount: 0, excesso: bruto, x: p.x, y: p.y, from, by });
   }
 
   /** Atordoa o inimigo (não age até acabar; cancela o golpe que preparava). Chefes resistem: a duração cai para BOSS_CC_RESIST. */
@@ -2247,7 +2483,7 @@ export class ZoneRoom extends Room<ZoneState> {
     let best: [string, Player] | null = null;
     let bestD = maxDist;
     this.state.players.forEach((p, id) => {
-      if (p.dead || p.traveling || p.shield || dist(p.x, p.y, e.sx, e.sy) > leash) return; // além da coleira: não vira alvo
+      if (p.dead || p.traveling || p.shield || (p.gm && p.gmInvis) || dist(p.x, p.y, e.sx, e.sy) > leash) return; // além da coleira ou invisível (Modo Deus): não vira alvo
       const d = dist(e.x, e.y, p.x, p.y);
       if (d < bestD) { bestD = d; best = [id, p]; }
     });
@@ -2355,10 +2591,11 @@ export class ZoneRoom extends Room<ZoneState> {
     // alvo: provocação ativa > quem já está em combate > mais próximo no raio de aggro (e dentro da coleira: quem está além dela não "puxa" o inimigo)
     let target: [string, Player] | null = null;
     const taunter = this.t < e.tauntUntil ? this.state.players.get(e.tauntId) : undefined;
-    if (taunter && !taunter.dead && !taunter.traveling && !taunter.shield) target = [e.tauntId, taunter];
+    if (taunter && !taunter.dead && !taunter.traveling && !taunter.shield && !(taunter.gm && taunter.gmInvis)) target = [e.tauntId, taunter];
     else {
       const current = e.targetId ? this.state.players.get(e.targetId) : undefined;
-      if (current && !current.dead && !current.traveling && !current.shield && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
+      // Modo Deus invisível: monstro nenhum mantém, mira ou persegue o GM (a escolha de alvo ignora ele)
+      if (current && !current.dead && !current.traveling && !current.shield && !(current.gm && current.gmInvis) && dist(e.x, e.y, current.x, current.y) <= K.aggro * 1.5) target = [e.targetId, current];
       else target = this.nearestPlayer(e, K.aggro, this.leashOf(K));
     }
     e.targetId = target ? target[0] : "";
@@ -2440,6 +2677,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private damagePlayer(id: string, p: Player, baseDmg: number, by?: string, crit = false, src?: { id: string; e: Enemy }) {
     if (this.zone.safe) return; // cidade segura: NINGUÉM leva dano, venha de onde vier (área, armadilha, projétil)
     if (p.shield) return; // bolha de chegada: imune a inimigos, chefes e PvP (também durante o load)
+    if (p.gmInvuln || (p.gm && p.gmInvis)) return; // Modo Deus: invulnerável, e invisível não é alvo de nada
     if (p.gear.af.dodge > 0 && Math.random() * 100 < p.gear.af.dodge) return; // Passo Fantasma (afixo): esquivou o golpe
     p.combatAt = this.t; // em combate: a regeneração de vida recomeça só depois de um tempo
     p.regenAcc = 0;

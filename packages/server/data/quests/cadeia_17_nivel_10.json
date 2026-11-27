@@ -6,5 +6,11 @@
   "npc": "merchant",
   "preRequisitos": ["cadeia_15_botas"],
   "objetivos": [{ "tipo": "falar", "npc": "merchant" }],
+  "fala": [
+    "Você voltou. E não é mais aquele andarilho que chegou coberto de cinza.",
+    "A cidade aguentou de pé porque gente como você saiu pelos portões e voltou.",
+    "Tenho um último pedido, e não é de mercador: siga em frente. Além das Cinzas, a Geada espera.",
+    "Leve isto. Que o fogo de Brasalume vá com você."
+  ],
   "recompensa": { "xp": 712, "ferro": 60, "itens": [{ "id": "pocao_de_vida", "qtd": 2 }, { "id": "mat_essencia_arcana", "qtd": 2 }, { "id": "{classe}_helmet_rare", "qtd": 1 }] }
 }

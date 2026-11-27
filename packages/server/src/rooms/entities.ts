@@ -37,6 +37,11 @@ export class Player extends Schema {
   @type("boolean") rooted = false; // enraizado (PvP): não anda (o cliente mostra correntes)
   @type("string") party = ""; // id do grupo ("" = sem grupo); o cliente marca a placa de quem é do seu grupo
   @type("string") weaponRarity = ""; // raridade da arma equipada ("" = sem arma): o cliente desenha o brilho público no personagem
+  @type("boolean") gm = false; // Modo Deus ligado (só conta admin): o cliente de admin mostra a marca [GM]
+  @type("boolean") gmInvis = false; // Modo Deus: invisível (o cliente comum esconde; monstros e jogadores não o alcançam)
+  @type("boolean") gmInvuln = false; // Modo Deus: invulnerável
+  @type("number") gmVel = 1; // Modo Deus: multiplicador de velocidade (1 = normal)
+  gmUsado = false; // só no servidor: o personagem já usou moedas, item ou XP do Modo Deus (marca permanente; isola da economia em produção)
 
   // --- só no servidor (não sincronizado) ---
   charId = ""; // linha em `characters`
@@ -90,6 +95,8 @@ export class Player extends Schema {
   pullX = 0; // ponto para onde é puxado
   pullY = 0;
   travelNoteAt = -1e9; // último aviso "em combate" ao tentar atravessar (para não repetir a cada tick)
+  mapaAt = -1e9; // quando o mapa-mundo do portão abriu (a escolha vale por 30 s, perto do portão)
+  travelOkAt = 0; // chegou por um portal: só atravessa de novo a partir deste instante (TRAVEL_COOLDOWN_S)
   combatAt = -1e9; // último instante em que causou ou recebeu dano (a regeneração de vida espera PLAYER_REGEN_DELAY_S)
   regenAcc = 0; // fração de vida regenerada ainda não aplicada (hp é inteiro)
   quests: QuestMap = new Map(); // quests do personagem (C1.1): carregadas do banco ao entrar

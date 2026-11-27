@@ -1,3 +1,4 @@
+import { extrasDoBanco, extrasParaBanco, type ExtrasBanco } from "./extras.js";
 import { randomUUID } from "node:crypto";
 import { START_ZONE, VAULT_SLOTS, NAME_MIN, NAME_MAX, ITEMS, INV_SLOTS, EQUIP_SLOTS, KINDS_EQUIPAVEIS, MAX_CHARACTERS_PER_ACCOUNT, migrateItemId, afixosValidos, afixosDaSemente, refinoValido, gemasValidas, type CharClass, type EquipSlot } from "@frixep/shared";
 import { emptyInventory, type Inventory } from "../game/inventory.js";
@@ -8,9 +9,9 @@ import type { Db, Tx } from "./index.js";
 
 /** Zona de nascimento dos personagens novos: a cidade. Só os testes (nunca em produção) podem trocar, para as suítes antigas seguirem lutando na zona 1. */
 export const startZone = () => { const z = Number(process.env.TEST_START_ZONE); return process.env.NODE_ENV !== "production" && Number.isInteger(z) && z > 0 ? z : START_ZONE; };
-export interface VaultRows { items: { slot: number; id: string; qty: number }[]; iron: number; obols: number }
+export interface VaultRows { items: ({ slot: number; id: string; qty: number } & ExtrasBanco)[]; iron: number; obols: number }
 
-export interface InvRows { items: { slot: number; id: string; qty: number; af: string | null; rf: number | null; gm: string | null }[]; eq: { slot: string; id: string; af: string | null; rf: number | null; gm: string | null }[]; iron: number; obols: number }
+export interface InvRows { items: { slot: number; id: string; qty: number; af: string | null; rf: number | null; gm: string | null; gmv: boolean }[]; eq: { slot: string; id: string; af: string | null; rf: number | null; gm: string | null; gmv: boolean }[]; iron: number; obols: number }
 
 export type { CharClass };
 export interface CharacterRow {
@@ -26,6 +27,11 @@ export interface CharacterRow {
   talentos: string; // JSON: id do talento -> ranks (C2.3)
   talentos_resets: number; // resets já pagos (C2.3)
   loadouts: string; // JSON: até 3 slots de build (variações + talentos + nome) e o ativo (C2.4)
+  gm_modo: boolean; // Modo Deus ligado (só conta admin; ver gm/modoDeus.ts)
+  gm_invis: boolean;
+  gm_invuln: boolean;
+  gm_vel: number;
+  gm_usado: boolean; // o personagem já usou moedas, item ou XP do Modo Deus (marca permanente)
 }
 
 /** Normaliza o nome para a chave de unicidade: sem acento, sem maiúsculas, espaços colapsados. */
@@ -136,7 +142,7 @@ export class Repo {
   /** personagem da conta: o pedido por id (só se for da conta) ou, sem id, o mais antigo (quem não escolhe entra no primeiro) */
   async getCharacter(accountId: string, charId?: string): Promise<CharacterRow | null> {
     const { rows } = await this.db.query<CharacterRow>(
-      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts from characters where account_id = $1 and ($2::text is null or id::text = $2) order by created_at limit 1",
+      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts, gm_modo, gm_invis, gm_invuln, gm_vel, gm_usado from characters where account_id = $1 and ($2::text is null or id::text = $2) order by created_at limit 1",
       [accountId, charId ?? null],
     );
     return rows[0] ?? null;
@@ -145,7 +151,7 @@ export class Repo {
   /** todos os personagens da conta, do mais antigo para o mais novo (a tela de seleção) */
   async listCharacters(accountId: string): Promise<CharacterRow[]> {
     const { rows } = await this.db.query<CharacterRow>(
-      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts from characters where account_id = $1 order by created_at",
+      "select id, account_id, name, class, level, xp, zone, auto_pot_at, variacoes, talentos, talentos_resets, loadouts, gm_modo, gm_invis, gm_invuln, gm_vel, gm_usado from characters where account_id = $1 order by created_at",
       [accountId],
     );
     return rows;
@@ -165,7 +171,7 @@ export class Repo {
         const id = randomUUID();
         const zone = startZone();
         await q("insert into characters (id, account_id, name, name_key, class, zone) values ($1, $2, $3, $4, $5, $6)", [id, accountId, name, nameKey(name), cls, zone]);
-        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone, auto_pot_at: 0, variacoes: "{}", talentos: "{}", talentos_resets: 0, loadouts: "{}" } };
+        return { ok: true as const, character: { id, account_id: accountId, name, class: cls, level: 1, xp: 0, zone, auto_pot_at: 0, variacoes: "{}", talentos: "{}", talentos_resets: 0, loadouts: "{}", gm_modo: false, gm_invis: false, gm_invuln: false, gm_vel: 1, gm_usado: false } };
       });
     } catch (e: any) {
       if (e?.code === "23505") return { ok: false, error: "name_taken" }; // violação da unicidade de name_key
@@ -175,6 +181,16 @@ export class Repo {
 
   async saveProgress(charId: string, level: number, xp: number): Promise<void> {
     await this.db.query("update characters set level = $2, xp = $3, updated_at = now() where id = $1", [charId, level, xp]);
+  }
+
+  /** estado do Modo Deus no personagem (só o servidor chama, depois de confirmar que a conta é admin) */
+  async setGmModo(charId: string, g: { modo: boolean; invis: boolean; invuln: boolean; vel: number }): Promise<void> {
+    await this.db.query("update characters set gm_modo = $2, gm_invis = $3, gm_invuln = $4, gm_vel = $5, updated_at = now() where id = $1", [charId, g.modo, g.invis, g.invuln, g.vel]);
+  }
+
+  /** marca o personagem como usuário do Modo Deus (permanente; só o servidor chama) */
+  async marcarGmUsado(charId: string): Promise<void> {
+    await this.db.query("update characters set gm_usado = true where id = $1", [charId]);
   }
 
   /** limiar da auto-poção (já validado por clampAutoPot no servidor) */
@@ -203,8 +219,8 @@ export class Repo {
 
   async loadInventory(charId: string, cls: CharClass = "warrior"): Promise<Inventory> {
     const inv = emptyInventory();
-    const items = await this.db.query<{ slot: number; item_id: string; qty: number; af: string | null; rf: number | null; gm: string | null }>(
-      "select slot, item_id, qty, af, rf, gm from inventory_items where character_id = $1",
+    const items = await this.db.query<{ slot: number; item_id: string; qty: number; af: string | null; rf: number | null; gm: string | null; gmv: boolean }>(
+      "select slot, item_id, qty, af, rf, gm, gmv from inventory_items where character_id = $1",
       [charId],
     );
     for (const r of items.rows) {
@@ -219,12 +235,12 @@ export class Repo {
       }
       const rf = KINDS_EQUIPAVEIS.includes(def.kind) ? refinoValido(r.rf) : 0; // refino só existe em equipamento
       const gm = gemasValidas(r.gm ? r.gm.split(",") : [], def.kind, def.rarity); // gemas engastadas (C3.3), gravadas como "forca,vida"
-      inv.slots[r.slot] = { id, qty: Math.max(1, Math.min(def.stack, r.qty)), ...(af.length ? { af } : {}), ...(rf ? { rf } : {}), ...(gm.length ? { gm } : {}) };
+      inv.slots[r.slot] = { id, qty: Math.max(1, Math.min(def.stack, r.qty)), ...(af.length ? { af } : {}), ...(rf ? { rf } : {}), ...(gm.length ? { gm } : {}), ...(r.gmv ? { gmv: true } : {}) };
     }
     const w = await this.db.query<{ iron: number; obols: number }>("select iron, obols from characters where id = $1", [charId]);
     inv.iron = Math.max(0, Number(w.rows[0]?.iron) || 0);
     inv.obols = Math.max(0, Number(w.rows[0]?.obols) || 0);
-    const eq = await this.db.query<{ slot: string; item_id: string; af: string | null; rf: number | null; gm: string | null }>("select slot, item_id, af, rf, gm from equipment where character_id = $1", [charId]);
+    const eq = await this.db.query<{ slot: string; item_id: string; af: string | null; rf: number | null; gm: string | null; gmv: boolean }>("select slot, item_id, af, rf, gm, gmv from equipment where character_id = $1", [charId]);
     for (const r of eq.rows) {
       const id = migrateItemId(r.item_id, cls);
       const def = ITEMS[id];
@@ -240,6 +256,7 @@ export class Repo {
         if (rf) inv.equipRf = { ...(inv.equipRf ?? {}), [r.slot]: rf };
         const gm = gemasValidas(r.gm ? r.gm.split(",") : [], def.kind, def.rarity);
         if (gm.length) inv.equipGm = { ...(inv.equipGm ?? {}), [r.slot]: gm };
+        if (r.gmv) inv.equipGmv = { ...(inv.equipGmv ?? {}), [r.slot]: true };
         if (id !== r.item_id) inv.migrated = true;
       }
     }
@@ -251,8 +268,8 @@ export class Repo {
     return {
       // equipamento grava SEMPRE a lista (vazia = "sem afixos", já passou pelo sistema); null fica só para itens antigos,
       // que o carregamento completa com o backfill. Assim um item sem afixo não ganha afixos a cada carregamento.
-      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, af: afixosGravados(s.id, s.af), rf: refinoValido(s.rf) || null, gm: gemasGravadas(s.gm) }] : [])),
-      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]!, af: afixosGravados(inv.equip[sl]!, inv.equipAf?.[sl]), rf: refinoValido(inv.equipRf?.[sl]) || null, gm: gemasGravadas(inv.equipGm?.[sl]) }] : [])),
+      items: inv.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, af: afixosGravados(s.id, s.af), rf: refinoValido(s.rf) || null, gm: gemasGravadas(s.gm), gmv: !!s.gmv }] : [])),
+      eq: EQUIP_SLOTS.flatMap((sl) => (inv.equip[sl] ? [{ slot: sl, id: inv.equip[sl]!, af: afixosGravados(inv.equip[sl]!, inv.equipAf?.[sl]), rf: refinoValido(inv.equipRf?.[sl]) || null, gm: gemasGravadas(inv.equipGm?.[sl]), gmv: !!inv.equipGmv?.[sl] }] : [])),
       iron: inv.iron, obols: inv.obols,
     };
   }
@@ -263,22 +280,24 @@ export class Repo {
     await q("delete from equipment where character_id = $1", [charId]);
     await q("update characters set iron = $2, obols = $3 where id = $1", [charId, r.iron, r.obols]);
     if (r.items.length) {
-      const ph = r.items.map((_, i) => `($1, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6}, $${i * 6 + 7})`).join(",");
-      await q(`insert into inventory_items (character_id, slot, item_id, qty, af, rf, gm) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty, x.af, x.rf, x.gm])]);
+      const ph = r.items.map((_, i) => `($1, $${i * 7 + 2}, $${i * 7 + 3}, $${i * 7 + 4}, $${i * 7 + 5}, $${i * 7 + 6}, $${i * 7 + 7}, $${i * 7 + 8})`).join(",");
+      await q(`insert into inventory_items (character_id, slot, item_id, qty, af, rf, gm, gmv) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty, x.af, x.rf, x.gm, x.gmv])]);
     }
     if (r.eq.length) {
-      const ph = r.eq.map((_, i) => `($1, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5}, $${i * 5 + 6})`).join(",");
-      await q(`insert into equipment (character_id, slot, item_id, af, rf, gm) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id, x.af, x.rf, x.gm])]);
+      const ph = r.eq.map((_, i) => `($1, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6}, $${i * 6 + 7})`).join(",");
+      await q(`insert into equipment (character_id, slot, item_id, af, rf, gm, gmv) values ${ph}`, [charId, ...r.eq.flatMap((x) => [x.slot, x.id, x.af, x.rf, x.gm, x.gmv])]);
     }
   }
 
   async loadVault(charId: string): Promise<Vault> {
     const v = emptyVault();
-    const items = await this.db.query<{ slot: number; item_id: string; qty: number }>("select slot, item_id, qty from vault_items where character_id = $1", [charId]);
+    const items = await this.db.query<{ slot: number; item_id: string; qty: number; af: string | null; rf: number | null; gm: string | null; gmv: boolean }>(
+      "select slot, item_id, qty, af, rf, gm, gmv from vault_items where character_id = $1", [charId]);
     for (const r of items.rows) {
       const def = ITEMS[r.item_id];
       if (!def || r.slot < 0 || r.slot >= VAULT_SLOTS || v.slots[r.slot]) continue; // item removido do jogo é ignorado
-      v.slots[r.slot] = { id: r.item_id, qty: Math.max(1, Math.min(def.stack, r.qty)) };
+      // extras (afixos, refino, gemas) voltam com o item (PD-16); linha antiga sem afixos ganha afixos determinísticos
+      v.slots[r.slot] = { id: r.item_id, qty: Math.max(1, Math.min(def.stack, r.qty)), ...extrasDoBanco(r.item_id, r, `${charId}:bau:${r.slot}:${r.item_id}`) };
     }
     const w = await this.db.query<{ vault_iron: number; vault_obols: number }>("select vault_iron, vault_obols from characters where id = $1", [charId]);
     v.iron = Math.max(0, Number(w.rows[0]?.vault_iron) || 0);
@@ -287,15 +306,15 @@ export class Repo {
   }
 
   vaultRows(v: Vault): VaultRows {
-    return { items: v.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty }] : [])), iron: v.iron, obols: v.obols };
+    return { items: v.slots.flatMap((s, i) => (s ? [{ slot: i, id: s.id, qty: s.qty, ...extrasParaBanco(s) }] : [])), iron: v.iron, obols: v.obols };
   }
 
   private async writeVault(q: Tx["query"], charId: string, r: VaultRows) {
     await q("delete from vault_items where character_id = $1", [charId]);
     await q("update characters set vault_iron = $2, vault_obols = $3 where id = $1", [charId, r.iron, r.obols]);
     if (r.items.length) {
-      const ph = r.items.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(",");
-      await q(`insert into vault_items (character_id, slot, item_id, qty) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty])]);
+      const ph = r.items.map((_, i) => `($1, ${[2, 3, 4, 5, 6, 7, 8].map((k) => `$${i * 7 + k}`).join(", ")})`).join(",");
+      await q(`insert into vault_items (character_id, slot, item_id, qty, af, rf, gm, gmv) values ${ph}`, [charId, ...r.items.flatMap((x) => [x.slot, x.id, x.qty, x.af, x.rf, x.gm, x.gmv])]);
     }
   }
 

@@ -37,6 +37,7 @@ export interface QuestDef {
   objetivos: Objetivo[];
   recompensa: RecompensaQuest;
   dica?: DicaQuest; // só as quests do tutorial (faixa no topo da tela)
+  fala?: string[]; // o que o NPC diz numa missão de conversar (uma fala por vez, antes de poder entregar)
 }
 
 /** Estado de uma quest de um personagem, como o servidor envia ao cliente. */
@@ -89,6 +90,11 @@ export function validarFormatoQuest(raw: unknown, origem: string): QuestDef {
     }
   }
 
+  const fala = q.fala;
+  if (fala !== undefined && (!Array.isArray(fala) || fala.length < 1 || fala.length > 8 || !fala.every((f) => isStr(f) && (f as string).length <= 280))) {
+    erro(origem, `"fala" deve ser uma lista de 1 a 8 textos de até 280 caracteres`);
+  }
+
   const r = q.recompensa;
   if (!isObj(r)) erro(origem, `"recompensa" é obrigatória (objeto com xp, ferro e itens)`);
   const rec = r as Record<string, unknown>;
@@ -112,6 +118,7 @@ export function validarFormatoQuest(raw: unknown, origem: string): QuestDef {
     objetivos,
     recompensa: { xp: rec.xp as number, ferro: rec.ferro as number, itens },
     ...(dica !== undefined ? { dica: { toque: dica.toque, teclado: dica.teclado } } : {}),
+    ...(fala !== undefined ? { fala: [...(fala as string[])] } : {}),
   };
 }
 

@@ -100,7 +100,7 @@ console.log("\n== Esquiva não estoura a bolha ==");
   await A.r.leave(true);
 }
 
-console.log("\n== Travessia: aparece longe do portão, sem inimigo por perto, protegido durante o load ==");
+console.log("\n== Travessia: aparece logo à frente do portão, sem inimigo por perto, protegido durante o load ==");
 {
   const tk = await account("warrior");
   let A = await join("zone", tk, true);
@@ -110,18 +110,23 @@ console.log("\n== Travessia: aparece longe do portão, sem inimigo por perto, pr
   await A.r.leave(true);
   await sleep(500);
   A = await join("zone4", tk, true); // chegada na cidade com carregamento
-  check("chega na cidade a 5,5 tiles do portão (fora do alcance)", near(A.me(), 24, 7.5, 0.2) && Math.hypot(A.me().x - 24, A.me().y - 2) >= 5, `(${A.me().x}, ${A.me().y})`);
+  check("chega na cidade a 3 tiles do portão (perto, mas fora do gatilho)", near(A.me(), 24, 3, 0.2) && Math.hypot(A.me().x - 24, A.me().y - 0) >= 2.9, `(${A.me().x}, ${A.me().y})`);
   check("e protegido pela bolha desde a chegada", A.me().shield === true);
   A.ready(); await sleep(200);
-  A.go(24, 2.6);
-  check("anda até o portão da cidade", await until(() => Math.hypot(A.me().x - 24, A.me().y - 2.6) < 0.4, 5000));
+  A.go(24, 0.6);
+  check("anda até o portão da cidade", await until(() => Math.hypot(A.me().x - 24, A.me().y - 0.6) < 0.4, 5000));
   A.r.send("travel", { to: 1 });
-  check("o mapa-mundo leva à zona 1", await until(() => A.ev.travel.length > 0, 5000) && A.ev.travel[0].zone === 1);
+  await sleep(600);
+  check("recém-chegado: o portão recusa viajar de novo na hora (espera)", A.ev.travel.length === 0 && A.ev.notice.some((t) => t.includes("Recém-chegado")), JSON.stringify(A.ev.notice.slice(-1)));
+  let viajou = false;
+  for (let i = 0; i < 14 && !viajou; i++) { A.r.send("travel", { to: 1 }); viajou = await until(() => A.ev.travel.length > 0, 1000); }
+  check("passada a espera, o mapa-mundo leva à zona 1", viajou && A.ev.travel[0].zone === 1);
   await A.r.leave(true);
   await sleep(500);
   A = await join("zone", tk, true);
   const me = A.me();
-  check("chega nas Cinzas no ponto de chegada vindo da cidade (9,5; 28), a 5,5 tiles do portão", near(me, 9.5, 28, 0.2) && Math.hypot(me.x - 4, me.y - 28) >= 5.4, `(${me.x}, ${me.y})`);
+  check("chega nas Cinzas no ponto de chegada vindo da cidade (7; 28), a 3 tiles do portão", near(me, 7, 28, 0.2) && Math.hypot(me.x - 4, me.y - 28) >= 2.9, `(${me.x}, ${me.y})`);
+  check("segunda travessia em menos de 60 s: sem bolha nova (não se renova a proteção atravessando)", A.me().shield === false);
   check("sem nenhum inimigo a menos de 14 tiles", closestEnemy(A) >= 14, `mais perto ${closestEnemy(A).toFixed(1)}`);
   await sleep(4000); // 4 s "carregando" (sem ready): nada acontece com ele
   check("4 s sem mandar ready: sem dano e vida cheia", A.ev.hits.length === 0 && A.me().hp === A.me().maxHp);

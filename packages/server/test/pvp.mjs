@@ -30,7 +30,7 @@ async function travelFromCity(token, to) {
   let gate = false, travel = null;
   r.onMessage("world_map", () => (gate = true));
   r.onMessage("travel", (m) => (travel = m));
-  r.send("move_to", { x: 24, y: 2 });
+  r.send("move_to", { x: 24, y: 0 });
   await until(() => gate, 14000);
   r.send("travel", { to });
   await until(() => travel, 5000);

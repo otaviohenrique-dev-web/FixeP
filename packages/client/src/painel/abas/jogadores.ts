@@ -16,6 +16,7 @@ interface Ficha {
   id: string; nome: string; classe: string; nivel: number; xp: number; zona: number; poder: number;
   criadoEm: string; contaCriadaEm: string; emailMascarado: string | null; temEmail: boolean; online: boolean;
   tostoes: number; obolos: number;
+  modoDeus?: { usado: boolean; isolado: boolean }; // marca do Modo Deus (permanente)
   inventario: { slot: number; item: string; qtd: number }[];
   equipamento: Record<string, string | null>;
   sancao: Sancao;
@@ -130,7 +131,8 @@ export const abaJogadores: AbaPainel = {
       const personagem = secao("Personagem",
         linha("Classe", CLASSES[f.classe] ?? f.classe), linha("Nível", f.nivel), linha("XP", fmtNum(f.xp)),
         linha("Poder total", fmtNum(f.poder)), linha("Zona", f.zona), linha("Criado em", fmtData(f.criadoEm)),
-        linha("Situação", f.online ? "Online agora" : "Offline"));
+        linha("Situação", f.online ? "Online agora" : "Offline"),
+        linha("Modo Deus", f.modoDeus?.usado ? (f.modoDeus.isolado ? "usou: isolado da economia (mercado, negociação e baú)" : "usou (travas desligadas neste servidor)") : "nunca usou"));
 
       const email = blocoEmail(f.id, f.emailMascarado, f.temEmail);
       const conta = secao("Conta",

@@ -1,7 +1,7 @@
 // Teste estático (sem servidor) da chegada nas zonas: TODO ponto de chegada (`arrive` de cada origem) e o `spawn` de cada zona
 // ficam fora do alcance de pisar no portão e numa clareira sem inimigos (comuns nem chefe), considerando o aggro de cada tipo e a coleira.
 // Uso: npx tsx test/chegada.unit.ts
-import { ZONES, expandSpawns, enemyKind, ARRIVAL_SAFE_RADIUS, ARRIVAL_GATE_DIST, ARRIVAL_SHIELD_S, WORLD_GATE, PORTAL_RADIUS } from "@frixep/shared";
+import { ZONES, expandSpawns, enemyKind, ARRIVAL_SAFE_RADIUS, ARRIVAL_GATE_DIST, ARRIVAL_SHIELD_S, WORLD_GATE, PORTAL_TRIGGER_RADIUS } from "@frixep/shared";
 
 let fails = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -23,7 +23,7 @@ for (const z of Object.values(ZONES)) {
     const worst = enemies.reduce((m, e) => Math.max(m, enemyKind(e.kind).aggro), 0);
     check(`${z.name} · ${name}: o raio seguro cobre o maior aggro (${worst}) com folga`, ARRIVAL_SAFE_RADIUS >= worst + 3);
     const gd = Math.min(...z.portals.map((q) => Math.hypot(q.x - p.x, q.y - p.y)));
-    check(`${z.name} · ${name}: fora do alcance de pisar em qualquer portão (≥ ${ARRIVAL_GATE_DIST - 0.1} tiles)`, gd >= ARRIVAL_GATE_DIST - 0.1 && gd > PORTAL_RADIUS + 1, `portão mais perto a ${gd.toFixed(1)}`);
+    check(`${z.name} · ${name}: fora do alcance de pisar em qualquer portão (≥ ${ARRIVAL_GATE_DIST - 0.1} tiles)`, gd >= ARRIVAL_GATE_DIST - 0.1 && gd > PORTAL_TRIGGER_RADIUS + 1, `portão mais perto a ${gd.toFixed(1)}`);
   }
   // quem chega de uma zona aparece junto do portão de volta para essa zona
   for (const [from, p] of Object.entries(z.arrive)) {

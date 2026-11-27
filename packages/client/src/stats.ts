@@ -1,4 +1,5 @@
 import { isTypingTarget } from "./keys";
+import { aoMudarConfig, config } from "./config";
 /**
  * Painel de desenvolvimento no canto superior direito: FPS e ping.
  * - FPS: contado aqui mesmo (quadros que o navegador realmente desenhou por segundo).
@@ -32,7 +33,7 @@ const color = (v: number, good: number, ok: number, invert = false) => {
   return bad ? "#ff6a5a" : mid ? "#ffd45e" : "#7dff9a";
 };
 
-export function mountStats(opts: { sendPing(t: number): void }): Stats {
+export function mountStats(opts: { sendPing(t: number): void; game?: Phaser.Game }): Stats {
   const q = new URLSearchParams(location.search).get("stats");
   let saved: string | null = null;
   try { saved = localStorage.getItem(KEY); } catch { /* ignore */ }
@@ -52,21 +53,30 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
   let online = -1;
   let best = Infinity;
   const render = () => {
-    el.classList.toggle("off", !on);
-    if (!on) return;
-    const f = `<b style="color:${color(fps, 40, 25, true)}">${fps}</b> FPS`;
-    const p = ping < 0 ? "<b>--</b> ms" : `<b style="color:${color(ping, 90, 180)}">${Math.round(ping)}</b> ms`;
-    const o = online < 0 ? "" : `<br><i class="dot"></i><b>${online}</b> online`;
-    el.innerHTML = `${f}<i class="sp"> · </i><br>${p} ping${o}`;
+    const c = config(); // Configurações: mostrar FPS e/ou ping
+    const linhas: string[] = [];
+    if (c.mostrarFps) linhas.push(`<b style="color:${color(fps, 40, 25, true)}">${fps}</b> FPS`);
+    if (c.mostrarPing) {
+      const p = ping < 0 ? "<b>--</b> ms" : `<b style="color:${color(ping, 90, 180)}">${Math.round(ping)}</b> ms`;
+      const o = online < 0 ? "" : `<br><i class="dot"></i><b>${online}</b> online`;
+      linhas.push(`${p} ping${o}`);
+    }
+    el.classList.toggle("off", !on || linhas.length === 0);
+    if (!on || linhas.length === 0) return;
+    el.innerHTML = linhas.join("<br>");
   };
+  const pararConfig = aoMudarConfig(render);
 
   // FPS: média de 1 segundo
   let frames = 0;
   let t0 = performance.now();
   let raf = 0;
+  // conta os quadros que o JOGO desenhou (respeita o limite de FPS); sem o jogo, conta os do navegador
+  const contar = () => { frames++; };
+  opts.game?.events.on("postrender", contar);
   const tick = (now: number) => {
     raf = requestAnimationFrame(tick);
-    frames++;
+    if (!opts.game) frames++;
     if (now - t0 >= 1000) {
       fps = Math.round((frames * 1000) / (now - t0));
       frames = 0;
@@ -103,7 +113,9 @@ export function mountStats(opts: { sendPing(t: number): void }): Stats {
     },
     destroy() {
       cancelAnimationFrame(raf);
+      opts.game?.events.off("postrender", contar);
       clearInterval(timer);
+      pararConfig();
       window.removeEventListener("keydown", onKey);
       el.remove();
       style.remove();

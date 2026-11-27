@@ -280,7 +280,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
       act.append(pr, b);
       // ficha completa do item (atributos, classe, nível) antes de comprar; compara com o equipado do mesmo tipo
       const ic = iconBox(l.itemId, l.qty);
-      fichaEm(ic, info, () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
+      fichaEm(ic, info, () => ({ def: d, af: l.af, rf: l.rf, gm: l.gm, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
       row.append(ic, info, act);
       list.append(row);
     }
@@ -416,7 +416,7 @@ export function mountMarket(opts: { send(type: string, payload: unknown): void; 
     b.onclick = () => { busy = true; send(l.status === "sold" ? Msg.MarketClaim : Msg.MarketCancel, { id: l.id }); render(); };
     act.append(b);
     const ic = iconBox(l.itemId, l.qty);
-    if (d) fichaEm(ic, info, () => ({ def: d, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
+    if (d) fichaEm(ic, info, () => ({ def: d, af: l.af, rf: l.rf, gm: l.gm, cmp: d.kind !== "potion" ? equippedOf(d.kind) : null }));
     row.append(ic, info, act);
     return row;
   }

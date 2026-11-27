@@ -1,5 +1,6 @@
 import { ITEMS, nomeIngrediente, precisaConfirmarDesmonte, materiaisDesmonte } from "@frixep/shared";
 import { validSlot, addItem, type Inventory } from "./inventory.js";
+import { bloqueioGm } from "../gm/modoDeus.js";
 
 export type DesmontarResult = { ok: true; msg: string } | { ok: false; error: string };
 
@@ -13,6 +14,8 @@ export function desmontarItem(inv: Inventory, pedido: { slot?: unknown; confirm?
   const slot = pedido.slot as number;
   const st = inv.slots[slot];
   if (!st || !ITEMS[st.id]) return { ok: false, error: "Espaço vazio." };
+  const travado = bloqueioGm(st);
+  if (travado) return { ok: false, error: travado };
   const def = ITEMS[st.id];
   const mats = materiaisDesmonte(st.id, st.rf ?? 0);
   if (!mats) return { ok: false, error: "Esse item não pode ser desmontado." };

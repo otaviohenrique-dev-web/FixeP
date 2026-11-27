@@ -87,14 +87,20 @@ export function mountChat(opts: ChatOptions): ChatUi {
   const isOpen = () => root.classList.contains("open");
   const typing = () => isOpen() && document.activeElement === input;
 
+  const FECHAR = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+  /** o botão vira ✕ com o chat aberto (fechar) e volta ao balão fechado */
+  const iconeBotao = () => { btn.innerHTML = isOpen() ? FECHAR : BUBBLE; btn.setAttribute("aria-label", isOpen() ? "Fechar chat" : "Abrir chat"); };
+
   function open() {
     root.classList.add("open");
+    iconeBotao();
     for (const l of Array.from(log.children)) l.classList.remove("old");
     log.scrollTop = log.scrollHeight;
     input.focus();
   }
   function close() {
     root.classList.remove("open");
+    iconeBotao();
     input.value = "";
     input.blur();
     for (const l of Array.from(log.children)) l.classList.add("old");
@@ -130,6 +136,7 @@ export function mountChat(opts: ChatOptions): ChatUi {
   }, true);
   window.addEventListener("keyup", (e) => { if (typing()) e.stopImmediatePropagation(); }, true);
 
+  btn.addEventListener("pointerdown", (e) => e.stopPropagation()); // não anda nem ataca ao tocar no botão
   btn.addEventListener("click", () => (isOpen() ? close() : open()));
 
   return {

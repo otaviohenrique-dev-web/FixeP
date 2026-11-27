@@ -61,7 +61,7 @@ const CSS = `
 .ec-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;background:rgba(6,12,20,.7);border:1px solid rgba(160,200,240,.18)}
 .ec-row.sel{border-color:#ffd08a;box-shadow:0 0 12px rgba(255,170,80,.3)}
 .ec-row.dis{opacity:.5}
-.ec-ic{width:40px;height:40px;flex:none;image-rendering:pixelated;object-fit:contain}
+.ec-ic{width:84px;height:84px;flex:none;image-rendering:auto;object-fit:contain}
 .ec-info{flex:1;min-width:0}
 .ec-info b{display:block;font:700 12px/1.25 "Cinzel",Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ec-info small{display:block;font:400 11px/1.3 Georgia,serif;color:#9fc0e0}
@@ -173,7 +173,7 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
 
   let snap: InventorySnapshot = { inv: Array.from({ length: INV_SLOTS }, () => null), equip: { weapon: null, offhand: null, helmet: null, armor: null, boots: null, cape: null }, iron: 0, obols: 0 };
 
-  // ---- saldo na HUD
+  // ---- saldo: não fica mais fixo na tela (aparece na Mochila, ao lado do título); o elemento segue existindo, fora da página
   const wallet = el("div", "ec-wallet");
   wallet.setAttribute("aria-label", "Moedas");
   const wIron = el("span"), wObol = el("span", "o");
@@ -183,7 +183,6 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
   wIron.append(coinImg("iron"), wIronN);
   wObol.append(coinImg("obols"), wObolN);
   wallet.append(wIron, wObol);
-  document.body.append(wallet);
 
   // ---- botão "Falar com ..." (aparece perto de um NPC; serve ao toque e ao teclado)
   const near = el("button", "ec-near");
@@ -962,8 +961,8 @@ export function mountEconomy(opts: { send(type: string, payload: unknown): void;
     questNotice: (text, ok) => quest.notice(text, ok),
     setNearNpc(n) {
       nearNpc = n;
-      near.classList.toggle("show", !!n && !tradeOpen && !back.classList.contains("open") && !market.isOpen());
-      if (n) { near.replaceChildren(el("kbd", "", "G"), document.createTextNode(`Falar com ${n.name} (${n.title})`)); }
+      // sem botão "Falar com..." na tela: o NPC mostra um "?" acima da placa; clicar/tocar nele ou apertar G abre a conversa
+      near.classList.remove("show");
     },
     setTrade,
     showTradeInvite,

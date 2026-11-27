@@ -1,11 +1,14 @@
 import { ITEMS, VAULT_SLOTS, VAULT_COIN_MAX, type InvStack, type VaultSnapshot } from "@frixep/shared";
 import { addItem, validSlot, type Inventory, type Result } from "./inventory.js";
+import { bloqueioGm } from "../gm/modoDeus.js";
+import { temExtras } from "../db/extras.js";
 
 /** Baú pessoal do jogador (só existe no servidor; o cliente recebe fotografias). Funções puras: mexem só em memória, o salvamento é feito pela sala. */
 export interface Vault { slots: (InvStack | null)[]; iron: number; obols: number }
 
 export const emptyVault = (): Vault => ({ slots: Array.from({ length: VAULT_SLOTS }, () => null), iron: 0, obols: 0 });
-export const vaultSnapshot = (v: Vault): VaultSnapshot => ({ slots: v.slots.map((s) => (s ? { id: s.id, qty: s.qty } : null)), iron: v.iron, obols: v.obols });
+// o retrato leva os extras (afixos, refino, gemas): a ficha do item no baú mostra o que ele tem (PD-16)
+export const vaultSnapshot = (v: Vault): VaultSnapshot => ({ slots: v.slots.map((s) => (s ? { ...s, ...(s.af ? { af: [...s.af] } : {}), ...(s.gm ? { gm: [...s.gm] } : {}) } : null)), iron: v.iron, obols: v.obols });
 export const validVaultSlot = (i: unknown): i is number => Number.isInteger(i) && (i as number) >= 0 && (i as number) < VAULT_SLOTS;
 
 const qtyOf = (raw: unknown, max: number): number | null => {
@@ -30,9 +33,19 @@ export function deposit(inv: Inventory, v: Vault, slot: unknown, qtyRaw: unknown
   if (!validSlot(slot)) return { ok: false, error: "Espaço inválido." };
   const st = inv.slots[slot];
   if (!st || !ITEMS[st.id]) return { ok: false, error: "Espaço vazio." };
+  const travado = bloqueioGm(st); // item do Modo Deus não entra no baú compartilhado
+  if (travado) return { ok: false, error: travado };
   const qty = qtyOf(qtyRaw, st.qty);
   if (qty === null) return { ok: false, error: "Quantidade inválida." };
   if (to !== undefined && !validVaultSlot(to)) return { ok: false, error: "Espaço do baú inválido." };
+  if (temExtras(st)) { // item com afixos, refino ou gemas: vai inteiro, com os extras, para um espaço vazio (nunca junta pilha)
+    const alvo = to !== undefined && v.slots[to as number] === null ? (to as number) : v.slots.indexOf(null);
+    if (alvo < 0) return { ok: false, error: "O baú está cheio." };
+    v.slots[alvo] = { ...st, qty, ...(st.af ? { af: [...st.af] } : {}), ...(st.gm ? { gm: [...st.gm] } : {}) };
+    st.qty -= qty;
+    if (st.qty <= 0) inv.slots[slot] = null;
+    return { ok: true };
+  }
   const before = v.slots.map((s) => (s ? { ...s } : null));
   const left = putInto(v.slots, st.id, qty, to as number | undefined);
   if (left > 0) { v.slots = before; return { ok: false, error: "O baú está cheio." }; }
@@ -53,10 +66,10 @@ export function withdraw(inv: Inventory, v: Vault, slot: unknown, qtyRaw: unknow
   let left = qty;
   if (to !== undefined) { // espaço escolhido: usa só se vazio ou da mesma pilha
     const dst = inv.slots[to as number], def = ITEMS[st.id];
-    if (dst === null) { const t = Math.min(def.stack, left); inv.slots[to as number] = { id: st.id, qty: t }; left -= t; }
-    else if (dst.id === st.id && dst.qty < def.stack) { const t = Math.min(def.stack - dst.qty, left); dst.qty += t; left -= t; }
+    if (dst === null) { const t = Math.min(def.stack, left); inv.slots[to as number] = { ...st, qty: t, ...(st.af ? { af: [...st.af] } : {}), ...(st.gm ? { gm: [...st.gm] } : {}) }; left -= t; }
+    else if (dst.id === st.id && dst.qty < def.stack && !temExtras(st) && !temExtras(dst)) { const t = Math.min(def.stack - dst.qty, left); dst.qty += t; left -= t; }
   }
-  if (left > 0) left = addItem(inv, st.id, left);
+  if (left > 0) left = addItem(inv, st.id, left, st.af, st.rf, st.gm, !!st.gmv); // os extras voltam com o item (PD-16)
   if (left > 0) { inv.slots = before; return { ok: false, error: "Mochila cheia." }; }
   st.qty -= qty;
   if (st.qty <= 0) v.slots[slot] = null;

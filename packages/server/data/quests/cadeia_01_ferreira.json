@@ -6,6 +6,12 @@
   "npc": "smith",
   "preRequisitos": ["tutorial_5_equipar"],
   "objetivos": [{ "tipo": "falar", "npc": "smith" }],
+  "fala": [
+    "Mais um que sobreviveu às Cinzas. Garrick disse que você viria.",
+    "Sou Brasa. Esta forja é a única coisa nesta cidade que ainda não esfriou.",
+    "Traga-me três peças iguais e eu as fundo numa só, melhor. O que não serve, eu desmonto em material.",
+    "Ferro Bruto, couro, essência... tudo tem uso nas minhas mãos. Volte quando tiver o que forjar."
+  ],
   "recompensa": { "xp": 152, "ferro": 20, "itens": [{ "id": "mat_ferro_bruto", "qtd": 2 }] },
   "dica": { "toque": "Toque em Brasa, à direita da fonte, e converse com ela.", "teclado": "Clique em Brasa, à direita da fonte, e converse com ela." }
 }
