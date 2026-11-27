@@ -458,6 +458,14 @@ class WorldScene extends Phaser.Scene {
         if (this.aimA) { e.preventDefault(); this.aimEnd(); return; } // ESC com a mira de uma skill aberta: cancela a skill (nada é gasto nem lançado)
         this.lockKey = ""; this.chase = null; if (this.selId) this.deselect();
       }
+      if (e.code === "KeyS" && !e.repeat && !menuOpen()) { // S: para o personagem onde ele está (cancela o caminho em andamento)
+        const me = this.me();
+        if (me && this.room) {
+          this.chase = null; this.pendingNpc = null; this.pendingVault = false;
+          this.room.send(Msg.MoveTo, { x: me.x, y: me.y, stop: true });
+        }
+        return;
+      }
       if (e.code === "KeyZ" && !e.repeat && !menuOpen() && this.cls === "cleric") { this.hud.toggleQ(); return; } // Z: alterna o Q do Clérigo
       if (e.code === "F10" && !e.repeat && ehAdmin() && !menuOpen()) { // F10 (admin): painel direto na aba Modo Deus
         e.preventDefault();
