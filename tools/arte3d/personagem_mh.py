@@ -46,14 +46,18 @@ def mat(nome, cor, metal=0.0, rug=0.75):
 PELE = mat("pele", (0.60, 0.39, 0.29))
 CABELO = mat("cabelo", (0.13, 0.08, 0.05), rug=0.9)
 ROUPA = mat("roupa_baixo", (0.07, 0.08, 0.12), rug=0.9)   # cinza-azulado escuro: não se confunde com a sombra da pele em 128 px
-ACO = mat("aco", (0.40, 0.41, 0.44), 0.55, 0.42)            # aço claro (referências)
-ACO_CLARO = mat("aco_claro", (0.58, 0.59, 0.62), 0.6, 0.38)
-ACO_ESCURO = mat("aco_escuro", (0.09, 0.09, 0.11), 0.5, 0.6)
-TECIDO = mat("tecido", (0.34, 0.31, 0.27), rug=0.95)
-TECIDO_ESC = mat("tecido_esc", (0.15, 0.13, 0.11), rug=0.95)
+# SET COMUM DO GUERREIRO: cores do desenho do usuário (27/11/2026). Aço escuro quase preto com brilho cinza, capa
+# vermelho-vinho com forro mais escuro, couro marrom (cabo, sola das botas), lâmina clara. Só o ACENTO fica de fora
+# (laranja das referências: o jogo pinta com a cor da raridade). Valores em linear (o desenho em sRGB).
+ACO = mat("aco", (0.13, 0.13, 0.14), 0.6, 0.33)        # placas: cinza-chumbo escuro (desenho ~#3c3c3e)
+ACO_CLARO = mat("aco_claro", (0.21, 0.21, 0.22), 0.6, 0.30)   # ombreiras, aros, guarda: um tom acima
+ACO_ESCURO = mat("aco_escuro", (0.05, 0.05, 0.055), 0.5, 0.55)  # manoplas, pomo: quase preto
+TECIDO = mat("tecido", (0.24, 0.018, 0.024), rug=0.9)      # capa: vermelho-vinho (desenho ~#842c32)
+TECIDO_ESC = mat("tecido_esc", (0.075, 0.010, 0.014), rug=0.95)   # forro da capa
 FENDA = mat("fenda", (0.0, 0.0, 0.0), rug=1.0)
-COURO = mat("couro", (0.20, 0.12, 0.07))
-LAMINA = mat("lamina", (0.70, 0.72, 0.76), 0.7, 0.28)
+COURO = mat("couro", (0.17, 0.075, 0.035))                 # cabo da espada, alças do escudo (desenho ~#7b4c35)
+COURO_BOTA = mat("couro_bota", (0.050, 0.025, 0.014), rug=0.8)   # pé das botas: couro marrom escuro
+LAMINA = mat("lamina", (0.46, 0.45, 0.44), 0.75, 0.26)     # lâmina clara (desenho ~#b5b3b2)
 ACENTO = mat("acento", (0.75, 0.75, 0.75), 0.4, 0.45)
 
 corpo.data.materials.clear(); corpo.data.materials.append(PELE)
@@ -353,7 +357,8 @@ casca("cinto", TRONCO, 0.548, 0.588, 0.042, ACENTO, espessura=0.012)
 # ---- BOTAS (slot dos pés): calçado de placa até o tornozelo, faixa laranja no cano
 PES = {"foot_l", "foot_r", "ball_l", "ball_r", "calf_l", "calf_r"}
 # o cano sobe até a canela (logo abaixo do joelho) e fica POR CIMA da armadura das pernas (infla maior que o 0.014 dela)
-casca("sapatos", PES, 0.0, 0.235, 0.028, ACO_CLARO, facetado=0.85, espessura=0.01, colecao_nome="botas")
+casca("sapatos", {"foot_l", "foot_r", "ball_l", "ball_r"}, 0.0, 0.235, 0.028, COURO_BOTA, facetado=0.85, espessura=0.01, colecao_nome="botas")   # pé de couro
+casca("botas_cano", {"calf_l", "calf_r"}, 0.0, 0.235, 0.028, ACO, facetado=0.85, espessura=0.01, colecao_nome="botas", juntar=True)   # cano de placa
 casca("botas_aro", {"calf_l", "calf_r"}, 0.215, 0.245, 0.036, ACENTO, espessura=0.008, colecao_nome="botas")
 
 # ---- ELMO: esfera moldada à cabeça (envoltória lisa da pele: sem nariz/orelhas), justa, desce até o pescoço e cobre a
