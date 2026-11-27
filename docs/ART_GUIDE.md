@@ -16,7 +16,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 - Objetos altos (árvores, paredes, pilares) têm **origem na base**: o ponto de ancoragem é o centro inferior do tile que ocupam.
 
 ## 3. Personagens e monstros
-- Quadro de **64 x 64 px** para personagens humanoides. Monstros grandes podem usar 128 x 128 ou 192 x 192.
+- Quadro de **128 x 128 px** para personagens humanoides, com até **32 cores** e **sem dithering** (padrão desde 27/11/2026). O jogo desenha o quadro de 128 em escala 0,5: no mundo ele ocupa o mesmo espaço do antigo 64 x 64 e ganha detalhe quando a câmera aproxima. Ponto dos pés na mesma proporção: (64, 104) no quadro de 128. Deixe 8 a 12 px de folga acima da cabeça para ataques. Arte antiga em 64 x 64 continua aceita; cada atlas usa um tamanho só. Atlas de 2048 x 2048 cabe 16 x 16 quadros de 128.
 - **Direções:** começar com 4 diagonais. Desenhar SE e NE; o jogo espelha SW e NW. As 8 direções completas entram depois, no marco M8 de `docs/GUIA_ARTE_INICIAL.pdf`.
 - Animações mínimas por classe (Guerreiro, Arqueiro, Clérigo, Mago): `idle` (4 frames), `walk` (6), `attack` (6), `skill1..3` (6–8), `dodge` (4), `hit` (2), `death` (6).
 - Monstros: `idle`, `walk`, `attack` (com frame de **telégrafo** visível, pois o combate depende disso), `hit`, `death`.
@@ -55,7 +55,7 @@ Os valores abaixo são o padrão adotado. Mudar o tamanho do tile exige mexer no
 
 ## 8. Modelos e marcos
 - O plano de marcos (M0 a M8), tempos de animação, tamanhos de efeito e convenção de exportação estão em `docs/GUIA_ARTE_INICIAL.pdf`.
-- Modelos (grade do chão 64x46, quadro de personagem 64x64 com o ponto dos pés e paleta inicial) em `assets/source/templates/`.
+- Modelos (grade do chão 64x46, quadro de personagem 128x128 com o ponto dos pés e paleta inicial) em `assets/source/templates/`.
 
 ## 9. Ver a arte no jogo
 - O carregador de sprites lê os atlas de `assets/characters/` e `assets/monsters/`. Recarregue o jogo depois de salvar.

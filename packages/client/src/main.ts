@@ -105,7 +105,8 @@ function zoomPcSalvo(): number {
   try { const v = Number(localStorage.getItem(ZOOM_PC_KEY)); return v >= ZOOM_PC_MIN && v <= ZOOM_PC_MAX ? v : 1; } catch { return 1; }
 }
 const TOUCH_ZOOM = 0.7; // celular: câmera mais afastada (enxerga ~43% mais do mapa em cada direção)
-const menuOpen = () => !!document.querySelector(".gm-back.open");
+// qualquer janela aberta (menu, mochila, baú, economia, missões, configurações) tira o foco do personagem: sem dash/atalhos de combate
+const menuOpen = () => !!document.querySelector(".gm-back.open, .iv-back.open, .ec-back.open, .qst-back.open, .vt-back.open, .cf-back.open");
 
 /** qual animação do personagem corresponde a cada ação (as 3 habilidades usam a mesma, "skill") */
 const animFor = (a: ActionId): ActionAnim => (a === "attack" ? "attack" : a === "dodge" ? "dodge" : "skill");
@@ -1812,7 +1813,7 @@ class WorldScene extends Phaser.Scene {
       }
       if (s.x < wv.x - 140 || s.x > wv.right + 140 || s.y < wv.y - 160 || s.y > wv.bottom + 160) { this.labels.get(key)?.setVisible(false); this.levelTags.get(key)?.setVisible(false); return; }
       s.setDepth(s.y).setAlpha(o.dead && !o.hideWhenDead ? (v.isSprite ? 0.6 : 0.35) : 1);
-      if (v.isSprite && !SEM_DESENHOS) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * s.scaleX, chaoH(24) * s.scaleX));
+      if (v.isSprite && !SEM_DESENHOS) timed("sombras", () => this.shadows.fillStyle(0x000000, 0.32).fillEllipse(s.x, s.y, 28 * v.escalaMundo, chaoH(24) * v.escalaMundo));
       // placa: nome, barra de vida e selo de nível (as bordas do selo mudam a cada 10 níveis)
       count("placas");
       const pg = timed("placas", () => drawPlate(this.bars, { x: s.x, y: s.y - v.headY - 2, hp, maxHp, level: o.level, kind: o.kind, time }));

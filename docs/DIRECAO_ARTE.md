@@ -78,7 +78,7 @@ Regras:
 - Estilo base de cada item (inglês, usado nos prompts): `Game item icon, pixel-art style, Albion Online inspired...` (bloco completo no PDF).
 
 ### 4.2 Personagens (4 classes)
-- Quadro de **64 x 64 px**, PNG transparente, ponto dos pés no centro inferior.
+- Quadro de **128 x 128 px** (32 cores, sem dithering; desenhado no jogo em escala 0,5), PNG transparente, ponto dos pés em (64, 104).
 - **4 diagonais:** desenhar SE e NE; o jogo espelha SW e NW. As 8 direções entram no marco M8 (`docs/GUIA_ARTE_INICIAL.pdf`).
 - Animações: `idle` 4 · `walk` 6 · `attack` 6 · `skill1` a `skill3` 6–8 · `dodge` 4 · `hit` 2 · `death` 6.
 - Equipamento em camadas separadas (corpo, armadura, arma, capa, aura), no mesmo grid de quadros.
@@ -92,7 +92,7 @@ Regras:
 
 ### 4.4 NPCs (3)
 - Ferreiro (`npc_smith`), Mercador (`npc_merchant`), Leiloeiro (`npc_auctioneer`).
-- Substituem os provisórios de `assets/placeholder/` com o mesmo quadro de personagem (64 x 64), em pé e parado.
+- Substituem os provisórios de `assets/placeholder/` com o mesmo quadro de personagem (128 x 128), em pé e parado.
 
 ### 4.5 Cenário e tiles
 - **4 zonas:** Cinzas (ash), Floresta Gélida (frost), Catacumbas (crypt), Cidade de Brasalume (town).
@@ -128,7 +128,7 @@ Regras:
 |---|---|---|---|
 | Ícone de item | `assets/items/` | `item_<família>_<raridade>.png` (ex.: `item_besta_epic.png`) | 48 x 48 (mestre 512) |
 | Poção de Vida | `assets/items/` | `item_pocao_vida.png` | 48 x 48 |
-| Personagem | `assets/characters/` | `warrior_walk_se_00.png` | 64 x 64 |
+| Personagem | `assets/characters/` | `warrior_walk_se_00.png` | 128 x 128 (32 cores) |
 | Monstro | `assets/monsters/` | `skeleton_attack_se_00.png` | 64 x 64 ou maior |
 | Tile | `assets/tiles/` | `tile_cinzas_grama_01.png` | 64 x 46 |
 | Efeito | `assets/fx/` | `fx_hit_slash_00.png` | conforme o efeito |

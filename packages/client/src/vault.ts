@@ -161,7 +161,14 @@ export function mountVault(opts: { send(type: string, payload: unknown): void })
       else if (fs === "vault" && side === "vault") opts.send(Msg.VaultMove, { from, to: i });
       sel = null;
     };
-    b.onclick = () => {
+    b.onclick = (e) => {
+      if (e.shiftKey && st) { // Shift+clique (PC): manda a pilha inteira para o outro lado (mochila -> baú, baú -> mochila)
+        if (side === "bag") opts.send(Msg.VaultDeposit, { slot: i, qty: st.qty });
+        else opts.send(Msg.VaultWithdraw, { slot: i, qty: st.qty });
+        sel = null;
+        movidoEm = Date.now();
+        return;
+      }
       if (sel && sel.side === "vault" && side === "vault" && sel.i !== i && stackOf("vault", sel.i)) { // item do baú selecionado + outro espaço do baú: reorganiza
         opts.send(Msg.VaultMove, { from: sel.i, to: i });
         sel = null;

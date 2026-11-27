@@ -10,6 +10,7 @@ export interface ActorAtlas {
   firstFrame: string;
   has: Set<string>; // "walk_se"
   durations: Map<string, number>; // "chave:walk:se" -> ms
+  quadro: number; // tamanho do quadro na imagem (64 ou 128); no mundo ele sempre ocupa FRAME (64)
 }
 export interface AtlasSpec { name: string; png: string; json: string }
 
@@ -85,7 +86,7 @@ function buildAnims(scene: Phaser.Scene, key: string, check: Ok): ActorAtlas {
     has.add(`${parsed.anim}_${parsed.dir}`);
     durations.set(animKey, totalDuration(frames));
   }
-  return { key, firstFrame: check.frames[0].filename, has, durations };
+  return { key, firstFrame: check.frames[0].filename, has, durations, quadro: check.quadro };
 }
 
 export type ActionAnim = "attack" | "skill" | "dodge" | "hit" | "death";
@@ -99,6 +100,8 @@ export class ActorView {
   readonly isSprite: boolean;
   /** altura da cabeça acima dos pés (onde ficam a barra de vida e o nome) */
   readonly headY: number;
+  /** escala do personagem no mundo (1 = normal; chefes maiores), independente do tamanho do quadro da arte */
+  readonly escalaMundo: number;
   /** a animação de morte já terminou (círculos: sempre verdadeiro) */
   deathDone = true;
 
@@ -117,12 +120,13 @@ export class ActorView {
 
   constructor(private scene: Phaser.Scene, private atlas: ActorAtlas | undefined, opts: { color: number; radius: number; mine?: boolean; scale?: number }) {
     this.baseColor = opts.color;
+    this.escalaMundo = opts.scale ?? 1;
     if (atlas) {
       this.sprite = scene.add.sprite(0, 0, atlas.key, atlas.firstFrame).setOrigin(PIVOT_X / FRAME, PIVOT_Y / FRAME);
       this.obj = this.sprite;
       this.isSprite = true;
-      this.headY = 58 * (opts.scale ?? 1);
-      if (opts.scale) this.sprite.setScale(opts.scale);
+      this.headY = 58 * this.escalaMundo;
+      this.sprite.setScale(this.escalaMundo * (FRAME / atlas.quadro)); // quadro de 128 vira 0,5: mesmo tamanho na tela, mais detalhe
       this.show("idle");
     } else {
       this.arc = scene.add.circle(0, 0, opts.radius, opts.color).setStrokeStyle(opts.mine ? 3 : 2, opts.mine ? 0xffffff : 0x000000, opts.mine ? 0.9 : 0.5);

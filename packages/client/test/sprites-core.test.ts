@@ -61,6 +61,10 @@ check("quadro cortado (trim) é recusado", (() => { const r = validateAtlasJson(
 check("tag apontando para fora é recusada", !validateAtlasJson({ frames: good.frames, meta: { frameTags: [{ name: "idle_se", from: 0, to: 99 }] } }).ok);
 check("só tags inválidas é recusado", !validateAtlasJson({ frames: good.frames, meta: { frameTags: [{ name: "lixo", from: 0, to: 1 }] } }).ok);
 check("duração ausente vira 100 ms", (() => { const r = validateAtlasJson({ frames: [{ filename: "a", sourceSize: { w: 64, h: 64 } }], meta: { frameTags: [{ name: "idle_se", from: 0, to: 0 }] } }); return r.ok && r.frames[0].duration === 100; })());
+check("atlas de 64x64 informa o quadro 64 (arte antiga continua valendo)", g.ok && g.quadro === 64);
+check("atlas de 128x128 é aceito e informa o quadro 128 (padrão novo, desenhado em escala 0,5)", (() => { const r = validateAtlasJson({ frames: [0, 1].map((n) => frame(n, 100, 128, 128)), meta: { frameTags: [{ name: "idle_se", from: 0, to: 1 }] } }); return r.ok && r.quadro === 128; })());
+check("atlas misturando 64 e 128 é recusado", (() => { const r = validateAtlasJson({ frames: [frame(0, 100, 128, 128), frame(1, 100, 64, 64)], meta: { frameTags: [{ name: "idle_se", from: 0, to: 1 }] } }); return !r.ok && r.reason.includes("tamanho só"); })());
+check("quadro fora do padrão (96x96 ou 128x64) é recusado", [[96, 96], [128, 64]].every(([w, h]) => !validateAtlasJson({ frames: [frame(0, 100, w, h)], meta: { frameTags: [{ name: "idle_se", from: 0, to: 0 }] } }).ok));
 check("entradas absurdas não quebram (null, texto, número, lista)", [null, undefined, "x", 5, [], {}].every((v) => !validateAtlasJson(v).ok));
 
 const failed = results.filter((r) => !r).length;
