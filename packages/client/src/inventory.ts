@@ -26,7 +26,7 @@ const CSS = `
 .iv-btn svg{width:22px;height:22px}
 .iv-back{position:fixed;inset:0;z-index:19;display:none;align-items:center;justify-content:center;background:rgba(2,5,11,.55);padding:12px;font-family:"Cinzel",Georgia,serif}
 .iv-back.open{display:flex}
-.iv-card{width:min(660px,100%);display:flex;flex-direction:column;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:hidden;padding:16px;border-radius:8px;color:#dbeaff;
+.iv-card{width:min(880px,100%);display:flex;flex-direction:column;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:hidden;padding:16px;border-radius:8px;color:#dbeaff;
   background:linear-gradient(180deg,rgba(20,34,52,.97),rgba(6,12,20,.98));border:1px solid rgba(255,150,70,.4);box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 1px 0 rgba(180,220,255,.12)}
 .iv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .iv-id{display:flex;align-items:center;gap:12px}
