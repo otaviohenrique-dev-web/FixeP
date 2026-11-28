@@ -89,7 +89,7 @@ rig.hide_render = True
 # ------------------------------------------------------------------ pose por rotações no MUNDO (independe do eixo de cada osso)
 P = rig.pose.bones
 def zerar():
-    for b in P: b.rotation_mode = "QUATERNION"; b.rotation_quaternion = (1, 0, 0, 0); b.location = (0, 0, 0)
+    for b in P: b.rotation_mode = "QUATERNION"; b.rotation_quaternion = (1, 0, 0, 0); b.location = (0, 0, 0); b.scale = (1, 1, 1)   # escala também: senão o erro acumula quadro a quadro e a malha "explode"
     bpy.context.view_layer.update()
 def girar(osso, eixo, graus):
     """gira o osso em torno do eixo do MUNDO que passa pela cabeça dele"""
@@ -281,11 +281,40 @@ GOLPE_CHAVES = {
     "e_prep": dict(braco=(-0.35, 0.45, -0.82), antebraco=(-0.20, 0.00, -0.98), lamina=(0.00, -0.85, -0.50), torcao=-18, inclina=0, escudo=0.5),
     "e_imp":  dict(braco=(-0.15, -0.90, -0.40), antebraco=(0.00, -0.90, -0.43), lamina=(0.60, -0.60, -0.52), torcao=18, inclina=16, escudo=0.9),
 }
+# HABILIDADES (packages/shared: Esquiva, Q Investida, W Correntes, E Escudo de Aço, R Queda do Colosso).
+# Chaves extras: ebraco/eantebraco = braço do escudo por direção; agacha (0..1) dobra os joelhos sem tirar os pés do
+# chão; passo (-1..1) abre as pernas como numa corrida (o jogo desloca o boneco na esquiva e na investida).
+GOLPE_CHAVES.update({
+    # ESQUIVA: dash baixo e rápido, escudo à frente, espada para trás
+    "d1": dict(braco=(-0.35, 0.35, -0.87), antebraco=(-0.25, 0.05, -0.97), lamina=(-0.10, 0.85, -0.50), ebraco=(0.35, -0.45, -0.82), eantebraco=(0.10, -0.95, -0.30), torcao=-8, inclina=18, agacha=0.5, passo=0.5),
+    "d2": dict(braco=(-0.35, 0.40, -0.85), antebraco=(-0.25, 0.10, -0.96), lamina=(-0.10, 0.85, -0.50), ebraco=(0.35, -0.45, -0.82), eantebraco=(0.10, -0.95, -0.30), torcao=-8, inclina=25, agacha=0.6, passo=-0.5),
+    # Q INVESTIDA: carga de escudo (ombro esquerdo à frente), corrida e impacto com o escudo
+    "q1": dict(braco=(-0.30, 0.40, -0.86), antebraco=(-0.20, 0.10, -0.97), lamina=(-0.05, 0.75, -0.65), ebraco=(0.30, -0.60, -0.74), eantebraco=(-0.05, -0.95, 0.30), torcao=-15, inclina=10, agacha=0.4),
+    "q2": dict(braco=(-0.30, 0.40, -0.86), antebraco=(-0.20, 0.10, -0.97), lamina=(-0.05, 0.75, -0.65), ebraco=(0.30, -0.60, -0.74), eantebraco=(-0.05, -0.95, 0.30), torcao=-20, inclina=22, agacha=0.3, passo=0.7),
+    "q3": dict(braco=(-0.30, 0.40, -0.86), antebraco=(-0.20, 0.10, -0.97), lamina=(-0.05, 0.75, -0.65), ebraco=(0.30, -0.60, -0.74), eantebraco=(-0.05, -0.95, 0.30), torcao=-20, inclina=22, agacha=0.3, passo=-0.7),
+    "q4": dict(braco=(-0.30, 0.45, -0.84), antebraco=(-0.20, 0.15, -0.97), lamina=(-0.05, 0.75, -0.65), ebraco=(0.15, -0.90, -0.40), eantebraco=(-0.15, -0.98, 0.10), torcao=-28, inclina=25, agacha=0.4, passo=0.4),
+    # W CORRENTES: arma a espada e aponta para a área-alvo à frente (lança as correntes)
+    "w1": dict(braco=(-0.60, 0.45, 0.66), antebraco=(-0.20, 0.30, 0.93), lamina=(0.15, 0.75, 0.65), ebraco=(0.45, -0.35, -0.82), torcao=-20, inclina=-4),
+    "w2": dict(braco=(-0.15, -0.95, 0.25), antebraco=(0.05, -0.98, 0.20), lamina=(0.55, -0.70, -0.45), ebraco=(0.50, 0.40, -0.77), torcao=18, inclina=10, agacha=0.2),
+    # E ESCUDO DE AÇO: ergue o escudo, bate a espada nele (provoca) e fica em guarda
+    "e1": dict(braco=(-0.55, 0.10, 0.83), antebraco=(0.20, 0.00, 0.98), lamina=(0.70, -0.35, 0.62), ebraco=(0.35, -0.75, -0.55), eantebraco=(-0.20, -0.60, 0.77), torcao=-10, inclina=0, agacha=0.2),
+    "e2": dict(braco=(-0.25, -0.60, -0.75), antebraco=(0.45, -0.85, -0.20), lamina=(0.75, -0.30, 0.58), ebraco=(0.35, -0.75, -0.55), eantebraco=(-0.20, -0.60, 0.77), torcao=10, inclina=4, agacha=0.2),
+    "e3": dict(braco=(-0.40, 0.15, -0.90), antebraco=(-0.15, -0.60, -0.78), lamina=(0.15, -0.95, 0.25), ebraco=(0.35, -0.75, -0.55), eantebraco=(-0.20, -0.60, 0.77), torcao=-6, inclina=6, agacha=0.3),
+    # R QUEDA DO COLOSSO: ergue a espada ao céu (invoca) e crava o golpe no chão
+    "r1": dict(braco=(-0.25, 0.05, 0.97), antebraco=(-0.05, 0.10, 0.99), lamina=(0.55, 0.35, 0.76), ebraco=(0.60, 0.05, 0.80), eantebraco=(0.30, 0.00, 0.95), torcao=0, inclina=-10),
+    "r2": dict(braco=(-0.20, 0.10, 0.97), antebraco=(-0.05, 0.15, 0.99), lamina=(0.55, 0.40, 0.73), ebraco=(0.55, 0.10, 0.83), eantebraco=(0.30, 0.05, 0.95), torcao=0, inclina=-14),
+    "r3": dict(braco=(-0.25, -0.75, -0.60), antebraco=(0.05, -0.60, -0.80), lamina=(0.65, -0.35, -0.68), ebraco=(0.55, -0.30, -0.78), eantebraco=(0.35, -0.75, -0.55), torcao=8, inclina=25, agacha=0.7),
+})
 # quadros de cada golpe: (chave A, chave B, mistura); "base" = guarda parada
 GOLPES = {
     "attack1": [("base", "h_prep", 0.6), ("h_prep", "h_prep", 0.0), ("h_imp", "h_imp", 0.0), ("h_seg", "h_seg", 0.0), ("h_seg", "base", 0.6)],
     "attack2": [("base", "v_prep", 0.6), ("v_prep", "v_prep", 0.0), ("v_imp", "v_imp", 0.0), ("v_seg", "v_seg", 0.0), ("v_seg", "base", 0.6)],
     "attack3": [("base", "e_prep", 0.6), ("e_prep", "e_prep", 0.0), ("e_imp", "e_imp", 0.0), ("e_imp", "base", 0.3), ("e_imp", "base", 0.7)],
+    "dodge":   [("base", "d1", 0.5), ("d1", "d1", 0.0), ("d2", "d2", 0.0), ("d2", "base", 0.4), ("d2", "base", 0.8)],
+    "skill1":  [("base", "q1", 0.6), ("q1", "q1", 0.0), ("q2", "q2", 0.0), ("q3", "q3", 0.0), ("q4", "q4", 0.0), ("q4", "base", 0.6)],
+    "skill2":  [("base", "w1", 0.6), ("w1", "w1", 0.0), ("w2", "w2", 0.0), ("w2", "w2", 0.0), ("w2", "base", 0.5), ("w2", "base", 0.85)],
+    "skill3":  [("base", "e1", 0.6), ("e1", "e1", 0.0), ("e2", "e2", 0.0), ("e1", "e1", 0.0), ("e2", "e2", 0.0), ("e3", "e3", 0.0)],
+    "ultimate": [("base", "r1", 0.5), ("r1", "r1", 0.0), ("r2", "r2", 0.0), ("r2", "r3", 0.5), ("r3", "r3", 0.0), ("r3", "r3", 0.0), ("r3", "base", 0.5)],
 }
 def direcao(osso): return (cauda_mundo(osso) - cabeca_mundo(osso)).normalized()
 def apontar(osso, alvo):
@@ -316,15 +345,19 @@ def mirar_lamina(lado, alvo, desvio_max=30):   # no golpe o pulso desvia mais pa
     repor(); _girar_pegada(lado, melhor[1], melhor[2]); return melhor[0]
 def chave_golpe(nome):
     if nome != "base": return GOLPE_CHAVES[nome]
-    return dict(braco=tuple(BASE_GOLPE["braco"]), antebraco=tuple(BASE_GOLPE["antebraco"]), lamina=tuple(BASE_GOLPE["lamina"]), torcao=0, inclina=0, escudo=0.0)
+    return dict(braco=tuple(BASE_GOLPE["braco"]), antebraco=tuple(BASE_GOLPE["antebraco"]), lamina=tuple(BASE_GOLPE["lamina"]),
+                ebraco=tuple(BASE_GOLPE["ebraco"]), eantebraco=tuple(BASE_GOLPE["eantebraco"]), torcao=0, inclina=0, escudo=0.0, agacha=0.0, passo=0.0)
 BASE_GOLPE = {}
+GOLPES_ESCUDO = {"d1", "d2", "q1", "q2", "q3", "q4", "w1", "w2", "e1", "e2", "e3", "r1", "r2", "r3"}
 def pose_golpe(i):
     base_parada()
     if not BASE_GOLPE:   # direções da guarda parada (ponto de partida e de volta do golpe)
-        BASE_GOLPE.update(braco=direcao("upperarm_r"), antebraco=direcao("lowerarm_r"), lamina=dir_espada("r"))
+        BASE_GOLPE.update(braco=direcao("upperarm_r"), antebraco=direcao("lowerarm_r"), lamina=dir_espada("r"),
+                          ebraco=direcao("upperarm_l"), eantebraco=direcao("lowerarm_l"))
     nome_golpe, i = i
     ka, kb, t = GOLPES[nome_golpe][i]
-    A, B = chave_golpe(ka), chave_golpe(kb)
+    A, B = dict(chave_golpe("base")), dict(chave_golpe("base"))
+    A.update(chave_golpe(ka)); B.update(chave_golpe(kb))   # o que a chave não define fica como na guarda
     t = t * t * (3 - 2 * t)   # suaviza
     mix = lambda k: Vector(A[k]).normalized().slerp(Vector(B[k]).normalized(), t) if A[k] != B[k] else Vector(A[k]).normalized()
     num = lambda k: A[k] + (B[k] - A[k]) * t
@@ -333,14 +366,21 @@ def pose_golpe(i):
     for o in ("spine_01", "spine_02", "spine_03"): girar(o, Z, tor / 3)   # Z+ leva o ombro direito (-X) para a frente (-Y)
     girar("spine_02", X, -2 + inc * 0.6); girar("spine_03", X, inc * 0.4)
     girar("head", Z, -tor * 0.8); girar("head", X, -inc * 0.7)   # a cabeça continua olhando o alvo, à frente
-    # joelhos levemente dobrados na base de combate
-    for l in ("l", "r"): girar(f"thigh_{l}", X, -6); girar(f"calf_{l}", X, 10); girar(f"foot_{l}", X, -4)
-    mover_pelvis(0, 0, -0.012)
+    # pernas: base de combate (joelhos levemente dobrados) + agachar (pés ficam no chão) + passada
+    ag, pa = num("agacha"), num("passo")
+    for l, sp in (("l", -1), ("r", 1)):
+        coxa = -6 - 32 * ag - 26 * pa * sp
+        joelho = 10 + 64 * ag + 30 * abs(pa) * (1 if pa * sp < 0 else 0.3)
+        girar(f"thigh_{l}", X, coxa); girar(f"calf_{l}", X, joelho); girar(f"foot_{l}", X, -(coxa + joelho) * 0.9 - 4)
+    mover_pelvis(0, 0, -0.012 - 0.13 * ag - 0.03 * abs(pa))
     # braço da espada
     apontar("upperarm_r", mix("braco")); apontar("lowerarm_r", mix("antebraco"))
     erro = mirar_lamina("r", mix("lamina"))
     # braço do escudo: traz o escudo um pouco à frente durante o golpe (guarda)
-    e = num("escudo"); girar("upperarm_l", Y, -35 * e); girar("upperarm_l", X, -15 * e); girar("lowerarm_l", X, -25 * e)   # abre o escudo para o lado
+    if ka in GOLPES_ESCUDO or kb in GOLPES_ESCUDO:   # braço do escudo por direção (habilidades)
+        apontar("upperarm_l", mix("ebraco")); apontar("lowerarm_l", mix("eantebraco"))
+    else:
+        e = num("escudo"); girar("upperarm_l", Y, -35 * e); girar("upperarm_l", X, -15 * e); girar("lowerarm_l", X, -25 * e)   # abre o escudo para o lado
     print("golpe", nome_golpe, "quadro", i, "erro da lâmina", round(erro, 1))
 
 def mover_pelvis(dx, dy, dz):
